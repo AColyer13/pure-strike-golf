@@ -147,7 +147,7 @@ export function computeLaunch(club, swing) {
 
   // centredness of strike: loses ball speed ("smash") and adds spin variance
   const strikeLoss = 1 - 0.14 * (1 - swing.strike) ** 1.5;
-  let smash = club.smash * strikeLoss;
+  const smash = club.smash * strikeLoss;
   let ballMph = clubMph * smash * lie.speed;
 
   // trajectory (ball position / shaft lean): low = knock-down, high = ball forward

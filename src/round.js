@@ -35,6 +35,7 @@ export function dailySpec(date = new Date()) {
 export function holesFor(mode, courseId, single = 1) {
   const course = courseById(courseId);
   if (mode === '18') return [...Array(18).keys()];
+  if (mode === 'random') return [...Array(9).keys()];
   if (mode === 'front') return [...Array(9).keys()];
   if (mode === 'back') return [...Array(9).keys()].map((i) => i + 9);
   if (mode === 'ctp') {
@@ -57,7 +58,7 @@ export function challengeHash(r) {
 }
 export function parseChallenge(hash) {
   const m = /#c=([a-z]+)\.([a-z0-9]+)\.([0-9-]+)\.(\d+)/.exec(hash || '');
-  if (!m || !courseById(m[1]) || !MODES[m[2]]) return null;
+  if (!m || !courseById(m[1], +m[4]) || !MODES[m[2]]) return null;
   const holes = m[3].split('-').map(Number).filter((i) => i >= 0 && i < 18);
   if (!holes.length) return null;
   return { courseId: m[1], mode: m[2], holes, seed: +m[4] };

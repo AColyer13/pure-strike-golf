@@ -2,11 +2,12 @@ import { UI } from './ui.js';
 import { Game } from './game.js';
 import { Academy } from './academy.js';
 import { parseChallenge } from './round.js';
+import { Editor } from './editor.js';
 
 const ui = new UI();
 const game = new Game(ui);
 const academy = new Academy();
-ui.attach(game, academy);
+ui.attach(game, academy, new Editor(game));
 // a shared challenge link (#c=course.mode.holes.seed) replays the same pins and wind
 ui.challenge = parseChallenge(location.hash);
 if (ui.challenge) ui.sel.courseId = ui.challenge.courseId;

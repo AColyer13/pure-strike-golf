@@ -1,0 +1,14 @@
+{
+  "name": "Pure Strike Golf",
+  "short_name": "Pure Strike",
+  "description": "Browser golf with real ball-flight physics, strokes-gained stats and a coach that explains every shot.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#0c1a12",
+  "theme_color": "#14281b",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

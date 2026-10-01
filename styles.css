@@ -343,3 +343,16 @@ body.reduced-motion *, body.reduced-motion *::before, body.reduced-motion *::aft
 body.touch.in-round #clubBox { bottom: 150px; }
 body.touch.in-round #lieBox { bottom: 246px; }
 body.touch.in-round #meter { bottom: 90px; }
+
+/* ---------- course editor ---------- */
+.ed-head { display: flex; justify-content: space-between; align-items: center; }
+.ed-body { display: grid; grid-template-columns: 1fr auto; gap: 18px; margin-top: 8px; }
+.ed-left { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+#edJson { width: 100%; height: min(420px, 50vh); font: 12px/1.45 ui-monospace, Consolas, monospace; background: #0b1710; color: #d8f0de; border: 1px solid var(--line); border-radius: 8px; padding: 8px; resize: vertical; user-select: text; tab-size: 2; }
+.ed-err { color: var(--red); font-size: 13px; min-height: 18px; }
+.ed-ref { font-size: 12px; color: var(--muted); }
+.ed-ref summary { cursor: pointer; }
+.ed-ref ul { padding-left: 18px; margin: 6px 0; }
+.ed-right { max-width: 360px; display: flex; flex-direction: column; gap: 6px; align-items: center; }
+#edCanvas { border-radius: 8px; border: 1px solid var(--line); max-width: 100%; }
+@media (max-width: 760px) { .ed-body { grid-template-columns: 1fr; } }

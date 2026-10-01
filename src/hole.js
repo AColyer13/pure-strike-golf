@@ -87,7 +87,7 @@ export class Hole {
   build(opts) {
     const d = this.def;
     // path: scale so the centre line length equals the card yardage
-    let pts = d.path || [[0, 0], [0, d.yds]];
+    const pts = d.path || [[0, 0], [0, d.yds]];
     let L = 0;
     for (let i = 1; i < pts.length; i++) L += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
     const k = d.yds / L;
@@ -565,7 +565,7 @@ export class Hole {
       }
       // canopy (ellipsoid / cone)
       if (y > t.crownY) {
-        let rAt = t.crownR;
+        let rAt;
         if (t.shape === 'cone') rAt = t.crownR * (1 - (y - t.crownY) / (t.h - t.crownY));
         else if (t.shape === 'palm') rAt = y > t.h - 2.5 ? t.crownR : 0;
         else {

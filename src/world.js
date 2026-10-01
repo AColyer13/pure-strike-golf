@@ -437,7 +437,6 @@ export class World {
     const farKind = st.farType || 'deep';
     const roughW = st.roughWidth ?? 20, cutW = st.cutWidth ?? 2.2, gCut = st.greenCut ?? 5;
     const gf = hole.gf;
-    const trees = hole.trees.filter((t) => t.straw);
     const strawOn = !!st.straw;
     const data = img.data;
     for (let j = 0; j < th; j++) {

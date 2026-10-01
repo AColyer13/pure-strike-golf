@@ -137,10 +137,10 @@ export class Game {
     this.ui.hideAll();
     this.audio.init();
     this.audio.setVolume(this.settings.volume);
-    const course = courseById(opts.courseId);
+    const seed = opts.seed ?? ((Math.random() * 2 ** 32) >>> 0);
+    const course = courseById(opts.courseId, seed);
     this.course = course;
     this.bag = buildBag(this.settings.profile);
-    const seed = opts.seed ?? ((Math.random() * 2 ** 32) >>> 0);
     const rng = mulberry32(seed);
     const windDir = rng() * Math.PI * 2;
     // pins and wind for every hole up front, so a seed always reproduces the same round
@@ -911,7 +911,7 @@ export class Game {
     this.meter.hide();
     if (this.challenge) { this.ui.challengeSummary(this.course, r, (m) => this.fmtDist(m)); return; }
     const history = loadHistory();
-    const prevBest = r.players.length === 1 ? bestFor(history, this.course.id, r.mode) : null;
+    const prevBest = r.players.length === 1 && !this.course.generated ? bestFor(history, this.course.id, r.mode) : null;
     for (const pl of r.players) {
       if (!pl.scores.length) continue;
       saveRound(roundEntry({

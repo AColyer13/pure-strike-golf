@@ -12,8 +12,8 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <script type="importmap">
 { "imports": {
-  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
-  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+  "three": "./vendor/three/build/three.module.js",
+  "three/addons/": "./vendor/three/addons/"
 } }
 </script>
 </head>
@@ -52,6 +52,7 @@
     <div class="menu-btns">
       <button id="btnAcademy" class="btn">Golf Academy</button>
       <button id="btnStats" class="btn">My stats</button>
+      <button id="btnEditor" class="btn">Course editor</button>
       <button id="btnSettings" class="btn">Settings</button>
       <button id="btnHow" class="btn">How to play</button>
     </div>
@@ -116,6 +117,7 @@
 <div id="summary" class="hidden modal"></div>
 <div id="settings" class="hidden modal wide"></div>
 <div id="stats" class="hidden modal wide"></div>
+<div id="editor" class="hidden modal wide"></div>
 <div id="academy" class="hidden"></div>
 <div id="loading" class="hidden"><div class="spinner"></div><div id="loadingText"></div></div>
 

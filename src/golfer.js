@@ -3,7 +3,6 @@
 // facing the ball, left shoulder toward the target.
 import * as THREE from 'three';
 
-import { lerp } from './util.js';
 const ease = (t) => t * t * (3 - 2 * t);
 
 function limb(len, r0, r1, mat) {

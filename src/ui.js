@@ -13,7 +13,7 @@ const sgn = (x, d = 2) => (x >= 0 ? '+' : '') + x.toFixed(d);
 const toParStr = (d) => (d === 0 ? 'E' : d > 0 ? `+${d}` : `${d}`);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const keyName = (k) => ({ ' ': 'Space', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Escape: 'Esc' }[k] || (k.length === 1 ? k.toUpperCase() : k));
-const MODALS = ['relief', 'pause', 'help', 'summary', 'settings', 'stats'];
+const MODALS = ['relief', 'pause', 'help', 'summary', 'settings', 'stats', 'editor'];
 
 export class UI {
   constructor() {
@@ -21,11 +21,11 @@ export class UI {
     this.scModal = false;
     this.sel = { courseId: 'augusta', mode: '18', hole: 1, players: 1, names: ['Player 1', 'Player 2', 'Player 3', 'Player 4'] };
     try { Object.assign(this.sel, JSON.parse(localStorage.getItem('psg-sel') || '{}')); } catch (e) { /* ignore */ }
-    if (!MODES[this.sel.mode] || this.sel.mode === 'daily' || this.sel.mode === 'random') this.sel.mode = '18';
+    if (!MODES[this.sel.mode] || this.sel.mode === 'daily') this.sel.mode = '18';
     this.toasts = $('toasts');
     $('minimap').addEventListener('pointerdown', (e) => this.minimapClick(e));
   }
-  attach(game, academy) { this.game = game; this.academy = academy; }
+  attach(game, academy, editor) { this.game = game; this.academy = academy; this.editor = editor; }
 
   // is a dialog open that should swallow game input?
   modalOpen() {
@@ -86,7 +86,7 @@ export class UI {
     // shared challenge link
     const cb = $('challengeBanner');
     if (this.challenge) {
-      const c = this.challenge, cc = courseById(c.courseId);
+      const c = this.challenge, cc = courseById(c.courseId, c.seed);
       cb.innerHTML = `<div><b>Challenge received:</b> ${cc.name} · ${MODES[c.mode].name} · ${c.holes.length === 1 ? `hole ${c.holes[0] + 1}` : `${c.holes.length} holes`} – same pins and wind as your friend.</div>
         <div class="row"><button class="btn primary" id="chAccept">Accept</button><button class="btn" id="chDismiss">Dismiss</button></div>`;
       cb.classList.remove('hidden');
@@ -106,7 +106,7 @@ export class UI {
         box.appendChild(b);
       }
     };
-    opt('optMode', this.sel.mode, ['18', 'front', 'back', 'single', 'ctp', 'drive'].map((k) => [k, MODES[k].name, MODES[k].desc]));
+    opt('optMode', this.sel.mode, ['18', 'front', 'back', 'single', 'ctp', 'drive', 'random'].map((k) => [k, MODES[k].name, MODES[k].desc]));
     opt('optPlayers', this.sel.players, [[1, '1'], [2, '2'], [3, '3'], [4, '4']]);
     opt('optProfile', s.profile, Object.entries(PROFILES).map(([k, p]) => [k, p.name, p.desc]));
     opt('optDiff', s.difficulty, [['beginner', 'Beginner', 'Big impact zone, full aim preview with wind and roll, full putt line'], ['standard', 'Standard', 'Normal zone, carry preview without wind, partial putt line'], ['pro', 'Pro', 'Small zone, no wind/putt assistance – read it yourself']]);
@@ -136,6 +136,7 @@ export class UI {
     $('btnAcademy').onclick = () => { this.academy.open(); };
     $('btnHow').onclick = () => this.showHelp(true);
     $('btnStats').onclick = () => this.showStats(true);
+    $('btnEditor').onclick = () => this.editor.open();
     $('btnSettings').onclick = () => this.showSettings(true);
   }
   setOpt(id, k) {
@@ -153,6 +154,7 @@ export class UI {
 
   play() {
     const m = this.sel.mode;
+    if (m === 'random') { this.start({ courseId: 'gen', holes: holesFor(m), mode: m }); return; }
     const holes = holesFor(m, this.sel.courseId, +this.sel.hole || 1);
     this.start({ courseId: this.sel.courseId, holes, mode: m });
   }
@@ -164,7 +166,7 @@ export class UI {
   }
 
   hideAll() {
-    for (const id of ['menu', 'intro', 'scorecard', 'relief', 'pause', 'summary', 'shotPanel', 'help', 'settings', 'stats']) $(id).classList.add('hidden');
+    for (const id of ['menu', 'intro', 'scorecard', 'relief', 'pause', 'summary', 'shotPanel', 'help', 'settings', 'stats', 'editor']) $(id).classList.add('hidden');
     document.body.classList.remove('sc-open');
     this.scModal = false;
     this.paused = false;
@@ -523,7 +525,7 @@ export class UI {
   summaryButtons(course, round) {
     const s = $('summary');
     const players = round.players.length > 1 ? round.players.map((p) => p.name) : null;
-    $('sumAgain').onclick = () => { s.classList.add('hidden'); this.game.startRound({ courseId: course.id, holes: round.holes, mode: round.mode, players }); };
+    $('sumAgain').onclick = () => { s.classList.add('hidden'); this.game.startRound({ courseId: course.id, holes: round.holes, mode: round.mode, players, seed: course.generated ? round.seed : undefined }); };
     $('sumMenu').onclick = () => { s.classList.add('hidden'); this.game.quitToMenu(); };
     $('sumShare').onclick = async () => {
       const url = location.origin + location.pathname + challengeHash(round);
@@ -642,7 +644,7 @@ export class UI {
       <div class="bests">${bests.map(([c, m, b]) => `<div><span>${c.name} · ${MODES[m]?.name || m}</span><b>${toParStr(b.toPar)} (${b.strokes})</b><small>${b.date}</small></div>`).join('') || '<p class="muted">None yet.</p>'}</div>
       <h3>Recent rounds</h3>
       <table class="hist"><tr><th>Date</th><th>Course</th><th>Mode</th><th>Score</th><th>Putts</th><th>SG</th></tr>
-      ${mine.slice(-12).reverse().map((r) => `<tr><td>${r.date.slice(0, 10)}</td><td>${courseById(r.course)?.name || r.course}</td><td>${MODES[r.mode]?.name || r.mode}</td><td>${toParStr(r.strokes - r.par)} (${r.strokes})</td><td>${r.putts}</td><td class="${r.sgTotal >= 0 ? 'good' : 'bad'}">${sgn(r.sgTotal, 1)}</td></tr>`).join('')}</table>
+      ${mine.slice(-12).reverse().map((r) => `<tr><td>${r.date.slice(0, 10)}</td><td>${r.course === 'gen' ? 'Random course' : r.course === 'custom' ? 'Custom course' : courseById(r.course)?.name || r.course}</td><td>${MODES[r.mode]?.name || r.mode}</td><td>${toParStr(r.strokes - r.par)} (${r.strokes})</td><td>${r.putts}</td><td class="${r.sgTotal >= 0 ? 'good' : 'bad'}">${sgn(r.sgTotal, 1)}</td></tr>`).join('')}</table>
       ` : '<p class="muted">No rounds yet. Finish a round and your scores, strokes-gained trends and a handicap estimate appear here.</p>'}
       <div class="row wrap"><button class="btn primary" id="stClose">Close</button>${mine.length ? '<button class="btn danger" id="stClear">Clear history</button>' : ''}</div>`;
     $('stClose').onclick = () => this.showStats(false);

@@ -222,7 +222,7 @@ export class Academy {
       });
       g.fillStyle = 'rgba(255,255,255,0.8)'; g.font = '11px Barlow, sans-serif'; g.fillText('Top view (right is down)', L + 4, 14);
       // legend
-      let lx = w - 10; g.textAlign = 'right';
+      const lx = w - 10; g.textAlign = 'right';
       [...all].reverse().forEach((s, i) => { g.fillStyle = s.current ? '#fff' : colors[(all.length - 1 - i) % colors.length]; g.fillText(s.name, lx, h - 8 - i * 13); });
       g.textAlign = 'left';
     }
