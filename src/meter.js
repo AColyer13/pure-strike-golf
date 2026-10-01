@@ -5,7 +5,7 @@
 //               (backswing), push it forward (downswing). Tempo = power,
 //               sideways drift = face angle, stroke direction = club path.
 
-const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+import { clamp } from './util.js';
 
 export class SwingMeter {
   constructor(canvas) {

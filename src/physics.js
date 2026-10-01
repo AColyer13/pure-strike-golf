@@ -4,6 +4,8 @@
 // Everything is SI (metres, seconds, kg, rad). Pure JS – no Three.js dependency,
 // so it can be unit tested / calibrated in Node.
 
+import { DEG, clamp, smooth } from './util.js';
+
 export const BALL = {
   mass: 0.04593,
   radius: 0.02135,
@@ -84,9 +86,6 @@ const len = (a) => Math.hypot(a[0], a[1], a[2]);
 const norm = (a) => { const l = len(a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
 export const vec = { v3, add, sub, mul, dot, cross, len, norm };
 
-const DEG = Math.PI / 180;
-const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
-const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 
 // Rotate vector v around unit axis k by angle a (Rodrigues)
 function rotAxis(v, k, a) {

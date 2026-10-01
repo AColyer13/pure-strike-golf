@@ -8,6 +8,7 @@
 // World space: metres, +x = right of the tee line, -z = toward the green, +y up.
 
 import { stimpToRoll } from './physics.js';
+import { clamp, smooth, lerp } from './util.js';
 
 export const YD = 0.9144;
 export const FT = 0.3048;
@@ -39,9 +40,6 @@ export function mulberry32(a) {
   };
 }
 
-const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
-const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
-const lerp = (a, b, t) => a + (b - a) * t;
 
 // Blob: rotated ellipse with a wobbly outline. Returns approx signed distance (m).
 function makeBlob(cx, cz, rx, ry, rotRad, seed, wob = 1) {

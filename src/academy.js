@@ -5,7 +5,7 @@ import { buildBag, PROFILES } from './clubs.js';
 import { YD, mulberry32 } from './hole.js';
 
 const $ = (id) => document.getElementById(id);
-const MPH = 0.44704;
+import { MPH } from './util.js';
 
 const LESSONS = [
   { id: 'dplane', title: 'Ball flight laws (D-plane)',

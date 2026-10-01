@@ -4,8 +4,7 @@ import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
 import { Hole, fbm, vnoise, mulberry32, YD } from './hole.js';
 
-const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
-const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+import { clamp, smooth } from './util.js';
 // palette colours are sRGB hex; the painted canvas is tagged SRGBColorSpace, so keep them in sRGB 0-255
 const hex = (h) => { const c = new THREE.Color(h); const s = c.clone().convertLinearToSRGB(); return [s.r * 255, s.g * 255, s.b * 255]; };
 const mix3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
