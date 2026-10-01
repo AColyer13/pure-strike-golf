@@ -2,6 +2,8 @@
 
 A 3D golf game built to be fun and physically honest. Every shot follows real ball-flight physics, and the game explains why it did what it did.
 
+**Play it in your browser: https://acolyer13.github.io/pure-strike-golf/**
+
 Four tribute courses, plus random courses and your own edits:
 
 | Course | Signature hole | What it teaches |
