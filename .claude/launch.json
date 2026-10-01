@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "golf", "runtimeExecutable": "node", "runtimeArgs": ["tools/serve.mjs"], "port": 8321, "autoPort": true }
+  ]
+}

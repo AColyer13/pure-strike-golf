@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pure Strike Golf</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Barlow+Condensed:wght@600;700;800&display=swap">
+<link rel="stylesheet" href="styles.css">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<canvas id="swingOverlay"></canvas>
+
+<div id="boot"><div class="logo">PURE <span>STRIKE</span> GOLF</div><div class="muted">Loading…</div></div>
+
+<!-- ============ main menu ============ -->
+<div id="menu" class="hidden">
+  <header class="menu-head">
+    <div class="logo">PURE <span>STRIKE</span> GOLF</div>
+    <div class="tagline">Realistic ball flight · real strategy · learn why every shot does what it does</div>
+  </header>
+  <div id="courseCards"></div>
+  <div class="menu-opts">
+    <div class="opt"><label>Round</label><div id="optMode" class="segs"></div><select id="optHole" class="hidden"></select></div>
+    <div class="opt"><label>Golfer</label><div id="optProfile" class="segs"></div><div id="profileDesc" class="muted small"></div></div>
+    <div class="opt"><label>Assists</label><div id="optDiff" class="segs"></div></div>
+    <div class="opt"><label>Swing</label><div id="optControl" class="segs"></div></div>
+    <div class="opt"><label>Units</label><div id="optUnits" class="segs"></div></div>
+  </div>
+  <div class="menu-btns">
+    <button id="btnPlay" class="btn primary big">Tee off ▶</button>
+    <button id="btnAcademy" class="btn big">Golf Academy</button>
+    <button id="btnHow" class="btn big">How to play</button>
+  </div>
+  <div class="menu-foot muted small">Tribute recreations of famous courses based on public scorecards and hole guides. Not affiliated with or endorsed by any club, tour or game publisher.</div>
+</div>
+
+<!-- ============ HUD ============ -->
+<div id="hud" class="hidden">
+  <div id="holeCard" class="panel">
+    <div class="hc-num" id="hcNum">1</div>
+    <div class="hc-info"><div class="hc-name" id="hcName"></div><div class="hc-par" id="hcPar"></div></div>
+    <div class="hc-right"><div class="hc-shot" id="hcShot"></div><div class="hc-score" id="hcScore">E</div></div>
+  </div>
+  <div id="distBox" class="panel">
+    <div class="lbl">To pin</div><div class="big" id="dPin"></div><div class="sub" id="dSub"></div>
+  </div>
+  <div id="windBox" class="panel">
+    <div class="wind-dial"><div id="windArrow"><i>➤</i></div></div>
+    <div><div class="big"><span id="windMph">0</span><small> mph</small></div><div class="sub" id="windTxt"></div></div>
+  </div>
+  <div id="clubBox" class="panel">
+    <div class="club-top"><span class="club-key" id="clubKey"></span><span class="club-name" id="clubName"></span><span class="club-arrows">↑↓</span></div>
+    <div class="sub" id="clubDist"></div>
+    <div class="club-row" id="shapeRow"><span>Shape <b id="shapeVal"></b> <kbd>Q</kbd><kbd>E</kbd></span><span>Flight <b id="trajVal"></b> <kbd>R</kbd><kbd>F</kbd></span></div>
+  </div>
+  <div id="lieBox" class="panel">
+    <div class="lbl">Lie</div><div class="lie-name" id="lieName"></div>
+    <div class="lie-range" id="lieRange"></div><div class="sub" id="lieSlope"></div>
+  </div>
+  <canvas id="minimap" class="panel"></canvas>
+  <div id="caddie" class="hidden"><div class="caddie-ico">🧢</div><div id="caddieText"></div></div>
+  <canvas id="meter"></canvas>
+</div>
+<div id="helpBar" class="hidden"></div>
+<div id="toasts"></div>
+<div id="banner" class="banner"></div>
+
+<div id="intro" class="hidden"></div>
+<div id="shotPanel" class="hidden panel"></div>
+<div id="relief" class="hidden modal"></div>
+<div id="scorecard" class="hidden modal"></div>
+<div id="pause" class="hidden modal"></div>
+<div id="help" class="hidden modal"></div>
+<div id="summary" class="hidden modal"></div>
+<div id="academy" class="hidden"></div>
+<div id="loading" class="hidden"><div class="spinner"></div><div id="loadingText"></div></div>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
