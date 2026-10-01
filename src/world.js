@@ -7,6 +7,8 @@ import { Hole, fbm, vnoise, mulberry32, YD } from './hole.js';
 import { clamp, smooth } from './util.js';
 // palette colours are sRGB hex; the painted canvas is tagged SRGBColorSpace, so keep them in sRGB 0-255
 const hex = (h) => { const c = new THREE.Color(h); const s = c.clone().convertLinearToSRGB(); return [s.r * 255, s.g * 255, s.b * 255]; };
+// cheap integer hash -> [0, 1) for per-texel grain
+const hash2 = (i, j) => { let h = Math.imul(i, 374761393) + Math.imul(j, 668265263); h = Math.imul(h ^ (h >>> 13), 1274126177); return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
 const mix3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 
 // ---------------------------------------------------------------- shared textures
@@ -430,7 +432,7 @@ export class World {
     const col = {
       fw: [hex(P.fairway[0]), hex(P.fairway[1])], cut: hex(P.cut), second: hex(P.second || P.rough), rough: hex(P.rough), deep: hex(P.deep),
       green: [hex(P.green[0]), hex(P.green[1])], fringe: hex(P.fringe), bunker: hex(P.bunker), waste: hex(P.waste), straw: hex(P.straw),
-      tee: [hex(P.tee[0]), hex(P.tee[1])], dirt: hex(P.dirt), path: hex(P.path), water: hex(P.water), mud: [70, 80, 60], rock: [120, 112, 98], sand: hex(hole.style.sand || '#e8dcb8'),
+      tee: [hex(P.tee[0]), hex(P.tee[1])], dirt: hex(P.dirt), path: hex(P.path), strawDark: mix3(hex(P.straw), [40, 25, 12], 0.35), strawLight: mix3(hex(P.straw), [220, 180, 120], 0.3), water: hex(P.water), mud: [70, 80, 60], rock: [120, 112, 98], sand: hex(hole.style.sand || '#e8dcb8'),
     };
     const st = hole.style;
     const roughKind = st.roughType || 'rough';
@@ -439,6 +441,8 @@ export class World {
     const gf = hole.gf;
     const strawOn = !!st.straw;
     const data = img.data;
+    const hz = g.createImageData(tw, th), hzd = hz.data; // minimap hazard hatching
+    const hatch = Math.max(3, Math.round(4 / texel));
     for (let j = 0; j < th; j++) {
       const z = B.minZ + ((j + 0.5) / th) * D;
       for (let i = 0; i < tw; i++) {
@@ -454,10 +458,10 @@ export class World {
         c3 = mix3(c3, col.cut, 1 - smooth(cutW - 0.4, cutW + 0.4, Math.min(fsd, gsd - gCut + cutW)));
         // fairway with mowing stripes
         if (fsd < 0.6) {
-          const stripe = Math.floor(pr.s / 9.5) % 2;
-          const cross = Math.floor((pr.o + 200) / 14) % 2;
-          let fc = col.fw[stripe];
-          if (st.crossMow) fc = mix3(fc, col.fw[cross], 0.3);
+          // soft-edged stripes: the mower's light/dark passes blend over ~1 m
+          const sv = smooth(0.3, 0.7, 0.5 + 0.5 * Math.sin((pr.s / 9.5) * Math.PI));
+          let fc = mix3(col.fw[0], col.fw[1], sv);
+          if (st.crossMow) fc = mix3(fc, mix3(col.fw[0], col.fw[1], smooth(0.3, 0.7, 0.5 + 0.5 * Math.sin(((pr.o + 200) / 14) * Math.PI))), 0.3);
           c3 = mix3(c3, fc, 1 - smooth(-0.3, 0.3, fsd));
         }
         // pine straw under trees
@@ -468,7 +472,11 @@ export class World {
             const d = Math.hypot(t.x - x, t.z - z) / (t.crownR * 1.4 + 2);
             if (d < best) best = d;
           }
-          if (best < 1.3) c3 = mix3(c3, col.straw, (1 - smooth(0.7, 1.3, best)) * (0.85 + n * 0.3));
+          if (best < 1.3) {
+            // needles: per-texel speckle between dark and sun-bleached straw
+            const h = hash2(i, j), needle = h < 0.33 ? col.strawDark : h > 0.85 ? col.strawLight : col.straw;
+            c3 = mix3(c3, needle, (1 - smooth(0.7, 1.3, best)) * (0.85 + n * 0.3));
+          }
         }
         // tree shade (ambient occlusion)
         // tee
@@ -503,9 +511,10 @@ export class World {
           if (w.kind === 'ocean') c3 = mix3(c3, col.sand, 1 - smooth(-0.5, 1.5, wd));
           else c3 = mix3(c3, col.mud, 1 - smooth(-0.3, 1.5, wd));
           c3 = mix3(c3, col.water, 1 - smooth(-5, -1.2, wd)); // deeper bed reads as water (also on the minimap)
+          if (wd < 0 && (i + j) % hatch === 0) { const q = (j * tw + i) * 4; hzd[q] = 255; hzd[q + 1] = 90; hzd[q + 2] = 80; hzd[q + 3] = 200; }
         }
-        // colour noise
-        const k = 1 + n * 0.07;
+        // colour noise: broad patches plus a fine grass grain
+        const k = 1 + n * 0.07 + (hash2(i, j) - 0.5) * 0.035;
         // canvas row 0 = top = minZ
         const id2 = (j * tw + i) * 4;
         data[id2] = clamp(c3[0] * k, 0, 255);
@@ -529,6 +538,10 @@ export class World {
     }
     g.globalCompositeOperation = 'source-over';
     this.textureCanvas = c;
+    const hc = document.createElement('canvas');
+    hc.width = tw; hc.height = th;
+    hc.getContext('2d').putImageData(hz, 0, 0);
+    this.hazardCanvas = hc;
     const tex = new THREE.CanvasTexture(c);
     tex.colorSpace = THREE.SRGBColorSpace;
     tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
@@ -584,6 +597,7 @@ export class World {
 
   buildWater(hole) {
     this.waterMats = [];
+    const stakes = [];
     const col = hole.style.palette.water;
     for (const w of hole.waters) {
       if (w.kind === 'pond') {
@@ -604,6 +618,13 @@ export class World {
           const x = dx * r, z = dz * r;
           if (i === 0) shape.moveTo(x, -z); else shape.lineTo(x, -z);
         }
+        const rays = this.shoreRays(hole, w);
+        if (w.island && rays.every((r) => r.hits[0])) {
+          // cut the island out so the water plane can't show through low spots (bunkers) on it
+          const isle = new THREE.Path();
+          rays.forEach((r, i) => { const rr = r.hits[0].r - 0.6, x = r.dx * rr, z = r.dz * rr; if (i === 0) isle.moveTo(x, -z); else isle.lineTo(x, -z); });
+          shape.holes.push(isle);
+        }
         const geo = new THREE.ShapeGeometry(shape, 1).rotateX(-Math.PI / 2);
         const mat = this.waterMaterial(col);
         const m = new THREE.Mesh(geo, mat);
@@ -611,6 +632,7 @@ export class World {
         m.receiveShadow = true;
         this.group.add(m);
         this.waterMats.push(mat);
+        this.buildShore(hole, w, rays, stakes);
       } else if (w.kind === 'creek') {
         // ribbon along the polyline
         const pts = w.pts;
@@ -639,8 +661,19 @@ export class World {
         const m = new THREE.Mesh(geo, mat);
         this.group.add(m);
         this.waterMats.push(mat);
+        // red stakes along both banks
+        for (let i = 0; i < pts.length - 1; i++) {
+          const a = pts[i], b = pts[i + 1];
+          const l = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+          const nx = -(b.z - a.z) / l, nz = (b.x - a.x) / l;
+          for (let t = 0; t < l; t += 14) {
+            const x = a.x + ((b.x - a.x) * t) / l, z = a.z + ((b.z - a.z) * t) / l;
+            for (const sd of [1, -1]) stakes.push([x + nx * sd * (w.hw + 1.6), z + nz * sd * (w.hw + 1.6)]);
+          }
+        }
       }
     }
+    this.buildStakes(hole, stakes);
     if (hole.waters.some((w) => w.kind === 'ocean') || hole.style.ocean) {
       const geo = new THREE.PlaneGeometry(6000, 6000, 1, 1).rotateX(-Math.PI / 2);
       const uv = geo.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 120, uv.getY(i) * 120);
@@ -653,6 +686,68 @@ export class World {
       // surf line
     }
   }
+  // Wet-edge foam where the pond meets the bank, and penalty stakes around it.
+  // The shoreline is found by marching rays from the pond centre and noting
+  // where the terrain crosses the water level (an island pond has two shores).
+  shoreRays(hole, w) {
+    const N = 96, step = 0.3, rMax = Math.max(w.rx, w.ry) * 1.6 + 12;
+    // wet = below the water level and inside the penalty area (not a bunker dipping low)
+    const wetAt = (x, z) => hole.height(x, z) < w.level && hole.waterSdf(x, z).d < 2;
+    const rays = [];
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2, dx = Math.cos(a), dz = Math.sin(a);
+      const hits = [];
+      let wet = wetAt(w.cx, w.cz);
+      for (let r = step; r < rMax; r += step) {
+        const now = wetAt(w.cx + dx * r, w.cz + dz * r);
+        if (now !== wet) { hits.push({ r, waterInside: !now }); wet = now; }
+        if (hits.length >= 2) break;
+      }
+      rays.push({ dx, dz, hits });
+    }
+    return rays;
+  }
+  buildShore(hole, w, rays, stakes) {
+    const N = rays.length;
+    const pos = [], colr = [], idx = [];
+    for (let k = 0; k < 2; k++) {
+      if (!rays.every((r) => r.hits[k])) continue;
+      const base = pos.length / 3;
+      rays.forEach((ray, i) => {
+        const h = ray.hits[k], sgn = h.waterInside ? -1 : 1; // foam extends into the water side
+        const r0 = h.r - 0.15 * sgn, r1 = h.r + 0.9 * sgn;
+        pos.push(w.cx + ray.dx * r0, w.level + 0.025, w.cz + ray.dz * r0, w.cx + ray.dx * r1, w.level + 0.02, w.cz + ray.dz * r1);
+        colr.push(0.95, 0.98, 1, 0.38, 0.95, 0.98, 1, 0);
+        const j = (i + 1) % N, a = base + i * 2, b = base + j * 2;
+        idx.push(a, a + 1, b, b, a + 1, b + 1);
+        // a stake every ~12 m along the shore, just up the bank
+        const arc = (2 * Math.PI * h.r) / N;
+        if (i % Math.max(1, Math.round(12 / arc)) === 0) { const rs = h.r - 1.4 * sgn; stakes.push([w.cx + ray.dx * rs, w.cz + ray.dz * rs]); }
+      });
+    }
+    if (!idx.length) return;
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(colr, 4));
+    geo.setIndex(idx);
+    const foam = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+    foam.renderOrder = 2;
+    this.group.add(foam);
+  }
+
+  // Red penalty-area stakes (instanced), skipping any that would sit on the green or tee
+  buildStakes(hole, stakes) {
+    const keep = stakes.filter(([x, z]) => hole.inBounds(x, z) && hole.greenSdf(x, z) > 3 && hole.teeSdf(x, z) > 1 && hole.waterSdf(x, z).d > 0.3);
+    if (!keep.length) return;
+    const geo = new THREE.CylinderGeometry(0.025, 0.03, 0.9, 6).translate(0, 0.45, 0);
+    const mat = new THREE.MeshLambertMaterial({ color: '#d42a1f' });
+    const inst = new THREE.InstancedMesh(geo, mat, keep.length);
+    const m4 = new THREE.Matrix4();
+    keep.forEach(([x, z], i) => { m4.makeTranslation(x, hole.height(x, z) - 0.05, z); inst.setMatrixAt(i, m4); });
+    inst.castShadow = true;
+    this.group.add(inst);
+  }
+
   pondSdf(w, x, z) { return this.hole.waterSdf(x, z).w === w ? this.hole.waterSdf(x, z).d : 5; }
 
   // ------------------------------------------------------------ flag, cup, tees

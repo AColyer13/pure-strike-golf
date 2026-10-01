@@ -268,6 +268,7 @@ export class UI {
     g.beginPath(); if (g.roundRect) g.roundRect(0, 0, cw, ch, 10); else g.rect(0, 0, cw, ch); g.clip();
     g.fillStyle = '#23402a'; g.fillRect(0, 0, cw, ch);
     g.drawImage(W.textureCanvas, ox, oy, bw * s, bd * s);
+    if (W.hazardCanvas) g.drawImage(W.hazardCanvas, ox, oy, bw * s, bd * s); // hatched penalty areas
     const P = (x, z) => [ox + (x - B.minX) * s, oy + (z - B.minZ) * s];
     const b = game.ball;
     const [bx, by] = P(b.p[0], b.p[2]);
