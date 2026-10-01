@@ -346,6 +346,7 @@ export class Game {
     const b = this.ball;
     if (!this.club) return;
     const f = dirOf(this.aim);
+    this.golfer.setOutfit(this.round?.p || 0);
     this.golfer.place({ x: b.p[0], z: b.p[2] }, f, this.hole.height(b.p[0], b.p[2]));
     const teed = b.isTee && !this.club.putter && this.club.loft < 30;
     const lift = b.isTee ? (teed ? (this.club.loft < 13 ? 0.035 : 0.012) : 0.005) : 0;

@@ -14,13 +14,33 @@ function limb(len, r0, r1, mat) {
   return g;
 }
 
+// joint ball that hides the seam where two limb cylinders meet
+function joint(r, mat) {
+  const m = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), mat);
+  m.castShadow = true;
+  return m;
+}
+
+// hot-seat players each get their own outfit so it's obvious whose turn it is
+export const OUTFITS = [
+  { shirt: '#d8403a', pants: '#e9e4d4', cap: '#1d2a44', skin: '#d9a27c', hair: '#3b2a1e' },
+  { shirt: '#2f6fd0', pants: '#2b2f3a', cap: '#f2f2f2', skin: '#a8714f', hair: '#1a1410' },
+  { shirt: '#f2c230', pants: '#3d4a33', cap: '#2a2a2a', skin: '#e8bf9c', hair: '#b88a4a' },
+  { shirt: '#f4f4f4', pants: '#6b7f99', cap: '#c22a52', skin: '#7a4b32', hair: '#111' },
+];
+
 export class Golfer {
-  constructor(opts = {}) {
-    const shirt = new THREE.MeshStandardMaterial({ color: opts.shirt || '#d8403a', roughness: 0.8 });
-    const pants = new THREE.MeshStandardMaterial({ color: opts.pants || '#e9e4d4', roughness: 0.85 });
-    const skin = new THREE.MeshStandardMaterial({ color: '#d9a27c', roughness: 0.7 });
+  constructor(opts = OUTFITS[0]) {
+    const shirt = new THREE.MeshStandardMaterial({ color: opts.shirt, roughness: 0.8 });
+    const pants = new THREE.MeshStandardMaterial({ color: opts.pants, roughness: 0.85 });
+    const skin = new THREE.MeshStandardMaterial({ color: opts.skin, roughness: 0.7 });
+    const hair = new THREE.MeshStandardMaterial({ color: opts.hair, roughness: 0.9 });
     const shoe = new THREE.MeshStandardMaterial({ color: '#f4f4f4', roughness: 0.5 });
-    const cap = new THREE.MeshStandardMaterial({ color: opts.cap || '#1d2a44', roughness: 0.7 });
+    const sole = new THREE.MeshStandardMaterial({ color: '#2a2a2a', roughness: 0.9 });
+    const belt = new THREE.MeshStandardMaterial({ color: '#1c1c1c', roughness: 0.5, metalness: 0.2 });
+    const cap = new THREE.MeshStandardMaterial({ color: opts.cap, roughness: 0.7 });
+    this.mats = { shirt, pants, skin, hair, cap };
+    this.outfit = 0;
     const glove = new THREE.MeshStandardMaterial({ color: '#fafafa', roughness: 0.6 });
     this.shaftMat = new THREE.MeshStandardMaterial({ color: '#c8ccd2', metalness: 0.9, roughness: 0.25 });
     this.headMat = new THREE.MeshStandardMaterial({ color: '#50555e', metalness: 0.8, roughness: 0.3 });
@@ -36,6 +56,9 @@ export class Golfer {
     const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.16, 0.22), pants);
     pelvis.castShadow = true;
     this.hips.add(pelvis);
+    const beltM = new THREE.Mesh(new THREE.BoxGeometry(0.352, 0.04, 0.232), belt);
+    beltM.position.y = 0.07;
+    this.hips.add(beltM);
     this.legs = [];
     for (const s of [-1, 1]) {
       const thigh = limb(0.46, 0.085, 0.07, pants);
@@ -43,10 +66,22 @@ export class Golfer {
       const shin = limb(0.44, 0.065, 0.05, pants);
       shin.position.y = -0.46;
       thigh.add(shin);
-      const foot = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.07, 0.27), shoe);
+      const hipJ = joint(0.085, pants);
+      thigh.add(hipJ);
+      const knee = joint(0.066, pants);
+      knee.position.y = -0.46;
+      thigh.add(knee);
+      // shoe: rounded toe on an upper, with a dark sole
+      const foot = new THREE.Group();
       foot.position.set(0, -0.46, 0.05);
-      foot.castShadow = true;
       shin.add(foot);
+      const upperShoe = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 0.2), shoe);
+      upperShoe.position.set(0, 0.005, -0.03);
+      const toe = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 1.2, 1.3), shoe);
+      toe.position.set(0, -0.025, 0.07);
+      const soleM = new THREE.Mesh(new THREE.BoxGeometry(0.104, 0.018, 0.29), sole);
+      soleM.position.set(0, -0.032, 0.005);
+      for (const m of [upperShoe, toe, soleM]) { m.castShadow = true; foot.add(m); }
       this.body.add(thigh);
       thigh.position.y = 0.9;
       this.legs.push({ thigh, shin, s });
@@ -64,6 +99,14 @@ export class Golfer {
     this.chest = new THREE.Group();
     this.chest.position.y = 0.52;
     this.spine.add(this.chest);
+    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.062, 0.018, 6, 14), shirt);
+    collar.rotation.x = Math.PI / 2;
+    collar.position.y = 0.035;
+    this.chest.add(collar);
+    const yoke = new THREE.Mesh(new THREE.CapsuleGeometry(0.075, 0.26, 4, 10).rotateZ(Math.PI / 2), shirt);
+    yoke.scale.z = 0.85;
+    yoke.castShadow = true;
+    this.chest.add(yoke);
     const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.1, 8), skin);
     neck.position.y = 0.07;
     this.chest.add(neck);
@@ -73,6 +116,17 @@ export class Golfer {
     const headM = new THREE.Mesh(new THREE.SphereGeometry(0.105, 16, 12), skin);
     headM.castShadow = true;
     this.head.add(headM);
+    const hairM = new THREE.Mesh(new THREE.SphereGeometry(0.108, 14, 8, Math.PI * 0.15, Math.PI * 0.7, Math.PI * 0.3, Math.PI * 0.35), hair);
+    hairM.rotation.y = Math.PI; // back and sides of the head, below the cap
+    this.head.add(hairM);
+    for (const s of [-1, 1]) {
+      const ear = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 6).scale(0.5, 1, 0.8), skin);
+      ear.position.set(0.102 * s, -0.01, 0);
+      this.head.add(ear);
+    }
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.016, 0.04, 6).rotateX(Math.PI / 2), skin);
+    nose.position.set(0, -0.015, 0.105);
+    this.head.add(nose);
     const capM = new THREE.Mesh(new THREE.SphereGeometry(0.11, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), cap);
     capM.position.y = 0.02;
     this.head.add(capM);
@@ -92,6 +146,10 @@ export class Golfer {
       const fore = limb(0.28, 0.042, 0.035, skin);
       fore.position.y = -0.3;
       upper.add(fore);
+      sh.add(joint(0.06, shirt));
+      const elbow = joint(0.044, skin);
+      elbow.position.y = -0.3;
+      upper.add(elbow);
       const hand = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), s < 0 ? glove : skin);
       hand.position.y = -0.3;
       fore.add(hand);
@@ -109,6 +167,13 @@ export class Golfer {
     this.t = 0;
     this.onImpact = null;
     this.putting = false;
+  }
+
+  setOutfit(i) {
+    const o = OUTFITS[i % OUTFITS.length];
+    if (this.outfit === i) return;
+    this.outfit = i;
+    for (const k of Object.keys(this.mats)) this.mats[k].color.set(o[k]);
   }
 
   setClub(club) {
