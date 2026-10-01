@@ -16,16 +16,21 @@ export const CUP_RADIUS = 0.054; // 4.25" diameter
 // Aerodynamic coefficients – calibrated against TrackMan PGA Tour averages
 // (see tools/calibrate.mjs). S = spin factor = r*omega / v.
 export const AERO = {
-  cdHigh: 0.2536,   // drag coefficient in the super-critical Reynolds regime (fast)
+  cdHigh: 0.2668,   // drag coefficient in the super-critical Reynolds regime (fast)
   cdLow: 0.30,    // drag below the "drag crisis" (slow balls: < ~13 m/s)
-  cdSpin: 0.175,   // extra drag from spin (induced drag)
-  cdRe: 0.08,     // drag keeps falling slightly with Reynolds number (fast drives)
-  clMax: 0.3243,    // lift: Cl = clMax*(1-exp(-(S/clS0)^clP)) � saturating with spin
-  clS0: 0.1396,
-  clP: 1.302,
+  cdSpin: 0.0924,   // extra drag from spin (induced drag)
+  cdRe: 0.17,     // drag keeps falling slightly with Reynolds number (fast drives)
+  clMax: 0.353,    // lift: Cl = clMax*(1-exp(-(S/clS0)^clP)) – saturating with spin
+  clS0: 0.1275,
+  clP: 1.383,
   cr1: 11,        // drag crisis speed band (m/s)
   cr2: 20,
-  spinTau: 90,    // spin decays exp(-t/tau) (fitted; tour data implies slow decay)
+  spinTau: 36.447,    // spin decays exp(-t/tau) (fitted; tour data implies slow decay)
+  cdReV: 47.1181,      // centre / half-width (m/s) of the Reynolds-number drag slope
+  cdReW: 26.6162,
+  clRe: 0.2176,        // lift falls slightly with speed (per cdReW above cdReV)
+  clLin: -0.1065,       // linear lift term on top of the saturating curve
+  spinS: 59.5605,       // spin decays faster at high spin ratio: rate = (1 + spinS*S) / spinTau
 };
 
 // ---------------------------------------------------------------- surfaces
@@ -94,9 +99,17 @@ export function aeroCoeffs(speed, spinRad) {
   const S = speed > 0.1 ? (BALL.radius * spinRad) / speed : 0;
   // drag crisis: dimples trip the boundary layer only above ~Re 6e4
   const crisis = 1 - smooth(AERO.cr1, AERO.cr2, speed);
-  const cd = AERO.cdHigh - AERO.cdRe * clamp((speed - 45) / 30, -1, 1) + (AERO.cdLow - AERO.cdHigh) * crisis + AERO.cdSpin * S;
-  const cl = AERO.clMax * (1 - Math.exp(-Math.pow(S / AERO.clS0, AERO.clP)));
+  const re = clamp((speed - AERO.cdReV) / AERO.cdReW, -1, 1);
+  const cd = AERO.cdHigh - AERO.cdRe * re + (AERO.cdLow - AERO.cdHigh) * crisis + AERO.cdSpin * S;
+  const cl = AERO.clMax * (1 - AERO.clRe * re) * (1 - Math.exp(-Math.pow(S / AERO.clS0, AERO.clP))) + AERO.clLin * S;
   return { cd, cl, S };
+}
+
+// Spin decay (viscous torque grows with spin ratio)
+function decaySpin(w, v, dt) {
+  const sp = len(v);
+  const S = sp > 0.1 ? (BALL.radius * len(w)) / sp : 0;
+  return mul(w, Math.exp((-dt * (1 + AERO.spinS * S)) / AERO.spinTau));
 }
 
 // Wind is quoted at 10 m (standard). Logarithmic boundary layer near the ground.
@@ -221,7 +234,7 @@ export function simulateCarry(ld, env, opts = {}) {
     prev = p;
     p = add(p, mul(vm, dt));
     v = add(v, mul(am, dt));
-    w = mul(w, Math.exp(-dt / AERO.spinTau));
+    w = decaySpin(w, v, dt);
     t += dt;
     if (p[1] > apex) apex = p[1];
     if (pts && Math.floor(t / dt) % 4 === 0) pts.push(p.slice());
@@ -311,7 +324,7 @@ export class BallSim {
     const prev = this.p;
     this.p = add(this.p, mul(vm, dt));
     this.v = add(this.v, mul(am, dt));
-    this.w = mul(this.w, Math.exp(-dt / AERO.spinTau));
+    this.w = decaySpin(this.w, this.v, dt);
     if (this.p[1] > this.apex) this.apex = this.p[1];
 
     // trees

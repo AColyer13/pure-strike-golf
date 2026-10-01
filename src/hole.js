@@ -560,9 +560,9 @@ export class Hole {
       const y = p[1] - t.y;
       if (y < 0 || y > t.h) continue;
       // trunk
+      // (the vn < 0 test stops a ball that is already moving away from being hit twice,
+      // so the result depends only on the inputs and the seeded rng – forecasts match)
       if (y < t.trunkH && dh < t.trunkR + 0.03) {
-        if (t.lastHit && t.lastHit > performance.now() - 80) continue;
-        t.lastHit = performance.now();
         const nx = dx / (dh || 1), nz = dz / (dh || 1);
         const vn = v[0] * nx + v[2] * nz;
         if (vn < 0) return { v: [(v[0] - 1.6 * vn * nx) * 0.45, v[1] * 0.5, (v[2] - 1.6 * vn * nz) * 0.45], kind: 'trunk' };

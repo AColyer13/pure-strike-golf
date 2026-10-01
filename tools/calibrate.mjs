@@ -1,5 +1,6 @@
 // Fits the aerodynamic coefficients so the simulator reproduces TrackMan PGA Tour
 // averages (carry, apex height, landing angle). Run: node tools/calibrate.mjs [--fit]
+// The pass/fail version of these checks lives in tests/physics.test.mjs (npm test).
 import { AERO, computeLaunch, simulateCarry } from '../src/physics.js';
 import { buildBag } from '../src/clubs.js';
 
@@ -28,11 +29,11 @@ function run(print) {
   return err;
 }
 
-const BOUNDS = { cdHigh: [0.18, 0.3], cdSpin: [0, 0.4], clS0: [0.03, 0.3], clP: [0.5, 2], clMax: [0.2, 0.45], cdLow: [0.3, 0.6], spinTau: [15, 90], cdRe: [-0.03, 0.08] };
+const BOUNDS = { cdHigh: [0.15, 0.32], cdSpin: [0, 0.5], clS0: [0.03, 0.4], clP: [0.3, 3], clMax: [0.2, 0.5], spinTau: [10, 400], cdRe: [-0.1, 0.35], cdReV: [25, 70], cdReW: [8, 50], clRe: [-0.6, 0.6], clLin: [-0.3, 0.6], spinS: [0, 150] };
 if (process.argv.includes('--fit')) {
-  const keys = ['cdHigh', 'cdSpin', 'clS0', 'clP', 'clMax', 'cdLow', 'spinTau', 'cdRe'];
+  const keys = Object.keys(BOUNDS);
   let best = run(false);
-  let step = { cdHigh: 0.01, cdSpin: 0.03, clS0: 0.01, clP: 0.05, clMax: 0.02, cdLow: 0.03, cr2: 1, spinTau: 3, cdRe: 0.01 };
+  const step = Object.fromEntries(keys.map((k) => [k, (BOUNDS[k][1] - BOUNDS[k][0]) * 0.05]));
   for (let it = 0; it < 250; it++) {
     let improved = false;
     for (const k of keys) {
@@ -49,7 +50,7 @@ if (process.argv.includes('--fit')) {
 }
 run(true);
 
-// Shape checks: 2 degree face-to-path with a 7 iron and driver
+// Shape checks: face-to-path with a 7 iron and driver
 for (const key of ['DR', '7I']) {
   const c = bag.find((b) => b.key === key);
   for (const [face, path] of [[0, 0], [2, 4], [-2, -4], [3, 0]]) {

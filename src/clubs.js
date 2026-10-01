@@ -2,11 +2,12 @@
 // launch, spin, carry). Amateur profiles are derived from TrackMan / Arccos
 // averages for scratch and ~15 handicap golfers.
 
+// Fairway-wood smash is the off-the-deck average (tee-shot smash is ~1.48).
 // key, name, loft, club mph, smash, launch deg, spin rpm, spin loft, tour carry (yd)
 const TOUR = [
   ['DR', 'Driver',        10.5, 113, 1.48, 10.9, 2686, 13,  275],
-  ['3W', '3 Wood',        15,   107, 1.48, 9.2,  3655, 17,  243],
-  ['5W', '5 Wood',        18,   103, 1.47, 9.4,  4350, 20,  230],
+  ['3W', '3 Wood',        15,   107, 1.45, 9.2,  3655, 17,  243],
+  ['5W', '5 Wood',        18,   103, 1.45, 9.4,  4350, 20,  230],
   ['3H', 'Hybrid',        20,   100, 1.46, 10.2, 4437, 21,  225],
   ['4I', '4 Iron',        23,    96, 1.43, 11.0, 4836, 24,  203],
   ['5I', '5 Iron',        26,    94, 1.40, 12.1, 5361, 27,  194],
