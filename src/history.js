@@ -90,9 +90,10 @@ export function handicapIndex(history) {
   return Math.max(-10, Math.min(54, Math.round(idx * 10) / 10));
 }
 
-// Per-category strokes gained per 18 holes over the most recent rounds.
+// Per-category strokes gained per 18 holes over the most recent rounds of 9+ holes
+// (a single hole scaled up to 18 is too noisy to call a trend).
 export function sgTrend(history, last = 20) {
-  return history.filter((r) => !r.player && r.holes > 0).slice(-last).map((r) => {
+  return history.filter((r) => !r.player && r.holes >= 9).slice(-last).map((r) => {
     const k = 18 / r.holes;
     return { date: r.date.slice(0, 10), course: r.course, OTT: r.sg.OTT * k, APP: r.sg.APP * k, ARG: r.sg.ARG * k, PUTT: r.sg.PUTT * k, total: r.sgTotal * k, toPar: r.strokes - r.par, holes: r.holes };
   });

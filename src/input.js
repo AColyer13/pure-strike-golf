@@ -104,6 +104,7 @@ export class Input {
     const onDown = (e) => {
       g.audio.init();
       if (e.pointerType === 'touch') { this.touchDown(e); return; }
+      if (e.pointerType === 'mouse') this.showTouch(false);
       if (e.button === 2) { this.drag = { x: e.clientX, y: e.clientY, yaw: g.cam.orbit.yaw, pitch: g.cam.orbit.pitch }; return; }
       if (e.button !== 0) return;
       this.primary(e.clientX, e.clientY, e);
@@ -180,7 +181,7 @@ export class Input {
   bindTouch() {
     const box = $('touchControls');
     if (!box) return;
-    if (matchMedia('(pointer: coarse)').matches) this.showTouch(true);
+    if (matchMedia('(hover: none) and (pointer: coarse)').matches) this.showTouch(true);
     for (const b of box.querySelectorAll('[data-act]')) {
       const a = b.dataset.act;
       const hold = b.hasAttribute('data-hold');

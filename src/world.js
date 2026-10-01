@@ -507,11 +507,8 @@ export class World {
         }
         // colour noise
         const k = 1 + n * 0.07;
-        const idx = ((th - 1 - j) * tw + i) * 4;
-        // canvas row 0 = top = uv v=1 = minZ (uv v = 1 - j/(nz-1))
-        const row = j;
-        const id2 = (row * tw + i) * 4;
-        void idx;
+        // canvas row 0 = top = minZ
+        const id2 = (j * tw + i) * 4;
         data[id2] = clamp(c3[0] * k, 0, 255);
         data[id2 + 1] = clamp(c3[1] * k, 0, 255);
         data[id2 + 2] = clamp(c3[2] * k, 0, 255);

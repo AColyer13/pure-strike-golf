@@ -21,6 +21,8 @@ export class SwingMeter {
     this.rangeLabel = '';
     this.onDone = null;
     this.onCancel = null;
+    this.autoPower = null; // one-button swing: power is set automatically here
+    this.onAuto = null;
     this.resize();
   }
   resize() {
@@ -52,6 +54,12 @@ export class SwingMeter {
     if (this.state === 'power') {
       this.v += (this.dir * dt * 1.0) / this.fullTime;
       const max = this.putt ? 1.0 : 1.1;
+      if (this.autoPower != null && this.dir > 0 && this.v >= this.autoPower) {
+        this.v = this.autoPower; this.click();
+        if (this.onAuto) this.onAuto();
+        this.draw();
+        return;
+      }
       if (this.v >= max) { this.v = max; this.dir = -1; }
       if (this.v <= 0 && this.dir < 0) { this.state = 'ready'; this.v = 0; if (this.onCancel) this.onCancel(); }
     } else if (this.state === 'accuracy') {

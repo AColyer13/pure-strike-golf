@@ -19,7 +19,11 @@ export class CameraDirector {
     this.landCam = null;
     this.menuT = 0;
     this.menuInit = false;
+    this.fov = 50;               // target field of view (degrees)
+    this.fovKick = 0;            // short zoom punch, decays to 0
   }
+
+  kick(deg) { this.fovKick = deg; }
 
   set(pos, look, k) { this.tPos.copy(pos); this.tLook.copy(look); if (k != null) this.k = k; }
   snap() { this.pos.copy(this.tPos); this.look.copy(this.tLook); }
@@ -29,12 +33,15 @@ export class CameraDirector {
   startFlyover() {
     const h = this.g.hole;
     this.flyT = 0;
-    this.flyDur = clamp(3.5 + h.length / 110, 4, 8.5);
+    this.fov = 50;
+    this.par3 = h.par === 3;
+    this.flyDur = this.par3 ? 6 : clamp(3.5 + h.length / 110, 4, 8.5);
   }
   // returns true when finished
   flyover(dt) {
     const h = this.g.hole;
     this.flyT += dt;
+    if (this.par3) return this.par3Flyover(dt);
     const k = clamp(this.flyT / this.flyDur, 0, 1);
     const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
     const s = e * h.length;
@@ -46,6 +53,28 @@ export class CameraDirector {
     this.tLook.set(look.x, h.height(look.x, look.z), look.z);
     this.k = 2.5;
     if (this.flyT === dt) this.snap();
+    return k >= 1;
+  }
+
+  // Par 3s open on the green (an orbit round the target – the island, the postage
+  // stamp), then pull back down the line to the tee.
+  par3Flyover(dt) {
+    const h = this.g.hole;
+    const k = clamp(this.flyT / this.flyDur, 0, 1);
+    const cx = h.cup.x, cz = h.cup.z, gy = h.height(cx, cz);
+    const f = dirOf(this.g.aim);
+    const base = Math.atan2(-f.x, -f.z); // angle of the tee side of the green
+    if (k < 0.55) {
+      const a = base + 0.9 - (k / 0.55) * 1.6;
+      this.tPos.set(cx + Math.sin(a) * 38, gy + 14, cz + Math.cos(a) * 38);
+      this.tLook.set(cx, gy, cz);
+      this.k = 3;
+      if (this.flyT === dt) this.snap();
+    } else {
+      const c = this.address();
+      this.tPos.copy(c.pos); this.tLook.copy(c.look);
+      this.k = 1.6;
+    }
     return k >= 1;
   }
 
@@ -78,7 +107,15 @@ export class CameraDirector {
   }
 
   // ------------------------------------------------------------------ flight
-  startFlight() { this.flightMode = 'behind'; this.landCam = null; }
+  startFlight(shot, forecast) {
+    this.flightMode = 'behind';
+    this.landCam = null;
+    this.fov = 50;
+    // approach that finishes on the green: the landing camera sits beyond the green looking back
+    const fc = forecast, b0 = shot.p;
+    const total = fc ? Math.hypot(fc.rest[0] - b0[0], fc.rest[2] - b0[2]) : 0;
+    this.reverse = !!fc && !shot.club.putter && total > 45 && (fc.restSurface === 'green' || fc.restSurface === 'fringe');
+  }
 
   flight(sim, shot, forecast, flightT) {
     const g = this.g, h = g.hole, p = sim.p;
@@ -88,6 +125,18 @@ export class CameraDirector {
     const fc = forecast;
     const totalD = Math.hypot(fc.rest[0] - b0[0], fc.rest[2] - b0[2]);
     const pv = new THREE.Vector3(p[0], p[1], p[2]);
+    if (putt && totalD > 3) {
+      // ball-cam: ride low behind the putt, looking down the line it is rolling on
+      const hv = Math.hypot(sim.v[0], sim.v[2]);
+      const moving = hv > 0.05 && sim.state === 'roll';
+      const fx = moving ? sim.v[0] / hv : dir.x, fz = moving ? sim.v[2] / hv : dir.z;
+      const cx = p[0] - fx * 1.5, cz = p[2] - fz * 1.5;
+      this.tPos.set(cx, h.height(cx, cz) + 0.42, cz);
+      this.tLook.set(p[0] + fx * 2.5, h.height(p[0] + fx * 2.5, p[2] + fz * 2.5) + 0.05, p[2] + fz * 2.5);
+      this.k = 4;
+      this.fov = 46;
+      return;
+    }
     if (putt || totalD < 45) {
       // low follow camera
       const back = putt ? 3.2 : 8;
@@ -104,8 +153,16 @@ export class CameraDirector {
       const L = fc.land, R = fc.rest;
       const side = dir.x * (R[2] - b0[2]) - dir.z * (R[0] - b0[0]) > 0 ? -1 : 1;
       const r = { x: -dir.z * side, z: dir.x * side };
-      const cx = L[0] + r.x * 26 + dir.x * 18, cz = L[2] + r.z * 26 + dir.z * 18;
-      this.landCam = new THREE.Vector3(cx, Math.max(h.height(cx, cz), L[1]) + 7, cz);
+      if (this.reverse) {
+        // green-side reverse angle: beyond the pin, low, looking back at the incoming ball
+        const cx = h.cup.x + dir.x * 24 + r.x * 7, cz = h.cup.z + dir.z * 24 + r.z * 7;
+        this.landCam = new THREE.Vector3(cx, h.height(cx, cz) + 3.5, cz);
+        this.fov = 38;
+      } else {
+        const cx = L[0] + r.x * 26 + dir.x * 18, cz = L[2] + r.z * 26 + dir.z * 18;
+        this.landCam = new THREE.Vector3(cx, Math.max(h.height(cx, cz), L[1]) + 7, cz);
+        this.fov = 44;
+      }
     }
     if (this.flightMode === 'behind') {
       this.tPos.set(b0[0] - dir.x * 7, b0[1] + 2.4, b0[2] - dir.z * 7);
@@ -120,6 +177,40 @@ export class CameraDirector {
       this.k = 1.6;
     }
     this.tLook.copy(pv);
+  }
+
+  // after a skipped flight: a view of where the ball finished
+  snapToRest(sim, shot) {
+    const h = this.g.hole, p = sim.p, dir = dirOf(shot.aim);
+    const back = shot.club.putter ? 3 : 14;
+    const cx = p[0] - dir.x * back, cz = p[2] - dir.z * back;
+    this.tPos.set(cx, h.height(cx, cz) + (shot.club.putter ? 1.2 : 5), cz);
+    this.tLook.set(p[0], p[1], p[2]);
+    this.k = 3;
+    this.fov = 50;
+  }
+
+  // ------------------------------------------------------------------ replay
+  // A different angle from the live shot: down the line from beyond the finish,
+  // looking back at the ball as it comes in (low and close for putts).
+  startReplay(shot, rec) {
+    const h = this.g.hole, dir = dirOf(shot.aim);
+    const end = rec[rec.length - 1], b0 = shot.p;
+    const putt = shot.club.putter;
+    const total = Math.hypot(end[0] - b0[0], end[2] - b0[2]);
+    const r = { x: -dir.z, z: dir.x };
+    let cx, cz, up;
+    if (putt) { cx = end[0] + dir.x * 2.2 + r.x * 0.6; cz = end[2] + dir.z * 2.2 + r.z * 0.6; up = 0.35; }
+    else if (total < 45) { cx = end[0] + dir.x * 10 + r.x * 4; cz = end[2] + dir.z * 10 + r.z * 4; up = 2.5; }
+    else { cx = end[0] + dir.x * 30 + r.x * 12; cz = end[2] + dir.z * 30 + r.z * 12; up = 7; }
+    this.tPos.set(cx, h.height(cx, cz) + up, cz);
+    this.tLook.set(b0[0], b0[1], b0[2]);
+    this.fov = putt ? 50 : 36;
+    this.snap();
+  }
+  replay(p) {
+    this.tLook.set(p[0], p[1], p[2]);
+    this.k = 6;
   }
 
   // ------------------------------------------------------------------ menu
@@ -148,5 +239,13 @@ export class CameraDirector {
     }
     this.camera.position.copy(this.pos);
     this.camera.lookAt(this.look);
+    // field of view eases to its target; the impact kick decays quickly
+    this.fovKick *= Math.exp(-dt * 5);
+    if (Math.abs(this.fovKick) < 0.02) this.fovKick = 0;
+    const want = this.fov + this.fovKick;
+    if (Math.abs(this.camera.fov - want) > 0.01) {
+      this.camera.fov += (want - this.camera.fov) * (1 - Math.exp(-dt * 4));
+      this.camera.updateProjectionMatrix();
+    }
   }
 }

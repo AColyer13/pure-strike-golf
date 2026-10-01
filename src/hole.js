@@ -428,11 +428,9 @@ export class Hole {
     const { d: wd, w } = this.waterSdf(x, z);
     if (w && wd < 14) {
       if (w.kind === 'ocean') {
-        const drop = w.beach ? smooth(-8, 14, wd * -1 + 6) : smooth(-2, w.cliff > 6 ? 2.5 : 10, -wd);
         // wd < 0 when seaward (−coast dist); land when wd > 0
         const t = w.beach ? 1 - smooth(-6, 10, wd) : 1 - smooth(-3, 3, wd);
         h = lerp(h, this.seaLevel - 3, clamp(t, 0, 1));
-        void drop;
       } else {
         let level = w.level;
         if (w.kind === 'creek') {

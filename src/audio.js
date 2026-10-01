@@ -1,7 +1,7 @@
 // Synthesized sound effects (no audio files): club strikes, ball landings,
 // the cup rattle, crowd reactions, birds and wind ambience.
 
-export class Audio {
+export class SoundEngine {
   constructor() {
     this.ctx = null;
     this.enabled = true;

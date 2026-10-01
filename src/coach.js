@@ -61,7 +61,7 @@ export function coachShot(s) {
     const dir = f2p > 0 ? 'right' : 'left';
     const shape = Math.abs(f2p) > 6 ? (f2p > 0 ? 'slice' : 'hook') : (f2p > 0 ? 'fade' : 'draw');
     L.push({ id: 'dplane-' + shape, pri: Math.abs(f2p) > 5 ? 8 : 5, title: `Why it curved: ${shape}`,
-      text: `Face ${f1(Math.abs(ld.face))}° ${ld.face >= 0 ? 'open' : 'closed'}, path ${f1(Math.abs(ld.path))}° ${ld.path >= 0 ? 'in-to-out' : 'out-to-in'} → face ${f1(Math.abs(f2p))}° ${f2p > 0 ? 'open' : 'closed'} to the path. The spin axis tilted ${f1(Math.abs(ld.axisTilt))}° and the ball curved ${dir}. (D-plane: the start line comes mostly from the face; the curve comes from face-to-path.)` });
+      text: `Face ${f1(Math.abs(ld.face))}° ${ld.face >= 0 ? 'open' : 'closed'}, path ${Math.abs(ld.path) < 0.05 ? 'square' : `${f1(Math.abs(ld.path))}° ${ld.path > 0 ? 'in-to-out' : 'out-to-in'}`} → face ${f1(Math.abs(f2p))}° ${f2p > 0 ? 'open' : 'closed'} to the path. The spin axis tilted ${f1(Math.abs(ld.axisTilt))}° and the ball curved ${dir}. (D-plane: the start line comes mostly from the face; the curve comes from face-to-path.)` });
   } else if (Math.abs(ld.hLaunch) > 3 && Math.abs(f2p) < 2) {
     L.push({ id: 'pushpull', pri: 5, title: ld.hLaunch > 0 ? 'Push' : 'Pull', text: `Started ${f1(Math.abs(ld.hLaunch))}° ${ld.hLaunch > 0 ? 'right' : 'left'} and flew straight: face and path pointed the same way, so there was no curve – only a wrong start line.` });
   }

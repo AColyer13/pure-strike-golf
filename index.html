@@ -7,6 +7,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Barlow+Condensed:wght@600;700;800&display=swap">
 <link rel="stylesheet" href="styles.css">
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#14281b">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
@@ -22,24 +25,38 @@
 
 <!-- ============ main menu ============ -->
 <div id="menu" class="hidden">
-  <header class="menu-head">
-    <div class="logo">PURE <span>STRIKE</span> GOLF</div>
-    <div class="tagline">Realistic ball flight · real strategy · learn why every shot does what it does</div>
-  </header>
-  <div id="courseCards"></div>
-  <div class="menu-opts">
-    <div class="opt"><label>Round</label><div id="optMode" class="segs"></div><select id="optHole" class="hidden"></select></div>
-    <div class="opt"><label>Golfer</label><div id="optProfile" class="segs"></div><div id="profileDesc" class="muted small"></div></div>
-    <div class="opt"><label>Assists</label><div id="optDiff" class="segs"></div></div>
-    <div class="opt"><label>Swing</label><div id="optControl" class="segs"></div></div>
-    <div class="opt"><label>Units</label><div id="optUnits" class="segs"></div></div>
+  <div class="menu-panel">
+    <header class="menu-head">
+      <div class="logo">PURE <span>STRIKE</span> GOLF</div>
+      <div class="tagline">Realistic ball flight · real strategy · learn why every shot does what it does</div>
+    </header>
+    <div id="challengeBanner" class="challenge hidden"></div>
+    <div id="courseTabs" class="course-tabs"></div>
+    <div id="courseHero" class="course-hero"></div>
+    <div class="menu-play">
+      <button id="btnQuick" class="btn primary big"></button>
+      <button id="btnPlay" class="btn big"></button>
+    </div>
+    <button id="dailyCard" class="daily-card"></button>
+    <details id="menuDrawer" class="drawer">
+      <summary>Round setup &amp; options</summary>
+      <div class="menu-opts">
+        <div class="opt"><label>Mode</label><div id="optMode" class="segs"></div><select id="optHole" class="hidden"></select></div>
+        <div class="opt"><label>Players (hot-seat)</label><div id="optPlayers" class="segs"></div><div id="optNames" class="names"></div></div>
+        <div class="opt"><label>Golfer</label><div id="optProfile" class="segs"></div><div id="profileDesc" class="muted small"></div></div>
+        <div class="opt"><label>Assists</label><div id="optDiff" class="segs"></div></div>
+        <div class="opt"><label>Swing</label><div id="optControl" class="segs"></div></div>
+        <div class="opt"><label>Units</label><div id="optUnits" class="segs"></div></div>
+      </div>
+    </details>
+    <div class="menu-btns">
+      <button id="btnAcademy" class="btn">Golf Academy</button>
+      <button id="btnStats" class="btn">My stats</button>
+      <button id="btnSettings" class="btn">Settings</button>
+      <button id="btnHow" class="btn">How to play</button>
+    </div>
+    <div class="menu-foot muted small">Tribute recreations of famous courses based on public scorecards and hole guides. Not affiliated with or endorsed by any club, tour or game publisher.</div>
   </div>
-  <div class="menu-btns">
-    <button id="btnPlay" class="btn primary big">Tee off ▶</button>
-    <button id="btnAcademy" class="btn big">Golf Academy</button>
-    <button id="btnHow" class="btn big">How to play</button>
-  </div>
-  <div class="menu-foot muted small">Tribute recreations of famous courses based on public scorecards and hole guides. Not affiliated with or endorsed by any club, tour or game publisher.</div>
 </div>
 
 <!-- ============ HUD ============ -->
@@ -70,6 +87,23 @@
   <canvas id="meter"></canvas>
 </div>
 <div id="helpBar" class="hidden"></div>
+<div id="ffHint" class="hidden"></div>
+<div id="captions" aria-live="polite"></div>
+<div id="touchControls">
+  <div class="tc-left">
+    <button data-act="aimLeft" data-hold aria-label="Aim left">◀</button>
+    <button data-act="aimRight" data-hold aria-label="Aim right">▶</button>
+    <button data-act="clubUp" aria-label="Longer club">▲</button>
+    <button data-act="clubDown" aria-label="Shorter club">▼</button>
+  </div>
+  <div class="tc-right">
+    <button data-act="menu" aria-label="Menu">☰</button>
+    <button data-act="shapeRight" aria-label="Change shot shape">⤳</button>
+    <button data-act="targetView" aria-label="Target view">👁</button>
+    <button data-act="skip" aria-label="Skip">⏭</button>
+    <button data-act="swing" data-hold class="tc-swing" aria-label="Swing">SWING</button>
+  </div>
+</div>
 <div id="toasts"></div>
 <div id="banner" class="banner"></div>
 
@@ -80,6 +114,8 @@
 <div id="pause" class="hidden modal"></div>
 <div id="help" class="hidden modal"></div>
 <div id="summary" class="hidden modal"></div>
+<div id="settings" class="hidden modal wide"></div>
+<div id="stats" class="hidden modal wide"></div>
 <div id="academy" class="hidden"></div>
 <div id="loading" class="hidden"><div class="spinner"></div><div id="loadingText"></div></div>
 

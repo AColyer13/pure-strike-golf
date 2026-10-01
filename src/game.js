@@ -1,35 +1,33 @@
-// Core game: state machine, shot execution, cameras, caddie, HUD updates.
+// Core game: round flow and the shot state machine.
+//   caddie.js – club choice, plays-like numbers, putt reads
+//   camera.js – flyover / address / flight / replay cameras
+//   input.js  – keyboard, mouse, touch and gamepad → named actions
+//   rules.js  – penalty-area relief
+//   round.js  – modes, seeds, daily challenge, challenge links
+// States: menu → flyover → address → swing → backswing → flight → result
+//         (→ replay | relief) → … → scorecard → summary
 import * as THREE from 'three';
 import { World } from './world.js';
 import { Golfer } from './golfer.js';
-import { BallSim, computeLaunch, simulateCarry, LIES, SURFACES, puttSpeedFor, BALL, G } from './physics.js';
-import { buildBag, PROFILES } from './clubs.js';
+import { BallSim, computeLaunch, LIES, SURFACES, puttSpeedFor, BALL } from './physics.js';
+import { buildBag } from './clubs.js';
 import { YD, FT, mulberry32 } from './hole.js';
-import { RoundStats, expectedStrokes, scoreName } from './stats.js';
+import { RoundStats, scoreName } from './stats.js';
 import { SwingMeter, MouseSwing, meterToStrike } from './meter.js';
-import { Audio } from './audio.js';
+import { SoundEngine } from './audio.js';
 import { coachShot, resetCoach } from './coach.js';
 import { COURSES, courseById } from './courses/index.js';
+import { DIFFICULTY, SHAPES, TRAJ, MAX_STROKES } from './config.js';
+import { clamp, DEG, MPH, dirOf, angOf } from './util.js';
+import { Caddie } from './caddie.js';
+import { CameraDirector } from './camera.js';
+import { Input } from './input.js';
+import { findEntry, reliefOptions } from './rules.js';
+import { loadHistory, saveRound, roundEntry, bestFor } from './history.js';
+import { MODES, SIGNATURE, seedFrom } from './round.js';
 
-const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
-const lerp = (a, b, t) => a + (b - a) * t;
-const DEG = Math.PI / 180;
-const MPH = 0.44704;
 const $ = (id) => document.getElementById(id);
-const dirOf = (a) => ({ x: Math.sin(a), z: -Math.cos(a) });
-const angOf = (dx, dz) => Math.atan2(dx, -dz);
-
-const DIFFICULTY = {
-  beginner: { name: 'Beginner', meterTime: 1.35, zone: 0.055, wind: true, roll: true, putt: 1.0, marker: true },
-  standard: { name: 'Standard', meterTime: 1.05, zone: 0.036, wind: false, roll: false, putt: 0.35, marker: true },
-  pro: { name: 'Pro', meterTime: 0.85, zone: 0.024, wind: false, roll: false, putt: 0, marker: false },
-};
-const SHAPES = {
-  draw: { name: 'Draw', path: 4.5, face: 1.5 },
-  straight: { name: 'Straight', path: 0, face: 0 },
-  fade: { name: 'Fade', path: -4.5, face: -1.5 },
-};
-const TRAJ = { '-1': 'Low', '0': 'Standard', '1': 'High' };
+const STEP = 1 / 240; // physics step during play
 
 export class Game {
   constructor(ui) {
@@ -56,22 +54,30 @@ export class Game {
     this.scene.add(this.tee);
     this.ballShadow = new THREE.Mesh(new THREE.CircleGeometry(0.03, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false }));
     this.scene.add(this.ballShadow);
+    // faint tracers of earlier attempts (closest-to-pin / long drive)
+    this.ghosts = new THREE.Group();
+    this.scene.add(this.ghosts);
 
-    this.audio = new Audio();
+    this.settings = this.loadSettings();
+    this.audio = new SoundEngine();
     this.meter = new SwingMeter($('meter'));
     this.mouseSwing = new MouseSwing($('swingOverlay'));
     this.mouseSwing.resize();
+    this.meter.onDone = (r) => this.meterDone(r);
+    this.meter.onCancel = () => { if (this.state === 'swing') this.state = 'address'; };
+    this.meter.onAuto = () => this.audio.ui('set');
+    this.mouseSwing.onBack = (b) => { this.golfer.phase = 'manual'; this.golfer.apply(-b); };
+    this.mouseSwing.onDone = (r) => this.executeSwing(r);
+    this.mouseSwing.onCancel = () => { this.golfer.phase = 'idle'; if (this.state === 'swing') this.state = 'address'; };
 
-    this.cam = { pos: new THREE.Vector3(0, 50, 50), look: new THREE.Vector3(), tPos: new THREE.Vector3(0, 50, 50), tLook: new THREE.Vector3(), k: 3 };
-    this.orbit = { yaw: 0, pitch: 0, zoom: 1 };
-    this.keys = {};
+    this.cam = new CameraDirector(this, this.camera);
+    this.caddie = new Caddie(this);
+    this.input = new Input(this);
     this.state = 'menu';
     this.timeScale = 1;
-    this.settings = this.loadSettings();
-    this.raycaster = new THREE.Raycaster();
-    this.bindInput();
     this.last = performance.now();
     this.hudTimer = 0;
+    this.applyAccessibility();
     requestAnimationFrame((t) => this.loop(t));
     addEventListener('resize', () => this.resize());
   }
@@ -80,10 +86,20 @@ export class Game {
   loadSettings() {
     let s = {};
     try { s = JSON.parse(localStorage.getItem('psg-settings') || '{}'); } catch (e) { /* ignore */ }
-    return { profile: 'scratch', difficulty: 'standard', control: 'meter', units: 'yd', volume: 0.7, tracer: true, ...s };
+    const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    return {
+      profile: 'scratch', difficulty: 'standard', control: 'meter', units: 'yd', volume: 0.7, tracer: true,
+      reducedMotion: reduce, oneButton: false, captions: false, uiScale: 1, keys: {}, ffSeen: 0, ...s,
+    };
   }
   saveSettings() {
     try { localStorage.setItem('psg-settings', JSON.stringify(this.settings)); } catch (e) { /* ignore */ }
+    this.applyAccessibility();
+  }
+  applyAccessibility() {
+    const s = this.settings;
+    document.documentElement.style.setProperty('--ui-scale', String(s.uiScale || 1));
+    document.body.classList.toggle('reduced-motion', !!s.reducedMotion);
   }
   get diff() { return DIFFICULTY[this.settings.difficulty] || DIFFICULTY.standard; }
 
@@ -95,21 +111,28 @@ export class Game {
     this.mouseSwing.resize();
   }
 
+  // a sound plus (optionally) an on-screen caption for players who can't hear it
+  sfx(fn, caption, ...args) {
+    this.audio[fn]?.(...args);
+    if (caption && this.settings.captions) this.ui.caption(caption);
+  }
+
   // ------------------------------------------------------------------ menu backdrop
   showcase(courseId) {
     const course = courseById(courseId) || COURSES[0];
-    const sig = { augusta: 11, standrews: 17, pebble: 6, sawgrass: 16 }[course.id] ?? 0;
     this.world.setCourse(course);
-    this.hole = this.world.buildHole(course, sig, {});
+    this.hole = this.world.buildHole(course, SIGNATURE[course.id] ?? 0, {});
     this.env = { rho: course.rho, wind: [2, 0, -1], firmness: course.firmness, stimp: this.hole.stimp };
     this.state = 'menu';
-    this.showcaseT = 0;
+    this.cam.menuInit = false;
     this.golfer.root.visible = false;
     this.ballMesh.visible = false; this.tee.visible = false; this.ballShadow.visible = false;
     this.world.reticle.visible = false; this.world.arc.visible = false; this.world.tracer.visible = false;
+    this.clearGhosts();
   }
 
   // ------------------------------------------------------------------ round
+  // opts: { courseId, holes, mode, seed?, players?: [names], daily?: dateKey }
   startRound(opts) {
     this.ui.hideAll();
     this.audio.init();
@@ -117,26 +140,43 @@ export class Game {
     const course = courseById(opts.courseId);
     this.course = course;
     this.bag = buildBag(this.settings.profile);
-    const seed = (Math.random() * 1e9) | 0;
+    const seed = opts.seed ?? ((Math.random() * 2 ** 32) >>> 0);
+    const rng = mulberry32(seed);
+    const windDir = rng() * Math.PI * 2;
+    // pins and wind for every hole up front, so a seed always reproduces the same round
+    const setup = {};
+    for (const idx of opts.holes) {
+      const [wmin, wmax] = course.wind;
+      setup[idx] = { pinIndex: Math.floor(rng() * 4), mph: wmin + (wmax - wmin) * Math.pow(rng(), 1.3), ang: windDir + (rng() - 0.5) * 1.4 };
+    }
+    const names = opts.players?.length ? opts.players : [null];
+    const balls = MODES[opts.mode]?.balls || 0;
     this.round = {
-      course, holes: opts.holes, i: 0, seed, rng: mulberry32(seed),
-      scores: [], stats: new RoundStats(), windDir: Math.random() * Math.PI * 2, mode: opts.mode,
+      course, holes: opts.holes, i: 0, seed, mode: opts.mode, daily: opts.daily || null, setup, balls,
+      players: names.map((name) => ({ name, scores: [], stats: new RoundStats(), attempts: [] })),
+      p: 0,
+      get player() { return this.players[this.p]; },
+      get scores() { return this.player.scores; },
+      get stats() { return this.player.stats; },
     };
     resetCoach();
     this.world.setCourse(course);
     this.computeBagDistances();
     this.ui.showHUD(true);
     this.meter.resize();
+    this.clearGhosts();
     this.loadHole();
   }
+
+  get challenge() { return this.round && this.round.balls > 0; }
 
   computeBagDistances() {
     // full-swing carry/total on flat fairway, no wind (the "yardage book")
     const c = this.course;
+    const flat = { height: () => 0, normal: () => [0, 1, 0], surface: () => 'fairway', inBounds: () => true, cup: { x: 1e5, z: 1e5 }, pinIn: false };
     for (const club of this.bag) {
       if (club.putter) continue;
       const ld = computeLaunch(club, { power: 1, face: 0, path: 0, strike: 1, traj: 0, lie: 'fairway' });
-      const flat = { height: () => 0, normal: () => [0, 1, 0], surface: () => 'fairway', inBounds: () => true, cup: { x: 1e5, z: 1e5 }, pinIn: false };
       const sim = new BallSim(flat, { rho: c.rho, wind: [0, 0, 0], firmness: c.firmness, stimp: c.stimp });
       sim.launch([0, BALL.radius, 0], ld, [0, 0, -1]);
       let n = 0;
@@ -152,93 +192,101 @@ export class Game {
     const course = this.course;
     this.ui.loading(true, `Hole ${idx + 1} – ${course.holes[idx].name}`);
     setTimeout(() => {
-      const pinIndex = Math.floor(r.rng() * 4);
-      this.hole = this.world.buildHole(course, idx, { pinIndex });
-      const hole = this.hole;
-      // wind for this hole
-      const [wmin, wmax] = course.wind;
-      const mph = wmin + (wmax - wmin) * Math.pow(r.rng(), 1.3);
-      const a = r.windDir + (r.rng() - 0.5) * 1.4;
-      this.windMph = mph;
-      this.windAng = a; // direction the wind blows TOWARD
-      this.env = { rho: course.rho, wind: [Math.sin(a) * mph * MPH, 0, -Math.cos(a) * mph * MPH], firmness: course.firmness, stimp: hole.stimp };
-      this.audio.setWind(mph, course.id === 'pebble' || course.id === 'standrews');
-      this.strokes = 0;
-      this.penalties = 0;
-      this.holeStats = r.stats.startHole(hole.number, hole.par, course.holes[idx].yds);
-      this.ball = { p: [hole.tee.x, hole.height(hole.tee.x, hole.tee.z) + BALL.radius, hole.tee.z], surface: 'tee', isTee: true };
-      this.lastSpot = this.ball.p.slice();
-      this.world.gridGroup = null; this.world.flow = null;
-      this.world.tracer.visible = false;
-      this.world.setTracer([]);
+      const S = r.setup[idx];
+      this.hole = this.world.buildHole(course, idx, { pinIndex: S.pinIndex });
+      this.windMph = S.mph;
+      this.windAng = S.ang; // direction the wind blows TOWARD
+      this.env = { rho: course.rho, wind: [Math.sin(S.ang) * S.mph * MPH, 0, -Math.cos(S.ang) * S.mph * MPH], firmness: course.firmness, stimp: this.hole.stimp };
+      this.audio.setWind(S.mph, course.id === 'pebble' || course.id === 'standrews');
       this.golfer.root.visible = true;
       this.ballMesh.visible = true;
       this.ui.loading(false);
-      this.ui.holeIntro(hole, course, this.fmtDist(hole.length), this.windText());
+      this.resetPlayerOnHole();
+      this.ui.holeIntro(this.hole, course, this.fmtDist(this.hole.length), this.windText(), this.introExtra());
       this.startFlyover();
     }, 30);
+  }
+
+  introExtra() {
+    const r = this.round;
+    if (r.balls) return `${MODES[r.mode].name}: ${MODES[r.mode].desc}`;
+    if (r.players.length > 1) return `${r.player.name} to play`;
+    return '';
+  }
+
+  // put the current player on the tee of the current hole
+  resetPlayerOnHole() {
+    const r = this.round, h = this.hole;
+    this.strokes = 0;
+    this.penalties = 0;
+    this.ballNo = 0;
+    if (!this.challenge) this.holeStats = r.stats.startHole(h.number, h.par, this.course.holes[h.index].yds);
+    this.teeUp();
+  }
+  teeUp() {
+    const h = this.hole;
+    this.ball = { p: [h.tee.x, h.height(h.tee.x, h.tee.z) + BALL.radius, h.tee.z], surface: 'tee', isTee: true };
+    this.world.setTracer([]);
+    this.world.tracer.visible = false;
+    this.rec = null;
   }
 
   // ------------------------------------------------------------------ flyover
   startFlyover() {
     this.state = 'flyover';
     document.body.classList.add('flyover');
-    this.flyT = 0;
-    const h = this.hole;
-    this.flyDur = clamp(3.5 + h.length / 110, 4, 8.5);
     this.meter.hide();
     this.world.reticle.visible = false;
     this.world.arc.visible = false;
     this.world.showGreenGrid(false);
-    this.prepareAddress(true);
+    this.prepareAddress();
     this.golfer.phase = 'idle';
+    this.cam.startFlyover();
+    if (this.settings.reducedMotion) {
+      // no camera flight: keep the hole card up briefly, then go straight to the ball
+      this.endFlyover(true);
+      clearTimeout(this.introT);
+      this.introT = setTimeout(() => this.ui.hideIntro(), 2600);
+    }
   }
-  updateFlyover(dt) {
-    this.flyT += dt;
-    const h = this.hole;
-    const k = clamp(this.flyT / this.flyDur, 0, 1);
-    const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
-    const s = e * h.length;
-    const p = h.pointAt(Math.max(0, s - 40));
-    const ahead = h.pointAt(Math.min(h.length, s + 80));
-    const g = { x: h.cup.x, z: h.cup.z };
-    const look = { x: lerp(ahead.x, g.x, e), z: lerp(ahead.z, g.z, e) };
-    const alt = 38 + 20 * Math.sin(k * Math.PI);
-    this.cam.tPos.set(p.x, h.height(p.x, p.z) + alt, p.z);
-    this.cam.tLook.set(look.x, h.height(look.x, look.z), look.z);
-    this.cam.k = 2.5;
-    if (this.flyT === dt) { this.cam.pos.copy(this.cam.tPos); this.cam.look.copy(this.cam.tLook); }
-    if (k >= 1) this.endFlyover();
-  }
-  endFlyover() {
+  endFlyover(keepIntro = false) {
     document.body.classList.remove('flyover');
-    this.ui.hideIntro();
+    if (!keepIntro) this.ui.hideIntro();
     this.enterAddress();
+    this.cam.snapAddress();
+    if (this.settings.reducedMotion) this.cam.snap();
   }
 
   // ------------------------------------------------------------------ address
-  prepareAddress(first = false) {
-    const h = this.hole;
-    const b = this.ball;
+  prepareAddress() {
+    const h = this.hole, b = this.ball;
     b.surface = b.isTee ? 'tee' : h.surface(b.p[0], b.p[2]);
     b.p[1] = h.height(b.p[0], b.p[2]) + BALL.radius;
     this.onGreen = b.surface === 'green';
     h.pinIn = !this.onGreen;
-    // default aim at the pin
     this.aim = angOf(h.cup.x - b.p[0], h.cup.z - b.p[2]);
     this.shape = 'straight';
     this.traj = 0;
     this.userClub = false;
-    this.chooseClub();
+    this.club = null;
+    this.caddie.chooseClub();
+    if (this.challenge && this.round.mode === 'drive') {
+      // long drive: always the driver, aimed down the centre line
+      this.setClub(0);
+      this.caddie.analysis = null;
+      this.caddie.msg = 'Long drive: biggest one in the fairway or first cut wins.';
+      this.caddie.aimForClub(this.club);
+    }
     this.placeGolfer();
     this.previewDirty = true;
   }
 
   enterAddress() {
     this.state = 'address';
-    this.orbit = { yaw: 0, pitch: 0, zoom: 1 };
+    this.cam.resetOrbit();
+    this.cam.targetView = false;
     const d = this.diff;
-    this.meter.configure({ fullTime: d.meterTime * (this.club.putter ? 1.25 : 1), marker: null });
+    this.meter.configure({ fullTime: d.meterTime * (this.club.putter ? 1.25 : 1), marker: null, autoPower: null });
     this.meter.show();
     this.meter.state = 'ready';
     this.meter.power = null;
@@ -250,6 +298,7 @@ export class Game {
     this.world.arc.visible = true;
     this.world.reticle.visible = !this.club.putter;
     this.world.tracer.visible = false;
+    this.ui.ffHint(false);
     this.previewDirty = true;
     this.caddieNote();
     this.ui.showShotPanel(null);
@@ -285,7 +334,7 @@ export class Game {
     this.golfer.setClub(this.club);
     this.placeGolfer();
     this.hole.pinIn = !this.club.putter;
-    if (this.club.putter) this.setupPutt();
+    if (this.club.putter) this.caddie.setupPutt();
     this.meter.configure({ putt: !!this.club.putter, fullTime: this.diff.meterTime * (this.club.putter ? 1.25 : 1) });
     this.mouseSwing.putt = !!this.club.putter;
     this.world.reticle.visible = !this.club.putter && this.state !== 'flyover';
@@ -295,233 +344,79 @@ export class Game {
 
   placeGolfer() {
     const b = this.ball;
+    if (!this.club) return;
     const f = dirOf(this.aim);
     this.golfer.place({ x: b.p[0], z: b.p[2] }, f, this.hole.height(b.p[0], b.p[2]));
-    const teed = this.ball.isTee && this.club && !this.club.putter && this.club.loft < 30;
-    const lift = this.ball.isTee ? (teed ? (this.club.loft < 13 ? 0.035 : 0.012) : 0.005) : 0;
+    const teed = b.isTee && !this.club.putter && this.club.loft < 30;
+    const lift = b.isTee ? (teed ? (this.club.loft < 13 ? 0.035 : 0.012) : 0.005) : 0;
     this.ballLift = lift;
-    this.tee.visible = this.ball.isTee;
+    this.tee.visible = b.isTee;
     this.tee.position.set(b.p[0], this.hole.height(b.p[0], b.p[2]) + lift - 0.005, b.p[2]);
     this.ballMesh.position.set(b.p[0], b.p[1] + lift, b.p[2]);
   }
 
-  // ------------------------------------------------------------------ caddie / club choice
-  // Plays-like distance: compares the club's carry on flat ground in still air
-  // with its carry to the target's elevation in the current wind.
-  playsLike(club, targetDist, dh, dir) {
-    const ld = computeLaunch(club, { power: 1, face: 0, path: 0, strike: 1, traj: this.traj, lie: 'fairway' });
-    const fwd = [dir.x, 0, dir.z];
-    const flat = simulateCarry(ld, { rho: this.env.rho, wind: [0, 0, 0] }, { fwd });
-    const elev = simulateCarry(ld, { rho: this.env.rho, wind: [0, 0, 0] }, { fwd, landY: dh });
-    const both = simulateCarry(ld, { rho: this.env.rho, wind: this.env.wind }, { fwd, landY: dh });
-    const fe = flat.carry / Math.max(1, elev.carry), fb = flat.carry / Math.max(1, both.carry);
-    return { plays: targetDist * fb, elevAdj: targetDist * (fe - 1), windAdj: targetDist * (fb - fe) };
-  }
-
-  chooseClub() {
-    const h = this.hole, b = this.ball;
-    const d = this.distToPin();
-    const dir = dirOf(this.aim);
-    const dh = h.height(h.cup.x, h.cup.z) - (b.p[1] - BALL.radius);
-    this.pl = null;
-    this.caddieMsg = '';
-    if (b.surface === 'green' || (b.surface === 'fringe' && d < 18) || (b.surface === 'cut' && d < 12 && h.greenSdf(b.p[0], b.p[2]) < 4)) {
-      this.setClub(this.bag.length - 1);
-      if (b.surface !== 'green') this.caddieMsg = 'Putt it from here. A poor putt usually finishes closer than a poor chip.';
-      return;
-    }
-    const usable = this.bag.filter((c) => !c.putter && (c.key !== 'DR' || b.isTee));
-    // plays-like distance using a mid iron as the reference, then refine with the chosen club
-    let club = usable.find((c) => c.carry <= d * 1.02) || usable[usable.length - 1];
-    let pl = this.playsLike(club, d, dh, dir);
-    const pick = (need) => {
-      let best = null;
-      for (const c of usable) if (c.carry >= need * 0.985) best = c; // smallest club that carries
-      return best;
-    };
-    let target = pick(pl.plays);
-    if (target) { pl = this.playsLike(target, d, dh, dir); target = pick(pl.plays) || target; }
-    this.pl = pl;
-    const lie = this.lieKey();
-    if (lie === 'splash' || (b.surface === 'bunker' && h.greenSdf(b.p[0], b.p[2]) < 30)) {
-      target = this.bag.find((c) => c.key === 'SW');
-      this.caddieMsg = 'Greenside bunker: open the face, splash the sand – the ball rides out on it.';
-    }
-    if (target && !(h.par >= 4 && b.isTee && pl.plays > target.carry + 30)) {
-      this.setClub(this.bag.indexOf(target));
-      return;
-    }
-    // pin out of range (tee shots / lay-ups): evaluate options by expected strokes
-    const longest = usable[0];
-    this.setClub(this.bag.indexOf(longest));
-    this.aimForClub(longest);
-    this.startCaddieAnalysis(usable);
-  }
-
-  // aim along the centre line at the club's typical total distance
-  aimForClub(club) {
-    const h = this.hole, b = this.ball;
-    const pr = h.project(b.p[0], b.p[2]);
-    const want = club.total * (this.ball.surface === 'fairway' || this.ball.isTee ? 1 : 0.9);
-    let best = null;
-    for (let s = pr.s; s <= h.length; s += 2) {
-      const q = h.pointAt(s);
-      const dd = Math.hypot(q.x - b.p[0], q.z - b.p[2]);
-      if (dd >= want) { best = q; break; }
-    }
-    if (!best) best = { x: h.cup.x, z: h.cup.z };
-    this.aim = angOf(best.x - b.p[0], best.z - b.p[2]);
+  // ------------------------------------------------------------------ address actions
+  setAim(a) {
+    if (this.state !== 'address') return;
+    this.aim = a;
     this.placeGolfer();
+    this.previewDirty = true;
   }
-
-  startCaddieAnalysis(clubs) {
-    const cands = clubs.slice(0, 9).filter((c) => c.total * 0.8 < this.distToPin());
-    this.analysis = { cands, i: 0, results: [], id: Math.random() };
-    this.caddieMsg = 'Caddie is checking the landing areas…';
+  aimAtWorld(x, z) { this.setAim(angOf(x - this.ball.p[0], z - this.ball.p[2])); }
+  aimAtPin() { this.aimAtWorld(this.hole.cup.x, this.hole.cup.z); }
+  cycleShape(d) {
+    const order = ['draw', 'straight', 'fade'];
+    this.shape = order[clamp(order.indexOf(this.shape) + d, 0, 2)];
+    this.previewDirty = true;
+    this.audio.ui('tick');
   }
-  stepCaddieAnalysis() {
-    const A = this.analysis;
-    if (!A || this.state !== 'address') return;
-    if (A.i >= A.cands.length) { this.finishAnalysis(); return; }
-    const club = A.cands[A.i++];
-    const h = this.hole, b = this.ball;
-    const pr = h.project(b.p[0], b.p[2]);
-    let tgt = null;
-    for (let s = pr.s; s <= h.length; s += 2) {
-      const q = h.pointAt(s);
-      if (Math.hypot(q.x - b.p[0], q.z - b.p[2]) >= club.total) { tgt = q; break; }
-    }
-    if (!tgt) return;
-    const aim = angOf(tgt.x - b.p[0], tgt.z - b.p[2]);
-    const spread = club.loft < 20 ? 3.2 : club.loft < 30 ? 2.4 : 1.8;
-    let es = 0; const notes = [];
-    for (const face of [-spread, 0, spread]) {
-      const out = this.simOutcome(club, aim, { face, power: 1, dt: 1 / 90, withWind: true });
-      let e;
-      if (out.result === 'water') { e = 1 + expectedStrokes('rough', out.entryDist / YD); notes.push('water'); }
-      else if (out.result === 'ob') { e = 1 + expectedStrokes(b.isTee ? 'fairway' : b.surface, this.distToPin() / YD, b.isTee); notes.push('out of bounds'); }
-      else {
-        e = expectedStrokes(out.surface, out.dist / YD);
-        if (out.surface === 'bunker') notes.push('bunkers');
-        if (out.surface === 'deep' || out.surface === 'straw') notes.push('trees');
-      }
-      es += e / 3;
-    }
-    A.results.push({ club, aim, es: es + 1, notes: [...new Set(notes)] });
+  setTraj(t) {
+    this.traj = clamp(t, -1, 1);
+    this.previewDirty = true;
+    this.audio.ui('tick');
   }
-  finishAnalysis() {
-    const A = this.analysis;
-    this.analysis = null;
-    if (!A.results.length) { this.caddieMsg = ''; return; }
-    A.results.sort((a, b) => a.es - b.es);
-    const best = A.results[0];
-    const longest = A.results.find((r) => r.club === A.cands[0]);
-    if (!this.userClub) {
-      this.setClub(this.bag.indexOf(best.club));
-      this.aim = best.aim;
-      this.placeGolfer();
-      this.previewDirty = true;
-    }
-    const fmt = (r) => `${r.club.name} ${r.es.toFixed(2)}`;
-    let msg = `Caddie: ${best.club.name} – expected score from here ${best.es.toFixed(2)}.`;
-    if (longest && longest !== best) {
-      msg += ` ${fmt(longest)}${longest.notes.length ? ` (brings ${longest.notes.join(' & ')} into play)` : ''}.`;
-    }
-    this.caddieMsg = msg;
-    this.updateHUD(true);
+  toggleTargetView() {
+    this.cam.targetView = !this.cam.targetView;
+    this.ui.toast(this.cam.targetView ? 'Target view – click the ground to aim' : 'Address view');
   }
-
-  // Deterministic outcome of a shot (used by the caddie and previews)
-  simOutcome(club, aim, o = {}) {
-    const h = this.hole, b = this.ball;
-    const dir = dirOf(aim);
-    const sh = SHAPES[this.shape];
-    const ld = computeLaunch(club, { power: o.power ?? 1, face: (o.face || 0) + sh.face, path: sh.path, strike: 1, traj: this.traj, lie: this.lieKey(), slope: this.slope() });
-    const env = { ...this.env, wind: o.withWind ? this.env.wind : [0, 0, 0] };
-    const sim = new BallSim(h, env, mulberry32(7));
-    const start = [b.p[0], b.p[1] + (this.ballLift || 0), b.p[2]];
-    sim.launch(start, ld, [dir.x, 0, dir.z]);
-    const dt = o.dt || 1 / 120;
-    const pts = o.path ? [start.slice()] : null;
-    let n = 0, land = null;
-    while (sim.state !== 'rest' && sim.state !== 'holed' && n++ < 9000) {
-      sim.step(dt);
-      if (pts && n % 3 === 0 && !land) pts.push(sim.p.slice());
-      if (!land && sim.landed) { land = sim.landed.slice(); if (o.stopAtLand) break; }
-    }
-    const ev = sim.events.map((e) => e.type);
-    let result = 'ok';
-    if (ev.includes('water')) result = 'water';
-    if (ev.includes('ob')) result = 'ob';
-    if (sim.state === 'holed') result = 'holed';
-    const p = sim.p;
-    const out = { result, land, rest: p.slice(), path: pts, ld, surface: h.surface(p[0], p[2]), dist: Math.hypot(h.cup.x - p[0], h.cup.z - p[2]) };
-    if (result === 'water') {
-      const e = this.findEntry(sim);
-      out.entryDist = Math.hypot(h.cup.x - e.x, h.cup.z - e.z);
-    }
-    return out;
+  toggleGrid() {
+    this.gridOn = !this.world.gridGroup?.visible;
+    this.world.showGreenGrid(this.gridOn);
   }
-
-  caddieNote() {
-    this.ui.caddie(this.caddieMsg || '');
+  toggleMute() {
+    this.audio.enabled = !this.audio.enabled;
+    this.ui.toast(this.audio.enabled ? 'Sound on' : 'Sound off');
   }
-
-  // ------------------------------------------------------------------ putting setup
-  setupPutt() {
-    const h = this.hole, b = this.ball;
-    const d = this.distToPin();
-    const ft = d / FT;
-    // effective (flat-equivalent) distance: the speed that would finish ~17 in (43 cm) past the
-    // hole if it missed – Pelz's optimum, and what the meter marker teaches
-    const dir = { x: (h.cup.x - b.p[0]) / d, z: (h.cup.z - b.p[2]) / d };
-    const v = this.puttSpeedToReach(dir, d + 0.43);
-    const eqFt = (v * v) / (2 * h.greenRoll * G) / FT;
-    this.puttEqFt = eqFt;
-    const ranges = [10, 20, 40, 70, 120];
-    this.puttRange = ranges.find((r) => r >= eqFt * 1.15) || 150;
-    this.puttElevIn = (h.height(h.cup.x, h.cup.z) - h.height(b.p[0], b.p[2])) / 0.0254;
-    this.meter.configure({ labels: [[0.25, `${Math.round(this.puttRange * 0.25)}ft`], [0.5, `${Math.round(this.puttRange * 0.5)}ft`], [0.75, `${Math.round(this.puttRange * 0.75)}ft`], [1, `${this.puttRange}ft`]], rangeLabel: `Putter range ${this.puttRange} ft` });
-    this.aim = angOf(dir.x, dir.z);
+  peekScorecard() {
+    const st = this.state;
+    if (!this.round || st === 'scorecard' || st === 'summary' || st === 'menu') return;
+    this.ui.scorecard(this.course, this.round, false);
   }
-  puttSpeedToReach(dir, d) {
-    const h = this.hole, b = this.ball;
-    let lo = 0.2, hi = 14;
-    const flat = puttSpeedFor(d, h.greenRoll);
-    for (let it = 0; it < 12; it++) {
-      const v = it === 0 ? flat : (lo + hi) / 2;
-      const sim = new BallSim(h, this.env, mulberry32(3));
-      const oldPin = h.pinIn, cup = h.cup; h.pinIn = false;
-      h.cup = { ...cup, x: 1e6, z: 1e6 }; // measure the roll with the hole covered
-      sim.putt(b.p.slice(), [dir.x, 0, dir.z], v);
-      let n = 0;
-      while (sim.state === 'roll' && n++ < 3000) sim.step(1 / 120);
-      h.pinIn = oldPin; h.cup = cup;
-      const along = (sim.p[0] - b.p[0]) * dir.x + (sim.p[2] - b.p[2]) * dir.z;
-      if (it === 0) { if (along < d && sim.state !== 'holed') lo = v; else hi = v; continue; }
-      if (sim.state === 'holed' || along >= d) hi = v; else lo = v;
-    }
-    return (lo + hi) / 2;
+  closeScorecardPeek() {
+    if (this.round && this.state !== 'scorecard' && !this.ui.scModal) this.ui.scorecard(null);
   }
+  caddieNote() { this.ui.caddie(this.caddie.msg || ''); }
 
   // ------------------------------------------------------------------ previews
   updatePreview() {
     this.previewDirty = false;
     const h = this.hole, b = this.ball, w = this.world;
     const dir = dirOf(this.aim);
+    const assist = this.diff;
     if (this.club.putter) {
       w.reticle.visible = false;
       w.arc.visible = false;
-      const frac = this.diff.putt;
-      this.meter.configure({ marker: this.diff.marker ? this.puttEqFt / this.puttRange : null });
-      if (frac <= 0) { w.puttLine.visible = false; return; }
+      this.suggestedPower = clamp(this.puttEqFt / this.puttRange, 0.02, 1);
+      this.meter.configure({ marker: assist.marker ? this.suggestedPower : null });
+      this.configureAuto();
+      if (assist.putt <= 0) { w.puttLine.visible = false; return; }
       // read: roll the marker-speed putt along the current aim
       const v = puttSpeedFor(this.puttEqFt * FT, h.greenRoll);
       const sim = new BallSim(h, this.env, mulberry32(3));
       sim.putt(b.p.slice(), [dir.x, 0, dir.z], v);
       const pts = [b.p.slice()];
       let n = 0, dist = 0;
-      const maxDist = Math.max(1.5, this.distToPin() * frac);
+      const maxDist = Math.max(1.5, this.distToPin() * assist.putt);
       while (sim.state === 'roll' && n++ < 3000) {
         const q = sim.p.slice();
         sim.step(1 / 120);
@@ -534,78 +429,45 @@ export class Game {
       return;
     }
     w.puttLine.visible = false;
-    const assist = this.diff;
-    const out = this.simOutcome(this.club, this.aim, { power: 1, withWind: assist.wind, path: true, stopAtLand: !assist.roll });
+    const out = this.caddie.simOutcome(this.club, this.aim, { power: 1, withWind: assist.wind, path: true, stopAtLand: !assist.roll });
     if (!out.land) return;
     const land = out.land;
     const n = h.normal(land[0], land[2]);
     w.reticle.position.set(land[0], h.height(land[0], land[2]) + 0.06, land[2]);
     w.reticle.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(...n));
     const carry = Math.hypot(land[0] - b.p[0], land[2] - b.p[2]);
-    const sc = clamp(carry / 55, 0.6, 6);
-    w.reticle.scale.setScalar(sc);
+    w.reticle.scale.setScalar(clamp(carry / 55, 0.6, 6));
     w.reticle.visible = true;
-    const arc = out.path.concat([land]);
-    w.setArc(arc);
+    w.setArc(out.path.concat([land]));
     w.arc.visible = this.settings.difficulty !== 'pro';
     this.previewLand = land;
     this.previewCarry = carry;
     this.previewRest = out.rest;
-    // meter marker: power that carries the plays-like distance to the pin
-    if (assist.marker) {
-      const d = this.distToPin();
-      const need = this.pl ? this.pl.plays : d;
-      const flatCarry = this.club.carry || carry;
-      let m = null;
-      if (need < flatCarry * 1.12) m = this.powerForFinish(need);
-      this.meter.configure({ marker: m });
-    } else this.meter.configure({ marker: null });
+    // suggested power: what carries the plays-like distance to the pin (full swing if out of range)
+    const need = this.pl ? this.pl.plays : this.distToPin();
+    const flatCarry = this.club.carry || carry;
+    this.suggestedPower = need < flatCarry * 1.12 && !(this.challenge && this.round.mode === 'drive') ? this.caddie.powerForFinish(need) : 1;
+    this.meter.configure({ marker: assist.marker && this.suggestedPower < 1 ? this.suggestedPower : null });
     this.meter.configure({ labels: null, rangeLabel: `${this.club.name} · carry ${this.fmtDist(this.club.carry)}` });
+    this.configureAuto();
   }
-
-  // Like a real caddie: the number that matters is where the ball FINISHES. Start from the
-  // plays-like carry, then bisect on full terrain sims so the release (bounce + roll) is included.
-  powerForFinish(need) {
-    const h = this.hole, b = this.ball;
-    const p0 = this.powerForCarry(need);
-    if (this.club.putter) return p0;
-    const dir = dirOf(this.aim);
-    const toCup = (h.cup.x - b.p[0]) * dir.x + (h.cup.z - b.p[2]) * dir.z;
-    const along = (pw) => {
-      const o = this.simOutcome(this.club, this.aim, { power: pw, withWind: true, dt: 1 / 90 });
-      return (o.rest[0] - b.p[0]) * dir.x + (o.rest[2] - b.p[2]) * dir.z - toCup;
-    };
-    const a0 = along(p0);
-    if (Math.abs(a0) <= 1.5) return p0;
-    // released past the pin → less power; spun back short → more power (capped at a full swing)
-    let lo = a0 > 0 ? Math.max(0.1, p0 - 0.35) : p0, hi = a0 > 0 ? p0 : Math.min(1, p0 + 0.2);
-    if (a0 > 0 && along(lo) > 0) return lo;
-    if (a0 < 0 && along(hi) < 0) return hi;
-    for (let i = 0; i < 8; i++) {
-      const m = (lo + hi) / 2;
-      if (along(m) > 0.3) hi = m; else lo = m;
-    }
-    return (lo + hi) / 2;
-  }
-
-  powerForCarry(need) {
-    const club = this.club;
-    let lo = 0.1, hi = 1.1;
-    for (let i = 0; i < 12; i++) {
-      const p = (lo + hi) / 2;
-      const ld = computeLaunch(club, { power: p, face: 0, path: 0, strike: 1, traj: this.traj, lie: this.lieKey() });
-      const c = simulateCarry(ld, { rho: this.env.rho, wind: [0, 0, 0] }, { fwd: [0, 0, -1], dt: 1 / 120 }).carry;
-      if (c < need) lo = p; else hi = p;
-    }
-    return (lo + hi) / 2;
+  // one-button swing: the meter sets power itself at the caddie's number
+  configureAuto() {
+    this.meter.configure({ autoPower: this.settings.oneButton ? clamp(this.suggestedPower ?? 1, 0.02, 1) : null });
   }
 
   // ------------------------------------------------------------------ swing
-  beginSwing() {
-    if (this.state !== 'address') return;
-    this.state = 'swing';
-    this.audio.ui('tick');
-    this.analysis = null;
+  meterClick() {
+    if (this.state !== 'address' && this.state !== 'swing') return;
+    if (this.settings.control === 'mouse') return;
+    if (this.state === 'address') {
+      if (this.previewDirty) this.updatePreview();
+      this.state = 'swing';
+      this.audio.ui('tick');
+      this.caddie.analysis = null;
+    }
+    const r = this.meter.click();
+    if (r === 'power') this.audio.ui('set');
   }
 
   meterDone(r) {
@@ -621,165 +483,184 @@ export class Game {
 
   executeSwing(sw) {
     this.state = 'backswing';
+    this.caddie.analysis = null;
     this.pendingSwing = sw;
     this.golfer.startSwing(this.club.putter ? sw.power : clamp(sw.power, 0.35, 1.05), () => this.impact());
-    if (this.settings.control === 'mouse') { this.golfer.phase = 'down'; this.golfer.t = 0; }
+    if (this.settings.control === 'mouse' || this.golfer.phase === 'manual') { this.golfer.phase = 'down'; this.golfer.t = 0; }
     this.world.reticle.visible = false;
     this.world.arc.visible = false;
     this.world.puttLine.visible = false;
     this.ui.caddie('');
   }
 
+  // Shot seed: the same round seed, hole, stroke and ball always give the same
+  // random lie/strike variation – so a shared challenge is fair to everyone.
+  shotSeed() {
+    const r = this.round;
+    return seedFrom(`${r.seed}:${r.holes[r.i]}:${this.strokes}:${this.ballNo}`);
+  }
+
   impact() {
     const sw = this.pendingSwing;
     const h = this.hole, b = this.ball;
     const dir = dirOf(this.aim);
-    const seed = (Math.random() * 1e9) | 0;
+    const seed = this.shotSeed();
     const sim = new BallSim(h, this.env, mulberry32(seed));
     const start = [b.p[0], b.p[1] + (this.ballLift || 0), b.p[2]];
     this.shotStart = { p: b.p.slice(), surface: b.surface, isTee: b.isTee, yards: this.distToPin() / YD, lie: this.lieKey(), dist: this.distToPin(), aim: this.aim, pl: this.pl, club: this.club, strokesBefore: this.strokes };
-    this.lastSpot = b.p.slice();
     this.tee.visible = false;
-    if (this.club.putter) {
+    const putt = !!this.club.putter;
+    let kind = 'putt';
+    if (putt) {
       const speed = puttSpeedFor(sw.power * this.puttRange * FT, h.greenRoll) * (0.97 + 0.03 * sw.strike);
-      const a = this.aim + sw.face * DEG;
-      const d2 = dirOf(a);
+      const d2 = dirOf(this.aim + sw.face * DEG);
       sim.putt(start, [d2.x, 0, d2.z], speed);
       this.shotLD = { putt: true, speed, face: sw.face, power: sw.power };
-      this.audio.hit('putt', sw.strike, sw.power);
     } else {
       const sh = SHAPES[this.shape];
       const lie = this.lieKey();
       const ld = computeLaunch(this.club, { power: sw.power, face: sw.face + sh.face, path: sw.path + sh.path, strike: sw.strike, traj: this.traj, lie, slope: this.slope(), rng: mulberry32(seed + 1) });
       sim.launch(start, ld, [dir.x, 0, dir.z]);
       this.shotLD = ld;
-      const kind = lie === 'splash' || lie === 'bunker' ? 'sand' : this.club.key === 'DR' ? 'driver' : this.club.loft <= 20 ? 'wood' : this.club.loft >= 45 ? 'wedge' : 'iron';
-      this.audio.hit(kind, sw.strike, sw.power);
+      kind = lie === 'splash' || lie === 'bunker' ? 'sand' : this.club.key === 'DR' ? 'driver' : this.club.loft <= 20 ? 'wood' : this.club.loft >= 45 ? 'wedge' : 'iron';
     }
-    // forecast (identical sim run to completion) for the broadcast camera
+    this.audio.hit(kind, sw.strike, sw.power);
+    // forecast: the identical sim run to completion, for the broadcast camera and slow-mo
     const fc = new BallSim(h, this.env, mulberry32(seed));
-    if (this.club.putter) fc.putt(start, sim.v.map((x) => x / (Math.hypot(...sim.v) || 1)), Math.hypot(...sim.v));
-    else { fc.launch(start, this.shotLD, [dir.x, 0, dir.z]); }
+    if (putt) fc.putt(start, sim.v.map((x) => x / (Math.hypot(...sim.v) || 1)), Math.hypot(...sim.v));
+    else fc.launch(start, this.shotLD, [dir.x, 0, dir.z]);
     let n = 0;
-    while (fc.state !== 'rest' && fc.state !== 'holed' && n++ < 20000) fc.step(1 / 240);
-    this.forecast = { land: fc.landed, rest: fc.p.slice(), t: fc.t, landT: fc.events.find((e) => e.type === 'land')?.t ?? 0 };
+    while (fc.state !== 'rest' && fc.state !== 'holed' && n++ < 20000) fc.step(STEP);
+    const fev = fc.events.map((e) => e.type);
+    this.forecast = {
+      land: fc.landed, rest: fc.p.slice(), t: fc.t, landT: fc.events.find((e) => e.type === 'land')?.t ?? 0,
+      holed: fc.state === 'holed', lip: fev.includes('lip'), restSurface: h.surface(fc.p[0], fc.p[2]),
+      restDist: Math.hypot(h.cup.x - fc.p[0], h.cup.z - fc.p[2]),
+    };
     this.sim = sim;
     this.evIdx = 0;
     this.strokes++;
     this.state = 'flight';
     this.flightT = 0;
+    this.simAcc = 0;
+    this.timeScale = 1;
     this.landV = null;
-    this.world.tracer.visible = this.settings.tracer && !this.club.putter;
+    this.restT = 0;
+    this.rec = [start.slice()];
+    this.recN = 0;
+    this.world.tracer.visible = this.settings.tracer && !putt;
     this.meter.hide();
-    this.ballShadow.visible = !this.club.putter;
-    this.flightCamMode = 'behind';
+    this.ballShadow.visible = !putt;
+    this.cam.startFlight(this.shotStart, this.forecast);
     this.ui.showShotPanel(null);
+    // impact hang: a flushed full swing freezes for a beat with a small zoom punch
+    if (!putt && sw.strike > 0.9 && sw.power > 0.8 && !this.settings.reducedMotion) {
+      this.hang = 0.1;
+      this.cam.kick(-4);
+    } else this.hang = 0;
+    // fast-forward hint, shown until the player has used it a few times
+    if (this.settings.ffSeen < 3 && !putt) this.ui.ffHint(true);
   }
 
   // ------------------------------------------------------------------ flight
+  stepSim(sim) {
+    const v = sim.v.slice();
+    sim.step(STEP);
+    if (!this.landV && sim.landed) this.landV = v;
+    if ((this.recN++ & 1) === 1) this.rec.push(sim.p.slice());
+  }
+
+  // slow motion when the ball is dying near the cup (holed, lip-out or near miss)
+  slowMoTarget() {
+    if (this.settings.reducedMotion) return 1;
+    const sim = this.sim, fc = this.forecast, h = this.hole;
+    if (!(fc.holed || fc.lip || fc.restDist < 0.5)) return 1;
+    if (sim.state === 'flight') return 1;
+    const d = Math.hypot(h.cup.x - sim.p[0], h.cup.z - sim.p[2]);
+    const sp = Math.hypot(...sim.v);
+    return d < 1.4 && sp < 3 ? 0.35 : 1;
+  }
+
   updateFlight(dt) {
     const sim = this.sim;
-    const fast = this.keys[' '] || this.keys['f'] ? 3 : 1;
-    const steps = Math.max(1, Math.round(dt * 240 * fast));
+    if (this.hang > 0) { this.hang -= dt; this.positionBall(sim.p); return; }
+    const ff = this.input.fastForward;
+    if (ff && !this.ffUsed) { this.ffUsed = true; this.settings.ffSeen++; this.saveSettings(); this.ui.ffHint(false); }
+    const target = this.slowMoTarget();
+    if (target < 1 && this.timeScale === 1) {
+      // the crowd leans in
+      if (this.forecast.lip || this.forecast.restDist < 0.5) this.sfx('crowd', '[crowd: “oooh…”]', 0.2, 1.5);
+    }
+    this.timeScale += (target - this.timeScale) * (1 - Math.exp(-dt * 8));
+    if (target === 1 && this.timeScale > 0.97) this.timeScale = 1;
+    const scale = ff ? 3 : this.timeScale;
+    this.simAcc += dt * 240 * scale;
+    const steps = Math.floor(this.simAcc);
+    this.simAcc -= steps;
     for (let i = 0; i < steps; i++) {
       if (sim.state === 'rest' || sim.state === 'holed') break;
-      const v = sim.v.slice();
-      sim.step(1 / 240);
-      if (!this.landV && sim.landed) this.landV = v;
+      this.stepSim(sim);
     }
-    this.flightT += dt * fast;
-    // events
+    this.flightT += dt * scale;
     while (this.evIdx < sim.events.length) this.onEvent(sim.events[this.evIdx++]);
-    // visuals
-    const p = sim.p;
+    this.positionBall(sim.p);
+    if (this.world.tracer.visible) this.world.setTracer(sim.trail.concat([sim.p]));
+    this.cam.flight(sim, this.shotStart, this.forecast, this.flightT);
+    if (sim.state === 'rest' || sim.state === 'holed') {
+      this.restT += dt;
+      if (this.restT > (sim.state === 'holed' ? 0.2 : 0.6)) this.onBallStop();
+    }
+  }
+
+  positionBall(p) {
     this.ballMesh.position.set(p[0], p[1], p[2]);
     const gh = this.hole.height(p[0], p[2]);
     this.ballShadow.position.set(p[0], gh + 0.02, p[2]);
     this.ballShadow.material.opacity = clamp(0.4 - (p[1] - gh) * 0.004, 0.08, 0.4);
-    const sc = clamp(1 + (p[1] - gh) * 0.03, 1, 4);
-    this.ballShadow.scale.setScalar(sc);
-    if (this.world.tracer.visible) this.world.setTracer(sim.trail.concat([p]));
-    this.updateFlightCamera(dt);
-    if (sim.state === 'rest' || sim.state === 'holed') {
-      if (!this.restT) this.restT = 0;
-      this.restT += dt;
-      if (this.restT > (sim.state === 'holed' ? 0.2 : 0.6)) { this.restT = 0; this.onBallStop(); }
-    }
+    this.ballShadow.scale.setScalar(clamp(1 + (p[1] - gh) * 0.03, 1, 4));
+  }
+
+  // jump straight to where the ball finishes (events are applied silently, except the last)
+  skipFlight() {
+    const sim = this.sim;
+    if (!sim || this.state !== 'flight') return;
+    let n = 0;
+    while (sim.state !== 'rest' && sim.state !== 'holed' && n++ < 40000) this.stepSim(sim);
+    const quiet = sim.events.slice(this.evIdx);
+    this.evIdx = sim.events.length;
+    const lastLoud = quiet.filter((e) => ['holed', 'water', 'ob', 'lip', 'pin'].includes(e.type)).pop();
+    if (lastLoud) this.onEvent(lastLoud);
+    this.positionBall(sim.p);
+    if (this.world.tracer.visible) this.world.setTracer(sim.trail.concat([sim.p]));
+    this.hang = 0;
+    this.cam.snapToRest(sim, this.shotStart);
+    this.onBallStop();
   }
 
   onEvent(e) {
-    const a = this.audio;
+    const putt = !!this.club.putter;
     if (e.type === 'land') {
-      a.land(e.surface, e.speed);
-      if (!this.club.putter) this.ui.toast(SURFACES[e.surface]?.name || e.surface, 'land');
-    } else if (e.type === 'bounce') { if (e.speed > 3) a.land(e.surface, e.speed * 0.6); }
-    else if (e.type === 'tree') { a.tree(); this.ui.toast(e.kind === 'trunk' ? 'Hit the trunk!' : 'Into the branches', 'bad'); }
-    else if (e.type === 'pin') { a.pin(); this.ui.toast('Off the flagstick!', 'good'); }
-    else if (e.type === 'lip') { a.groan(); this.ui.toast('Lipped out!', 'bad'); }
-    else if (e.type === 'holed') { a.cup(); }
-    else if (e.type === 'water') { a.splash(1); a.groan(); }
-    else if (e.type === 'ob') { a.groan(); }
-  }
-
-  updateFlightCamera(dt) {
-    const sim = this.sim, p = sim.p;
-    const b0 = this.shotStart.p;
-    const dir = dirOf(this.shotStart.aim);
-    const cam = this.cam;
-    const h = this.hole;
-    const putt = this.club.putter;
-    const fc = this.forecast;
-    const totalD = Math.hypot(fc.rest[0] - b0[0], fc.rest[2] - b0[2]);
-    const pv = new THREE.Vector3(p[0], p[1], p[2]);
-    if (putt || totalD < 45) {
-      // low follow camera
-      const back = putt ? 3.2 : 8;
-      cam.tPos.set(b0[0] - dir.x * back + (p[0] - b0[0]) * 0.55, Math.max(p[1], h.height(p[0], p[2])) + (putt ? 1.3 : 3), b0[2] - dir.z * back + (p[2] - b0[2]) * 0.55);
-      cam.tLook.copy(pv);
-      cam.k = 3;
-      return;
-    }
-    const t = this.flightT;
-    const toLand = fc.landT - sim.t;
-    if (this.flightCamMode === 'behind' && t > 0.5) this.flightCamMode = 'chase';
-    if (this.flightCamMode === 'chase' && sim.state === 'flight' && toLand < 2.0 && fc.land) {
-      this.flightCamMode = 'landing';
-      // broadcast camera near the landing area, off to the side
-      const L = fc.land, R = fc.rest;
-      const side = dir.x * (R[2] - b0[2]) - dir.z * (R[0] - b0[0]) > 0 ? -1 : 1;
-      const r = { x: -dir.z * side, z: dir.x * side };
-      const cx = L[0] + r.x * 26 + dir.x * 18, cz = L[2] + r.z * 26 + dir.z * 18;
-      this.landCam = new THREE.Vector3(cx, Math.max(h.height(cx, cz), L[1]) + 7, cz);
-    }
-    if (this.flightCamMode === 'behind') {
-      cam.tPos.set(b0[0] - dir.x * 7, b0[1] + 2.4, b0[2] - dir.z * 7);
-      cam.tLook.copy(pv);
-      cam.k = 4;
-    } else if (this.flightCamMode === 'chase') {
-      const hv = Math.hypot(sim.v[0], sim.v[2]) || 1;
-      const fx = sim.state === 'flight' ? sim.v[0] / hv : dir.x, fz = sim.state === 'flight' ? sim.v[2] / hv : dir.z;
-      cam.tPos.set(p[0] - fx * 22, Math.max(p[1] + 5, h.height(p[0] - fx * 22, p[2] - fz * 22) + 3), p[2] - fz * 22);
-      cam.tLook.copy(pv);
-      cam.k = 2.2;
-    } else {
-      cam.tPos.copy(this.landCam);
-      cam.tLook.copy(pv);
-      cam.k = 1.6;
-    }
+      this.audio.land(e.surface, e.speed);
+      if (!putt) this.ui.toast(SURFACES[e.surface]?.name || e.surface, 'land');
+    } else if (e.type === 'bounce') { if (e.speed > 3) this.audio.land(e.surface, e.speed * 0.6); }
+    else if (e.type === 'tree') { this.sfx('tree', '[branches crack]'); this.ui.toast(e.kind === 'trunk' ? 'Hit the trunk!' : 'Into the branches', 'bad'); }
+    else if (e.type === 'pin') { this.sfx('pin', '[clang off the flagstick]'); this.ui.toast('Off the flagstick!', 'good'); }
+    else if (e.type === 'lip') { this.sfx('groan', '[crowd groans]'); this.ui.toast('Lipped out!', 'bad'); }
+    else if (e.type === 'holed') { this.sfx('cup', '[ball rattles into the cup]'); }
+    else if (e.type === 'water') { this.audio.splash(1); this.sfx('groan', '[splash – crowd groans]'); }
+    else if (e.type === 'ob') { this.sfx('groan', '[crowd groans]'); }
   }
 
   // ------------------------------------------------------------------ shot result
-  onBallStop() {
-    const sim = this.sim, h = this.hole;
-    const S = this.shotStart;
+  shotInfo() {
+    const sim = this.sim, h = this.hole, S = this.shotStart;
     const ev = sim.events.map((e) => e.type);
     const putt = !!this.club.putter;
     let result = 'ok';
     if (sim.state === 'holed') result = 'holed';
     else if (ev.includes('water')) result = 'water';
     else if (ev.includes('ob')) result = 'ob';
-    const p = sim.p;
-    const cup = h.cup;
+    const p = sim.p, cup = h.cup;
     const dir = dirOf(S.aim);
     const info = {
       putt, club: this.club, ld: this.shotLD, result, lie: S.lie, isTee: S.isTee, par: h.par,
@@ -789,9 +670,8 @@ export class Game {
       apexFt: (sim.apex - S.p[1]) / FT,
       descent: this.landV ? Math.atan2(-this.landV[1], Math.hypot(this.landV[0], this.landV[2])) / DEG : null,
       stimp: h.stimp,
+      pinFt: Math.hypot(cup.x - p[0], cup.z - p[2]) / FT,
     };
-
-    // distance to pin relative to shot line
     const toCup = { x: cup.x - S.p[0], z: cup.z - S.p[2] };
     const dC = Math.hypot(toCup.x, toCup.z) || 1;
     const along = ((p[0] - S.p[0]) * toCup.x + (p[2] - S.p[2]) * toCup.z) / dC;
@@ -800,7 +680,7 @@ export class Game {
     if (S.pl && info.approach) { info.windAdj = S.pl.windAdj / YD; info.elevAdj = S.pl.elevAdj / YD; info.elevFt = (h.height(cup.x, cup.z) - S.p[1]) / FT; }
     if (putt) {
       info.startFt = S.dist / FT;
-      info.afterFt = Math.hypot(cup.x - p[0], cup.z - p[2]) / FT;
+      info.afterFt = info.pinFt;
       info.shortFt = (dC - along) / FT;
       const lat = ((p[0] - S.p[0]) * -toCup.z + (p[2] - S.p[2]) * toCup.x) / dC;
       info.lateralFt = lat / FT;
@@ -811,44 +691,52 @@ export class Game {
       info.holed = result === 'holed';
       info.uphillIn = this.puttElevIn;
     }
+    if (result === 'ok') { info.after = h.surface(p[0], p[2]); info.onGreen = info.after === 'green'; }
+    return info;
+  }
 
-    // outcome → stats, next ball position
-    let after, penalty = 0;
-    if (result === 'holed') {
-      after = { surface: 'green', yards: 0 };
-    } else if (result === 'water') {
-      penalty = 1;
-      this.pendingWater = { entry: this.findEntry(sim), info };
+  onBallStop() {
+    const sim = this.sim, S = this.shotStart;
+    this.ui.ffHint(false);
+    this.ffUsed = false;
+    this.timeScale = 1;
+    const info = this.shotInfo();
+    this.lastInfo = info;
+    this.lastSg = null;
+    this.state = 'result';
+    if (this.challenge) { this.challengeResult(info); return; }
+    const result = info.result, putt = info.putt;
+    if (result === 'water') {
+      // stats are recorded once the drop is chosen
+      this.pendingWater = { entry: findEntry(this.hole, sim, S.p), info };
       info.after = 'water';
-    } else if (result === 'ob') {
+      this.showResult(info, null);
+      this.resultNext = 'water';
+      return;
+    }
+    let after, penalty = 0;
+    if (result === 'holed') after = { surface: 'green', yards: 0 };
+    else if (result === 'ob') {
       penalty = 1;
       after = { surface: S.isTee ? 'fairway' : S.surface, yards: S.yards };
       this.ball = { p: S.p.slice(), surface: S.surface, isTee: S.isTee };
     } else {
-      const surf = h.surface(p[0], p[2]);
-      this.ball = { p: p.slice(), surface: surf, isTee: false };
-      after = { surface: surf, yards: this.distToPin() / YD };
-      info.after = surf;
-      info.onGreen = surf === 'green';
+      this.ball = { p: sim.p.slice(), surface: info.after, isTee: false };
+      after = { surface: info.after, yards: this.distToPin() / YD };
     }
-    this.lastInfo = info;
-    if (result === 'water') {
-      // stats recorded after the drop is chosen
-      this.showResult(info, null);
-      this.state = 'result';
-      this.resultNext = 'water';
-      return;
-    }
-    if (penalty) { this.strokes += penalty; this.penalties += penalty; this.holeStats.penalties += penalty; }
+    if (penalty) this.addPenalty(penalty);
     const sg = this.round.stats.recordShot({ surface: S.isTee ? 'tee' : S.surface, yards: S.yards, isTee: S.isTee }, after, result === 'holed', penalty);
+    this.lastSg = sg;
     this.trackFirGir(info, S);
     this.showResult(info, sg);
-    this.state = 'result';
     this.resultNext = result === 'holed' ? 'holed' : 'next';
     if (result === 'holed') this.onHoled();
-    else if (!putt && info.onGreen && this.distToPin() < 3) this.audio.crowd(0.6);
-    else if (!putt && info.onGreen) this.audio.crowd(0.25, 1.6);
+    else if (!putt && info.onGreen && this.distToPin() < 3) this.sfx('crowd', '[crowd applauds]', 0.6);
+    else if (!putt && info.onGreen) this.sfx('crowd', '[polite applause]', 0.25, 1.6);
+    else if (putt && info.startFt > 10 && info.afterFt < 1) this.sfx('crowd', '[crowd: “ooh!”]', 0.25, 1.4);
   }
+
+  addPenalty(n) { this.strokes += n; this.penalties += n; this.holeStats.penalties += n; }
 
   trackFirGir(info, S) {
     const h = this.hole, st = this.holeStats;
@@ -856,67 +744,9 @@ export class Game {
     if ((info.after === 'green' || info.result === 'holed') && this.strokes <= h.par - 2) st.gir = true;
   }
 
-  // point where the ball last crossed into the penalty area (projected path)
-  findEntry(sim) {
-    const h = this.hole;
-    const tr = sim.trail.concat([sim.p]);
-    for (let i = tr.length - 1; i > 0; i--) {
-      const a = tr[i - 1];
-      if (h.surface(a[0], a[2]) !== 'water') {
-        let lo = a, hi = tr[i];
-        for (let k = 0; k < 12; k++) {
-          const m = [(lo[0] + hi[0]) / 2, 0, (lo[2] + hi[2]) / 2];
-          if (h.surface(m[0], m[2]) === 'water') hi = m; else lo = m;
-        }
-        return { x: lo[0], z: lo[2] };
-      }
-    }
-    return { x: this.shotStart.p[0], z: this.shotStart.p[2] };
-  }
-
-  reliefOptions() {
-    const h = this.hole, e = this.pendingWater.entry, cup = h.cup;
-    const S = this.shotStart;
-    const dryOK = (x, z, margin = 1) => { const s = h.surface(x, z); return s !== 'water' && s !== 'ob' && h.waterSdf(x, z).d > margin && s !== 'green'; };
-    const opts = [];
-    opts.push({ id: 'replay', title: 'Stroke and distance', desc: 'Replay from where you last played.', p: S.p.slice(), surface: S.surface, isTee: S.isTee });
-    // back on the line
-    const dx = e.x - cup.x, dz = e.z - cup.z, dl = Math.hypot(dx, dz) || 1;
-    for (let k = 1; k < 400; k += 1) {
-      const x = e.x + (dx / dl) * k, z = e.z + (dz / dl) * k;
-      if (!h.inBounds(x, z)) break;
-      if (dryOK(x, z, 1.5) && h.surface(x, z) !== 'bunker') {
-        const x2 = x + (dx / dl) * 1.5, z2 = z + (dz / dl) * 1.5;
-        opts.push({ id: 'line', title: 'Back-on-the-line relief', desc: 'Drop on the line from the hole through the crossing point, as far back as you like.', p: [x2, 0, z2] });
-        break;
-      }
-    }
-    // lateral (red penalty area): within two club-lengths, no nearer the hole
-    const eD = Math.hypot(e.x - cup.x, e.z - cup.z);
-    let best = null;
-    for (let r = 0.5; r <= 12 && !best; r += 0.5) {
-      for (let a = 0; a < 32; a++) {
-        const x = e.x + Math.cos((a / 32) * Math.PI * 2) * r, z = e.z + Math.sin((a / 32) * Math.PI * 2) * r;
-        if (Math.hypot(x - cup.x, z - cup.z) < eD) continue;
-        if (!dryOK(x, z, 0.6) || !h.inBounds(x, z)) continue;
-        const d = Math.hypot(x - cup.x, z - cup.z);
-        if (!best || d < best.d) best = { x, z, d };
-      }
-      if (r >= 2.2 && best) break;
-    }
-    if (best) opts.push({ id: 'lateral', title: 'Lateral relief', desc: 'Drop within two club-lengths of where the ball crossed the edge, no nearer the hole.', p: [best.x, 0, best.z] });
-    for (const o of opts) {
-      o.p[1] = h.height(o.p[0], o.p[2]) + BALL.radius;
-      o.dist = Math.hypot(cup.x - o.p[0], cup.z - o.p[2]);
-      o.surface = o.surface || h.surface(o.p[0], o.p[2]);
-      o.es = expectedStrokes(o.isTee ? 'tee' : o.surface, o.dist / YD, !!o.isTee);
-    }
-    return opts;
-  }
-
   chooseRelief(o) {
     const S = this.shotStart;
-    this.strokes += 1; this.penalties += 1; this.holeStats.penalties += 1;
+    this.addPenalty(1);
     this.round.stats.recordShot({ surface: S.isTee ? 'tee' : S.surface, yards: S.yards, isTee: S.isTee }, { surface: o.surface, yards: o.dist / YD }, false, 1);
     this.ball = { p: o.p.slice(), surface: o.surface, isTee: !!o.isTee };
     this.pendingWater = null;
@@ -924,21 +754,20 @@ export class Game {
     this.nextShot();
   }
 
-  showResult(info, sg) {
-    this.ui.showShotPanel({ info, sg, fmt: (m) => this.fmtDist(m), tips: coachShot(info) });
-    let banner = '';
-    if (info.result === 'water') banner = 'Penalty area';
-    else if (info.result === 'ob') banner = 'Out of bounds';
-    if (banner) this.ui.banner(banner, 'bad');
+  showResult(info, sg, extra) {
+    this.ui.showShotPanel({ info, sg, fmt: (m) => this.fmtDist(m), tips: coachShot(info), extra, canReplay: !!this.rec?.length });
+    if (info.result === 'water') this.ui.banner('Penalty area', 'bad');
+    else if (info.result === 'ob') this.ui.banner('Out of bounds', 'bad');
     this.updateHUD(true);
   }
 
   continueAfterResult() {
     if (this.state !== 'result') return;
+    if (this.resultNext === 'attempt') { this.nextAttempt(); return; }
     if (this.resultNext === 'water') {
       this.state = 'relief';
       this.ui.showShotPanel(null);
-      this.ui.relief(this.reliefOptions(), (o) => this.chooseRelief(o), (m) => this.fmtDist(m));
+      this.ui.relief(reliefOptions(this.hole, this.pendingWater.entry, this.shotStart), (o) => this.chooseRelief(o), (m) => this.fmtDist(m));
       return;
     }
     if (this.resultNext === 'holed') { this.finishHole(); return; }
@@ -947,49 +776,158 @@ export class Game {
 
   nextShot() {
     this.ui.showShotPanel(null);
-    if (this.strokes >= 12) { this.ui.toast('Picked up (maximum 12)', 'bad'); this.finishHole(); return; }
+    if (this.strokes >= MAX_STROKES) { this.ui.toast(`Picked up (maximum ${MAX_STROKES})`, 'bad'); this.finishHole(); return; }
     this.prepareAddress();
     this.enterAddress();
-    // place the camera right away behind the ball
-    this.snapAddressCamera();
+    this.cam.snapAddress();
   }
 
   onHoled() {
     const h = this.hole;
-    const name = scoreName(this.strokes, h.par);
     const d = this.strokes - h.par;
-    this.ui.banner(name, d < 0 ? 'great' : d === 0 ? 'good' : 'bad');
-    this.audio.crowd(d < 0 ? 1 : d === 0 ? 0.55 : 0.2, d < 0 ? 4 : 2.5);
+    this.ui.banner(scoreName(this.strokes, h.par), d < 0 ? 'great' : d === 0 ? 'good' : 'bad');
+    this.sfx('crowd', d < 0 ? '[crowd roars]' : '[applause]', d < 0 ? 1 : d === 0 ? 0.55 : 0.2, d < 0 ? 4 : 2.5);
   }
 
+  // ------------------------------------------------------------------ replay
+  startReplay() {
+    if (this.state !== 'result' || !this.rec?.length) return;
+    this.state = 'replay';
+    this.replayT = 0;
+    this.replayHold = 0;
+    this.ui.showShotPanel(null);
+    this.ui.toast('Replay – Space to return');
+    this.cam.startReplay(this.shotStart, this.rec);
+    this.ballShadow.visible = !this.shotStart.club.putter;
+  }
+  updateReplay(dt) {
+    const rec = this.rec;
+    // slow enough to watch, but never longer than ~7 s however far the ball rolled
+    this.replayT += dt * 120 * Math.max(this.settings.reducedMotion ? 1 : 0.6, rec.length / 120 / 7);
+    const i = Math.min(rec.length - 1, Math.floor(this.replayT));
+    const p = rec[i];
+    this.positionBall(p);
+    if (this.world.tracer.visible) this.world.setTracer(rec.slice(0, i + 1));
+    this.cam.replay(p);
+    if (i >= rec.length - 1) { this.replayHold += dt; if (this.replayHold > 1) this.endReplay(); }
+  }
+  endReplay() {
+    if (this.state !== 'replay') return;
+    this.state = 'result';
+    const rec = this.rec;
+    this.positionBall(rec[rec.length - 1]);
+    if (this.world.tracer.visible) this.world.setTracer(rec);
+    this.showResult(this.lastInfo, this.lastSg, this.lastExtra);
+  }
+
+  // ------------------------------------------------------------------ challenge modes
+  // Closest to the pin / long drive: a fixed number of balls from the tee, best one counts.
+  challengeResult(info) {
+    const r = this.round, mode = r.mode;
+    let value = null, label;
+    if (mode === 'ctp') {
+      if (info.result === 'ok' || info.result === 'holed') value = info.result === 'holed' ? 0 : info.pinFt;
+      label = value == null ? (info.result === 'water' ? 'Wet – no score' : 'Out of bounds – no score') : value === 0 ? 'HOLE IN ONE!' : `${value < 10 ? value.toFixed(1) : value.toFixed(0)} ft from the pin`;
+    } else {
+      const ok = info.result === 'ok' && ['fairway', 'cut', 'fringe', 'green'].includes(info.after);
+      if (ok) value = info.totalYd;
+      label = ok ? `${this.fmtDist(info.totalYd * YD)} – in play` : `${this.fmtDist(info.totalYd * YD)} – ${info.result === 'ok' ? SURFACES[info.after]?.name || 'missed' : 'penalty'}, doesn't count`;
+    }
+    r.player.attempts.push(value);
+    const vals = r.player.attempts.filter((v) => v != null);
+    const best = vals.length ? (mode === 'ctp' ? Math.min(...vals) : Math.max(...vals)) : null;
+    const isBest = value != null && value === best;
+    this.lastExtra = { title: `Ball ${this.ballNo + 1} of ${r.balls}`, label, best: best == null ? '—' : mode === 'ctp' ? `${best.toFixed(1)} ft` : this.fmtDist(best * YD), isBest };
+    if (value === 0) { this.ui.banner('Hole in one!', 'great'); this.sfx('crowd', '[crowd goes wild]', 1, 5); }
+    else if (isBest && vals.length > 1) { this.ui.banner('New best', 'good'); this.sfx('crowd', '[applause]', 0.5, 2); }
+    else if (value == null) this.sfx('groan', '[crowd groans]');
+    this.addGhost(this.sim.trail.concat([this.sim.p]));
+    this.showResult(info, null, this.lastExtra);
+    this.resultNext = 'attempt';
+  }
+  nextAttempt() {
+    const r = this.round;
+    this.ui.showShotPanel(null);
+    this.ballNo++;
+    if (this.ballNo < r.balls) {
+      this.strokes = 0;
+      this.teeUp();
+      this.prepareAddress();
+      this.enterAddress();
+      this.cam.snapAddress();
+      return;
+    }
+    // this player's balls are done
+    if (r.p < r.players.length - 1) { r.p++; this.nextPlayerSameHole(); return; }
+    this.endRound();
+  }
+
+  addGhost(points) {
+    if (points.length < 2) return;
+    const geo = new THREE.BufferGeometry().setFromPoints(points.map((p) => new THREE.Vector3(p[0], p[1], p[2])));
+    const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.28, depthWrite: false }));
+    this.ghosts.add(line);
+  }
+  clearGhosts() {
+    for (const c of [...this.ghosts.children]) { c.geometry.dispose(); c.material.dispose(); this.ghosts.remove(c); }
+  }
+
+  // ------------------------------------------------------------------ hole / round end
   finishHole() {
     const r = this.round;
-    const st = r.stats.finishHole(this.strokes);
+    r.stats.finishHole(this.strokes);
     r.scores.push({ number: this.hole.number, par: this.hole.par, strokes: this.strokes });
-    this.state = 'scorecard';
     this.ui.showShotPanel(null);
+    // hot seat: everyone plays the hole (same pin and wind) before moving on
+    if (r.p < r.players.length - 1) {
+      const d = this.strokes - this.hole.par;
+      this.ui.toast(`${r.player.name}: ${this.strokes} (${scoreName(this.strokes, this.hole.par)})`, d < 0 ? 'good' : '');
+      r.p++;
+      this.nextPlayerSameHole();
+      return;
+    }
+    r.p = 0;
+    this.state = 'scorecard';
     const last = r.i >= r.holes.length - 1;
     this.ui.scorecard(this.course, r, true, () => {
       if (last) this.endRound();
       else { r.i++; this.loadHole(); }
     }, last ? 'Finish round' : 'Next hole');
-    void st;
+  }
+
+  nextPlayerSameHole() {
+    const r = this.round;
+    this.clearGhosts();
+    this.resetPlayerOnHole();
+    this.prepareAddress();
+    this.enterAddress();
+    this.cam.snapAddress();
+    this.ui.banner(`${r.player.name} to play`, 'good');
   }
 
   endRound() {
     const r = this.round;
-    const t = r.stats.totals();
-    // best score per course/mode
-    let best = null;
-    try {
-      const key = `psg-best-${this.course.id}-${r.mode}`;
-      best = JSON.parse(localStorage.getItem(key) || 'null');
-      if (r.holes.length === (r.mode === '18' ? 18 : r.mode === 'front' || r.mode === 'back' ? 9 : 1) && (!best || t.strokes - t.par < best.toPar)) {
-        localStorage.setItem(key, JSON.stringify({ toPar: t.strokes - t.par, strokes: t.strokes, date: new Date().toISOString().slice(0, 10) }));
-      }
-    } catch (e) { /* ignore */ }
     this.state = 'summary';
-    this.ui.summary(this.course, r, t, best, this.settings);
+    this.meter.hide();
+    if (this.challenge) { this.ui.challengeSummary(this.course, r, (m) => this.fmtDist(m)); return; }
+    const history = loadHistory();
+    const prevBest = r.players.length === 1 ? bestFor(history, this.course.id, r.mode) : null;
+    for (const pl of r.players) {
+      if (!pl.scores.length) continue;
+      saveRound(roundEntry({
+        course: this.course, mode: r.mode, holes: pl.scores, totals: pl.stats.totals(), profile: this.settings.profile,
+        difficulty: this.settings.difficulty, player: r.players.length > 1 ? pl.name : null, seed: r.seed,
+      }));
+    }
+    if (r.daily) {
+      try {
+        const key = `psg-daily-${r.daily}`;
+        const t = r.players[0].stats.totals();
+        const old = JSON.parse(localStorage.getItem(key) || 'null');
+        if (!old || t.strokes - t.par < old.toPar) localStorage.setItem(key, JSON.stringify({ toPar: t.strokes - t.par, strokes: t.strokes }));
+      } catch (e) { /* ignore */ }
+    }
+    this.ui.summary(this.course, r, r.players[0].stats.totals(), prevBest, this.settings);
   }
 
   quitToMenu() {
@@ -997,199 +935,9 @@ export class Game {
     document.body.classList.remove('flyover');
     this.meter.hide();
     this.mouseSwing.enabled = false; this.mouseSwing.draw();
+    this.round = null;
     this.showcase(this.course?.id || 'augusta');
     this.ui.mainMenu();
-  }
-
-  // ------------------------------------------------------------------ camera
-  addressCamera() {
-    const b = this.ball, h = this.hole;
-    const putt = this.club.putter;
-    const a = this.aim + this.orbit.yaw;
-    const f = dirOf(a);
-    const z = this.orbit.zoom;
-    const back = (putt ? 3.3 : 3.9) * z, up = (putt ? 1.35 : 1.35) * z + this.orbit.pitch * 4;
-    const side = putt ? 0.55 : 0.3; // shift right of the line, away from the golfer
-    const px = b.p[0] - f.x * back - f.z * side, pz = b.p[2] - f.z * back + f.x * side;
-    const py = Math.max(h.height(px, pz) + 0.6, b.p[1] + up);
-    // tilt the view so the ball sits ~11° below the screen centre (above the swing meter)
-    const dep = Math.atan2(py - b.p[1], back) - 11.5 * DEG;
-    const lx = px + f.x * 20 * Math.cos(dep), lz = pz + f.z * 20 * Math.cos(dep);
-    const ly = py - 20 * Math.sin(dep);
-    return { pos: new THREE.Vector3(px, py, pz), look: new THREE.Vector3(lx, ly, lz) };
-  }
-  snapAddressCamera() {
-    const c = this.addressCamera();
-    this.cam.tPos.copy(c.pos); this.cam.tLook.copy(c.look);
-  }
-  targetCamera() {
-    const land = this.club.putter ? [this.hole.cup.x, 0, this.hole.cup.z] : (this.previewLand || this.ball.p);
-    const f = dirOf(this.aim);
-    const h = this.hole;
-    const y = h.height(land[0], land[2]);
-    return { pos: new THREE.Vector3(land[0] - f.x * 30, y + 70, land[2] - f.z * 30), look: new THREE.Vector3(land[0], y, land[2]) };
-  }
-
-  updateCamera(dt) {
-    const c = this.cam;
-    if (this.state === 'address' || this.state === 'swing' || this.state === 'backswing') {
-      const t = this.targetView ? this.targetCamera() : this.addressCamera();
-      c.tPos.copy(t.pos); c.tLook.copy(t.look); c.k = this.targetView ? 3 : 5;
-    } else if (this.state === 'menu') {
-      this.showcaseT += dt;
-      const h = this.hole;
-      if (h) {
-        const a = this.showcaseT * 0.06;
-        const cx = h.gf.x, cz = h.gf.z;
-        const R = 95;
-        c.tPos.set(cx + Math.sin(a) * R, h.height(cx, cz) + 32, cz + Math.cos(a) * R);
-        c.tLook.set(cx, h.height(cx, cz) + 2, cz);
-        c.k = 1;
-        if (!this.menuInit) { c.pos.copy(c.tPos); c.look.copy(c.tLook); this.menuInit = true; }
-      }
-    }
-    const k = 1 - Math.exp(-c.k * dt);
-    c.pos.lerp(c.tPos, k);
-    c.look.lerp(c.tLook, k);
-    // keep the camera above the ground
-    if (this.hole) {
-      const gh = this.hole.height(c.pos.x, c.pos.z);
-      if (c.pos.y < gh + 0.5) c.pos.y = gh + 0.5;
-    }
-    this.camera.position.copy(c.pos);
-    this.camera.lookAt(c.look);
-  }
-
-  // ------------------------------------------------------------------ input
-  bindInput() {
-    addEventListener('keydown', (e) => {
-      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
-      const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-      if (this.keys[k] && k !== ' ') { /* repeat */ }
-      this.keys[k] = true;
-      this.onKey(k, e);
-      if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) e.preventDefault();
-    });
-    addEventListener('keyup', (e) => {
-      const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-      this.keys[k] = false;
-      if (k === 'Tab' && this.state !== 'scorecard' && this.round) this.ui.scorecard(null);
-    });
-    const cv = $('c');
-    const ov = $('swingOverlay');
-    const onDown = (e) => {
-      this.audio.init();
-      if (e.button === 2) { this.drag = { x: e.clientX, y: e.clientY, yaw: this.orbit.yaw, pitch: this.orbit.pitch }; return; }
-      if (e.button !== 0) return;
-      if (this.state === 'flyover') { this.endFlyover(); return; }
-      if (this.state === 'result') { this.continueAfterResult(); return; }
-      if (this.targetView && this.state === 'address') { this.aimAtScreen(e.clientX, e.clientY); return; }
-      if (this.settings.control === 'mouse' && this.state === 'address') {
-        if (this.mouseSwing.down(e)) { this.state = 'swing'; this.analysis = null; }
-        return;
-      }
-      if (this.state === 'address' || this.state === 'swing') this.meterClick();
-    };
-    ov.addEventListener('pointerdown', onDown);
-    cv.addEventListener('pointerdown', onDown);
-    addEventListener('pointermove', (e) => {
-      if (this.drag) {
-        this.orbit.yaw = this.drag.yaw - (e.clientX - this.drag.x) * 0.005;
-        this.orbit.pitch = clamp(this.drag.pitch - (e.clientY - this.drag.y) * 0.004, -0.3, 2.5);
-      }
-      if (this.mouseSwing.active) this.mouseSwing.move(e);
-    });
-    addEventListener('pointerup', (e) => {
-      if (e.button === 2) { this.drag = null; return; }
-      if (this.mouseSwing.active) this.mouseSwing.up(e);
-    });
-    addEventListener('contextmenu', (e) => e.preventDefault());
-    addEventListener('wheel', (e) => {
-      if (this.state === 'address') this.orbit.zoom = clamp(this.orbit.zoom * (e.deltaY > 0 ? 1.1 : 0.9), 0.5, 4);
-    }, { passive: true });
-
-    this.meter.onDone = (r) => this.meterDone(r);
-    this.meter.onCancel = () => { if (this.state === 'swing') this.state = 'address'; };
-    this.mouseSwing.onBack = (b) => { this.golfer.phase = 'manual'; this.golfer.apply(-b); };
-    this.mouseSwing.onDone = (r) => this.executeSwing(r);
-    this.mouseSwing.onCancel = () => { this.golfer.phase = 'idle'; if (this.state === 'swing') this.state = 'address'; };
-  }
-
-  meterClick() {
-    if (this.state !== 'address' && this.state !== 'swing') return;
-    if (this.settings.control === 'mouse') return;
-    if (this.state === 'address') this.beginSwing();
-    const r = this.meter.click();
-    if (r === 'power') this.audio.ui('set');
-  }
-
-  onKey(k, e) {
-    const st = this.state;
-    if (k === 'Escape') { if (this.round && st !== 'menu' && st !== 'summary') this.ui.togglePause(); return; }
-    if (this.ui.paused) return;
-    if (k === 'm') { this.audio.enabled = !this.audio.enabled; this.ui.toast(this.audio.enabled ? 'Sound on' : 'Sound off'); return; }
-    if (k === 'Tab' && this.round && st !== 'scorecard' && st !== 'summary' && st !== 'menu') { this.ui.scorecard(this.course, this.round, false); return; }
-    if (st === 'flyover' && (k === ' ' || k === 'Enter')) { this.endFlyover(); return; }
-    if (st === 'result' && (k === ' ' || k === 'Enter')) { this.continueAfterResult(); return; }
-    if (st === 'swing' && k === ' ' && !e.repeat) { this.meterClick(); return; }
-    if (st !== 'address') return;
-    if (k === ' ' && !e.repeat) { if (this.settings.control === 'meter') this.meterClick(); else this.ui.toast('Mouse swing: hold the left button, pull back, push through'); return; }
-    if (k === 'ArrowUp' || k === 'w') this.setClub(this.clubIdx - 1, true);
-    else if (k === 'ArrowDown' || k === 's') this.setClub(this.clubIdx + 1, true);
-    else if (k === 'q') this.cycleShape(-1);
-    else if (k === 'e') this.cycleShape(1);
-    else if (k === 'r') this.setTraj(this.traj + 1);
-    else if (k === 'f') this.setTraj(this.traj - 1);
-    else if (k === 'v') { this.targetView = !this.targetView; this.ui.toast(this.targetView ? 'Target view – click the ground to aim' : 'Address view'); }
-    else if (k === 'g') { this.gridOn = !this.world.gridGroup?.visible; this.world.showGreenGrid(this.gridOn); }
-    else if (k === 'c') { this.caddieNote(); }
-    else if (k === 'p') { this.aim = angOf(this.hole.cup.x - this.ball.p[0], this.hole.cup.z - this.ball.p[2]); this.placeGolfer(); this.previewDirty = true; }
-    this.updateHUD(true);
-  }
-
-  cycleShape(d) {
-    const order = ['draw', 'straight', 'fade'];
-    const i = clamp(order.indexOf(this.shape) + d, 0, 2);
-    this.shape = order[i];
-    this.previewDirty = true;
-    this.audio.ui('tick');
-  }
-  setTraj(t) {
-    this.traj = clamp(t, -1, 1);
-    this.previewDirty = true;
-    this.audio.ui('tick');
-  }
-
-  aimAtScreen(x, y) {
-    const ndc = new THREE.Vector2((x / innerWidth) * 2 - 1, -(y / innerHeight) * 2 + 1);
-    this.raycaster.setFromCamera(ndc, this.camera);
-    const hit = this.raycaster.intersectObject(this.world.terrain, false)[0];
-    if (!hit) return;
-    this.aim = angOf(hit.point.x - this.ball.p[0], hit.point.z - this.ball.p[2]);
-    this.placeGolfer();
-    this.previewDirty = true;
-    this.audio.ui('tick');
-  }
-  aimAtWorld(x, z) {
-    if (this.state !== 'address') return;
-    this.aim = angOf(x - this.ball.p[0], z - this.ball.p[2]);
-    this.placeGolfer();
-    this.previewDirty = true;
-  }
-
-  handleHeldKeys(dt) {
-    if (this.state !== 'address') return;
-    const fine = this.keys['Shift'];
-    const rate = (this.club.putter ? 4 : 14) * (fine ? 0.2 : 1) * DEG;
-    let d = 0;
-    if (this.keys['ArrowLeft'] || this.keys['a']) d -= 1;
-    if (this.keys['ArrowRight'] || this.keys['d']) d += 1;
-    if (d) {
-      this.aimHold = (this.aimHold || 0) + dt;
-      this.aim += d * rate * dt * (1 + Math.min(2, this.aimHold));
-      this.placeGolfer();
-      this.previewDirty = true;
-    } else this.aimHold = 0;
   }
 
   // ------------------------------------------------------------------ HUD
@@ -1197,9 +945,7 @@ export class Game {
     if (this.settings.units === 'm') return `${Math.round(m)} m`;
     return `${Math.round(m / YD)} yds`;
   }
-  windText() {
-    return `${Math.round(this.windMph)} mph`;
-  }
+  windText() { return `${Math.round(this.windMph)} mph`; }
   windRel() {
     // wind relative to the aim line: + = helping (downwind), side + = left-to-right
     const a = this.windAng - this.aim;
@@ -1208,25 +954,24 @@ export class Game {
 
   updateHUD(force) {
     if (!this.round || !this.hole || !this.club) return;
-    const h = this.hole, b = this.ball;
-    const toPar = this.round.scores.reduce((s, x) => s + x.strokes - x.par, 0);
+    const h = this.hole, b = this.ball, r = this.round;
+    const toPar = r.scores.reduce((s, x) => s + x.strokes - x.par, 0);
     const d = this.distToPin();
     const lk = this.lieKey();
     const lie = LIES[lk] || LIES.rough;
-    const sl = this.slope();
     this.ui.hud({
       hole: h.number, name: h.name, par: h.par, yards: this.course.holes[h.index].yds,
-      shot: this.strokes + 1, toPar, holeToPar: null,
+      shot: this.challenge ? `Ball ${this.ballNo + 1}/${r.balls}` : `Shot ${this.strokes + 1}`, toPar,
+      player: r.players.length > 1 ? r.player.name : null, challenge: this.challenge,
       dist: this.onGreen || this.club.putter ? `${(d / FT).toFixed(d / FT < 10 ? 1 : 0)} ft` : this.fmtDist(d),
       plays: this.pl && !this.club.putter ? this.fmtDist(this.pl.plays) : null,
       elev: (h.height(h.cup.x, h.cup.z) - (b.p[1] - BALL.radius)) / FT,
       puttEq: this.club.putter ? this.puttEqFt : null,
       wind: this.windRel(), windMph: this.windMph,
       club: this.club, clubCarry: this.club.putter ? `${this.puttRange} ft range` : `Carry ${this.fmtDist(this.club.carry)} · Total ${this.fmtDist(this.club.total)}`,
-      lie: SURFACES[b.isTee ? 'tee' : b.surface]?.name || b.surface, lieKey: lk, lieRange: lk === 'splash' ? 'Explosion shot' : `${lie.dist[0]}–${lie.dist[1]}%`, slope: sl,
+      lie: SURFACES[b.isTee ? 'tee' : b.surface]?.name || b.surface, lieKey: lk, lieRange: lk === 'splash' ? 'Explosion shot' : `${lie.dist[0]}–${lie.dist[1]}%`, slope: this.slope(),
       shape: SHAPES[this.shape].name, traj: TRAJ[this.traj], putter: !!this.club.putter,
-      stimp: h.stimp,
-      state: this.state,
+      stimp: h.stimp, state: this.state,
     });
     if (force) this.ui.minimap(this);
   }
@@ -1245,25 +990,24 @@ export class Game {
   frame(dt) {
     const st = this.state;
     if (!this.ui.paused) {
-      if (st === 'flyover') this.updateFlyover(dt);
+      this.input.update(dt);
+      if (st === 'flyover') { if (this.cam.flyover(dt)) this.endFlyover(); }
       else if (st === 'address') {
-        this.handleHeldKeys(dt);
-        if (this.analysis) this.stepCaddieAnalysis();
+        if (this.caddie.analysis) this.caddie.stepAnalysis();
         if (this.previewDirty) { this.previewT = (this.previewT || 0) + dt; if (this.previewT > 0.06) { this.previewT = 0; this.updatePreview(); this.updateHUD(true); } }
         this.caddieTick = (this.caddieTick || 0) + dt;
         if (this.caddieTick > 0.5) { this.caddieTick = 0; this.caddieNote(); }
-      } else if (st === 'swing') {
-        this.meter.update(dt);
-      } else if (st === 'flight') this.updateFlight(dt);
-      if (st === 'backswing' || st === 'flight' || st === 'result' || st === 'address' || st === 'swing' || st === 'flyover') this.golfer.update(dt);
-      if (st === 'flight' || st === 'result' || st === 'holed') { /* camera handled in flight */ }
-      if (st !== 'flight' && st !== 'result' && st !== 'relief' && st !== 'scorecard') this.updateCamera(dt);
-      else {
-        const c = this.cam; const k = 1 - Math.exp(-c.k * dt);
-        c.pos.lerp(c.tPos, k); c.look.lerp(c.tLook, k);
-        if (this.hole) { const gh = this.hole.height(c.pos.x, c.pos.z); if (c.pos.y < gh + 0.5) c.pos.y = gh + 0.5; }
-        this.camera.position.copy(c.pos); this.camera.lookAt(c.look);
-      }
+      } else if (st === 'swing') this.meter.update(dt);
+      else if (st === 'flight') this.updateFlight(dt);
+      else if (st === 'replay') this.updateReplay(dt);
+      if (['backswing', 'flight', 'result', 'address', 'swing', 'flyover', 'replay'].includes(st) && !(st === 'flight' && this.hang > 0)) this.golfer.update(dt);
+      // camera targets
+      if (st === 'address' || st === 'swing' || st === 'backswing') {
+        const c = this.cam.targetView ? this.cam.target() : this.cam.address();
+        this.cam.set(c.pos, c.look, this.cam.targetView ? 3 : 5);
+        this.cam.fov = 50;
+      } else if (st === 'menu') this.cam.menu(dt);
+      this.cam.apply(dt);
       if (st === 'address' && this.meter.state !== 'hidden') this.meter.draw();
     }
     // ball visibility scale with distance
