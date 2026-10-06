@@ -1,11 +1,15 @@
 // Golf Academy: short lessons on what actually matters, plus a Ball Flight Lab
 // that runs the game's own physics so players can see cause and effect.
-import { computeLaunch, simulateCarry, BallSim, LIES } from './physics.js';
+import { computeLaunch, simulateCarry, BallSim, LIES, SURFACES } from './physics.js';
 import { buildBag, PROFILES } from './clubs.js';
 import { YD, mulberry32 } from './hole.js';
 
 const $ = (id) => document.getElementById(id);
 import { MPH } from './util.js';
+
+// the lab's lie list uses the same names as the in-play LIE badge; the two bunker lies are spelled out
+const LIE_LABEL = { bunker: 'Fairway bunker', splash: 'Greenside bunker (splash)' };
+const lieName = (k) => LIE_LABEL[k] || SURFACES[k]?.name || k;
 
 const LESSONS = [
   { id: 'dplane', title: 'Ball flight laws (D-plane)',
@@ -101,7 +105,7 @@ export class Academy {
     $('labCtl').innerHTML = `
       <label><span>Golfer</span><select data-k="profile">${Object.entries(PROFILES).map(([k, p]) => `<option value="${k}" ${k === s.profile ? 'selected' : ''}>${p.name}</option>`).join('')}</select></label>
       <label><span>Club</span><select data-k="club">${bag.map((c) => `<option value="${c.key}" ${c.key === s.club ? 'selected' : ''}>${c.name}</option>`).join('')}</select></label>
-      <label><span>Lie</span><select data-k="lie">${Object.keys(LIES).filter((k) => k !== 'green').map((k) => `<option value="${k}" ${k === s.lie ? 'selected' : ''}>${k}</option>`).join('')}</select></label>
+      <label><span>Lie</span><select data-k="lie">${Object.keys(LIES).filter((k) => k !== 'green').map((k) => `<option value="${k}" ${k === s.lie ? 'selected' : ''}>${lieName(k)}</option>`).join('')}</select></label>
       ${slider('power', 'Swing', 0.4, 1.1, 0.01, (v) => `${Math.round(v * 100)}%`)}
       ${slider('face', 'Face', -8, 8, 0.5, (v) => `${v > 0 ? '+' : ''}${v}° ${v > 0 ? 'open' : v < 0 ? 'closed' : ''}`)}
       ${slider('path', 'Path', -8, 8, 0.5, (v) => `${v > 0 ? '+' : ''}${v}° ${v > 0 ? 'in-out' : v < 0 ? 'out-in' : ''}`)}

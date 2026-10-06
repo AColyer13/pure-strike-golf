@@ -143,7 +143,7 @@ select { font: 500 13px Barlow, sans-serif; background: #173022; color: var(--te
 #helpBar { position: fixed; bottom: 8px; left: 50%; transform: translateX(-50%); display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; font-size: 12px; color: rgba(255,255,255,.75); z-index: 10; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,.8); width: 96vw; }
 #helpBar b { color: #fff; }
 
-#toasts { position: fixed; top: 90px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 6px; align-items: center; z-index: 15; pointer-events: none; }
+#toasts { position: fixed; top: 14px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 6px; align-items: center; z-index: 15; pointer-events: none; }
 .toast { background: var(--panel); border: 1px solid var(--line); padding: 6px 16px; border-radius: 30px; font-weight: 700; backdrop-filter: blur(6px); animation: tin .25s ease-out; transition: opacity .4s, transform .4s; }
 .toast.good { border-color: var(--green); color: #c9ffd9; }
 .toast.bad { border-color: var(--red); color: #ffd2cf; }
@@ -268,6 +268,8 @@ td span.pickup i { position: absolute; top: -6px; right: -7px; font: 700 12px Ba
 .lab-out span { font-size: 11px; color: var(--muted); }
 .lab-out b { font: 700 17px 'Barlow Condensed', sans-serif; }
 
+/* narrow portrait: the hole card and distance panel fill the top-left, so toasts sit below them */
+@media (max-width: 700px) and (orientation: portrait) { #toasts { top: 215px; } }
 @media (max-width: 900px) {
   .ac-body { grid-template-columns: 1fr; }
   .ac-list { flex-direction: row; overflow-x: auto; }
@@ -297,6 +299,8 @@ body.flyover #hud > .panel, body.flyover #hud #caddie, body.flyover #helpBar { o
 .sc-board div { display: flex; justify-content: space-between; gap: 14px; }
 .sc-board.big { margin: 10px 0; font-size: 18px; }
 .sc-board.big b { font: 700 24px 'Barlow Condensed', sans-serif; }
+.share-box { display: flex; flex-direction: column; gap: 4px; margin: 10px 0 4px; font-size: 13px; color: var(--muted); }
+.share-box input { font: 500 13px Barlow, sans-serif; background: #173022; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; width: 100%; user-select: text; }
 .attempts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0; }
 .attempts span { min-width: 90px; color: var(--muted); }
 .attempts i { font-style: normal; background: rgba(255,255,255,.08); border-radius: 6px; padding: 2px 8px; }
@@ -435,6 +439,12 @@ body.reduced-motion *, body.reduced-motion *::before, body.reduced-motion *::aft
 .ed-head { display: flex; justify-content: space-between; align-items: center; }
 .ed-body { display: grid; grid-template-columns: 1fr auto; gap: 18px; margin-top: 8px; }
 .ed-left { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.ed-basics { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: end; margin-bottom: 8px; }
+.ed-basics label { display: flex; flex-direction: column; gap: 3px; font: 700 11px Barlow, sans-serif; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.ed-basics label.grow { flex: 1; min-width: 200px; }
+.ed-basics input, .ed-basics select { font: 500 14px Barlow, sans-serif; letter-spacing: normal; text-transform: none; background: #173022; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; user-select: text; }
+.ed-basics input[type=number] { width: 90px; }
+.ed-adv { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
 #edJson { width: 100%; height: min(420px, 50vh); font: 12px/1.45 ui-monospace, Consolas, monospace; background: #0b1710; color: #d8f0de; border: 1px solid var(--line); border-radius: 8px; padding: 8px; resize: vertical; user-select: text; tab-size: 2; }
 .ed-err { color: var(--red); font-size: 13px; min-height: 18px; }
 .ed-ref { font-size: 12px; color: var(--muted); }

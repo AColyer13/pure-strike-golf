@@ -50,6 +50,12 @@ export class Editor {
             <select id="edCourse">${COURSES.map((c) => `<option value="${c.id}" ${c.id === this.baseId ? 'selected' : ''}>${c.name}</option>`).join('')}</select>
             <select id="edHole">${base.holes.map((h, i) => `<option value="${i}" ${i === this.idx ? 'selected' : ''}>${i + 1}. ${h.name}${edited.includes(i) ? ' ✎' : ''}</option>`).join('')}</select>
           </div>
+          <div class="ed-basics">
+            <label>Par <select id="edPar"><option value="3">3</option><option value="4">4</option><option value="5">5</option></select></label>
+            <label>Yards <input id="edYds" type="number" min="60" max="700" step="1"></label>
+            <label class="grow">Strategy note <input id="edTip" type="text" maxlength="400" placeholder="Shown on the hole intro card"></label>
+          </div>
+          <label class="ed-adv" for="edJson">Hole data (JSON): bunkers, water, trees, elevation and pins live here. See the field reference below.</label>
           <textarea id="edJson" spellcheck="false"></textarea>
           <div id="edErr" class="ed-err"></div>
           <div class="row wrap">
@@ -79,7 +85,23 @@ export class Editor {
       </div>`;
     const ta = $('edJson');
     ta.value = pretty(this.current());
-    ta.oninput = () => { clearTimeout(this.t); this.t = setTimeout(() => this.preview(), 250); };
+    // the basics form and the JSON describe the same hole: edit either one
+    const par = $('edPar'), yds = $('edYds'), tip = $('edTip');
+    const syncForm = () => {
+      let d; try { d = JSON.parse(ta.value); } catch (e) { return; }
+      par.value = String(d.par); yds.value = d.yds ?? ''; tip.value = d.tip || '';
+    };
+    const syncJson = () => {
+      let d; try { d = JSON.parse(ta.value); } catch (e) { $('edErr').textContent = 'Fix the JSON error before using these fields'; return; }
+      d.par = +par.value;
+      if (yds.value !== '') d.yds = +yds.value;
+      if (tip.value.trim()) d.tip = tip.value; else delete d.tip;
+      ta.value = pretty(d);
+      this.preview();
+    };
+    syncForm();
+    par.onchange = yds.oninput = tip.oninput = syncJson;
+    ta.oninput = () => { clearTimeout(this.t); this.t = setTimeout(() => { syncForm(); this.preview(); }, 250); };
     $('edCourse').onchange = (e) => { this.baseId = e.target.value; this.idx = 0; this.load(); };
     $('edHole').onchange = (e) => { this.idx = +e.target.value; this.load(); };
     $('edClose').onclick = () => this.close();

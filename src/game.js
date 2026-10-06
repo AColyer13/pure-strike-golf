@@ -24,6 +24,7 @@ import { Caddie, canPutt } from './caddie.js';
 import { CameraDirector } from './camera.js';
 import { Input } from './input.js';
 import { reliefOptions } from './rules.js';
+import { fmtWind } from './units.js';
 import { loadHistory, saveRound, roundEntry, bestFor } from './history.js';
 import { SIGNATURE, createRound, holeEnv, introExtra } from './round.js';
 import {
@@ -72,6 +73,7 @@ export class Game {
     this.meter = new SwingMeter($('meter'));
     this.mouseSwing = new MouseSwing($('swingOverlay'));
     this.mouseSwing.resize();
+    this.meter.cueFn = (putt) => this.swingCue(putt);
     this.meter.onDone = (r) => this.meterDone(r);
     this.meter.onCancel = () => { if (this.state === 'swing') this.state = 'address'; };
     this.meter.onAuto = () => this.audio.ui('set');
@@ -259,6 +261,7 @@ export class Game {
 
   enterAddress() {
     this.state = 'address';
+    this.addressAt = performance.now();
     this.cam.resetOrbit();
     this.cam.targetView = false;
     document.body.classList.remove('target-view');
@@ -294,6 +297,7 @@ export class Game {
     this.club = this.bag[this.clubIdx];
     if (user) this.userClub = true;
     this.golfer.setClub(this.club);
+    if (user) this.caddie.clubChanged();
     this.placeGolfer();
     this.hole.pinIn = !this.club.putter;
     if (this.club.putter) this.caddie.setupPutt();
@@ -430,9 +434,20 @@ export class Game {
   }
 
   // ------------------------------------------------------------------ swing
+  get addressSettling() { return performance.now() - (this.addressAt || 0) < 350; }
+
+  // the meter's "how do I start" prompt follows the control scheme and input device
+  swingCue(putt) {
+    const touch = document.body.classList.contains('touch');
+    if (this.settings.control === 'mouse') return touch ? 'Drag down, then up, to swing' : 'Hold LMB: pull back, push up to swing';
+    return `${touch ? 'Tap SWING' : `${this.ui.key('swing')} / click`} to start the ${putt ? 'stroke' : 'swing'}`;
+  }
+
   meterClick() {
     if (this.state !== 'address' && this.state !== 'swing') return;
     if (this.settings.control === 'mouse') return;
+    // the press that skipped the flyover or dismissed the last result must not also start a swing
+    if (this.state === 'address' && this.addressSettling) return;
     if (this.state === 'address') {
       if (this.previewDirty) this.updatePreview();
       this.state = 'swing';
@@ -659,16 +674,16 @@ export class Game {
     if (r.next === 'water') {
       // stats are recorded once the drop is chosen
       this.pendingWater = { entry: r.entry, info };
-      this.showResult(info, null);
       this.resultNext = 'water';
+      this.showResult(info, null);
       return;
     }
     this.strokes = r.strokes;
     this.penalties += r.penalty;
     this.ball = r.ball;
     this.lastSg = r.sg;
-    this.showResult(info, r.sg);
     this.resultNext = r.next;
+    this.showResult(info, r.sg);
     if (r.result === 'holed') this.onHoled();
     else if (!putt && info.onGreen && this.distToPin() < 3) this.sfx('crowd', '[crowd applauds]', 0.6);
     else if (!putt && info.onGreen) this.sfx('crowd', '[polite applause]', 0.25, 1.6);
@@ -686,7 +701,7 @@ export class Game {
   }
 
   showResult(info, sg, extra) {
-    this.ui.showShotPanel({ info, sg, fmt: (m) => this.fmtDist(m), tips: coachShot(info), extra, canReplay: !!this.rec?.length });
+    this.ui.showShotPanel({ info, sg, fmt: (m) => this.fmtDist(m), tips: coachShot(info, this.settings.units), extra, canReplay: !!this.rec?.length });
     if (info.result === 'water') this.ui.banner('Penalty area', 'bad');
     else if (info.result === 'ob') this.ui.banner('Out of bounds', 'bad');
     this.updateHUD(true);
@@ -773,8 +788,8 @@ export class Game {
     else if (isBest && vals.length > 1) { this.ui.banner('New best', 'good'); this.sfx('crowd', '[applause]', 0.5, 2); }
     else if (value == null) this.sfx('groan', '[crowd groans]');
     this.addGhost(this.sim.trail.concat([this.sim.p]));
-    this.showResult(info, null, this.lastExtra);
     this.resultNext = 'attempt';
+    this.showResult(info, null, this.lastExtra);
   }
   nextAttempt() {
     const r = this.round;
@@ -870,6 +885,7 @@ export class Game {
     this.tutorial?.end();
     this.showcase(this.course?.id || 'augusta');
     this.ui.mainMenu();
+    const menu = document.getElementById('menu'); if (menu) menu.scrollTop = 0;
   }
 
   // ------------------------------------------------------------------ HUD
@@ -877,28 +893,35 @@ export class Game {
     if (this.settings.units === 'm') return `${Math.round(m)} m`;
     return `${Math.round(m / YD)} yds`;
   }
-  windText() { return `${Math.round(this.windMph)} mph`; }
+  windText() { return fmtWind(this.windMph, this.settings.units); }
   windRel() { return windRelOf(this.windAng, this.windMph, this.aim); }
 
   updateHUD(force) {
     if (!this.round || !this.hole || !this.club) return;
-    const h = this.hole, b = this.ball, r = this.round;
+    const h = this.hole, r = this.round;
     const toPar = r.scores.reduce((s, x) => s + x.strokes - x.par, 0);
-    const d = this.distToPin();
+    // After the ball stops the club, plays-like and putt-speed numbers describe the shot just played,
+    // so the HUD shows only where the ball finished (and "Holed" once it drops) until the next address.
+    const resting = this.state === 'result' || this.state === 'replay';
+    const holed = resting && this.resultNext === 'holed';
+    const fromSim = resting && this.sim && (this.challenge || this.resultNext === 'water');
+    const b = fromSim ? { p: this.sim.p, surface: this.lastInfo?.after || this.ball.surface } : this.ball;
+    const d = holed ? 0 : distToPin(h, b);
+    const feet = this.club.putter || (resting ? b.surface === 'green' : this.onGreen);
     const lk = this.lieKey();
     const lie = LIES[lk] || LIES.rough;
     this.ui.hud({
       hole: h.number, name: h.name, par: h.par, yards: this.course.holes[h.index].yds,
-      shot: this.challenge ? `Ball ${this.ballNo + 1}/${r.balls}` : `Shot ${this.strokes + 1}`, toPar,
+      shot: this.challenge ? `Ball ${this.ballNo + 1}/${r.balls}` : holed ? `Holed in ${this.strokes}` : `Shot ${this.strokes + 1}`, toPar,
       player: r.players.length > 1 ? r.player.name : null, challenge: this.challenge,
-      dist: this.onGreen || this.club.putter ? `${(d / FT).toFixed(d / FT < 10 ? 1 : 0)} ft` : this.fmtDist(d),
-      plays: this.pl && !this.club.putter ? this.fmtDist(this.pl.plays) : null,
-      elev: (h.height(h.cup.x, h.cup.z) - (b.p[1] - BALL.radius)) / FT,
-      puttEq: this.club.putter ? this.puttEqFt : null,
+      dist: holed ? 'Holed' : feet ? `${(d / FT).toFixed(d / FT < 10 ? 1 : 0)} ft` : this.fmtDist(d),
+      plays: this.pl && !this.club.putter && !resting ? this.fmtDist(this.pl.plays) : null,
+      elev: holed ? 0 : (h.height(h.cup.x, h.cup.z) - (b.p[1] - BALL.radius)) / FT,
+      puttEq: this.club.putter && !resting ? this.puttEqFt : null,
       wind: this.windRel(), windMph: this.windMph,
       club: this.club, clubCarry: this.club.putter ? `${this.puttRange} ft range` : `Carry ${this.fmtDist(this.club.carry)} · Total ${this.fmtDist(this.club.total)}`,
       lie: b.isTee ? SURFACES.tee.name : b.surface === 'tee' ? 'Tee box · fairway lie' : SURFACES[b.surface]?.name || b.surface,
-      lieKey: lk, lieRange: lk === 'splash' ? 'Explosion shot' : `${lie.dist[0]}–${lie.dist[1]}%`, slope: this.slope(),
+      lieKey: lk, lieRange: lk === 'splash' ? 'Explosion shot' : `${lie.dist[0]}–${lie.dist[1]}%`, slope: resting ? { up: 0, side: 0 } : this.slope(),
       shape: SHAPES[this.shape].name, traj: TRAJ[this.traj], putter: !!this.club.putter,
       stimp: h.stimp, state: this.state,
     });

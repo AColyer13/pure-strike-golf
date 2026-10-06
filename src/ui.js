@@ -5,9 +5,10 @@ import { YD } from './hole.js';
 import { SURFACES } from './physics.js';
 import { DEFAULT_KEYS, ACTION_LABELS } from './config.js';
 import { MODES, SIGNATURE, dailySpec, holesFor, challengeHash } from './round.js';
-import { loadHistory, bestFor, handicapIndex, sgTrend, clearHistory, RATINGS } from './history.js';
+import { loadHistory, bestFor, handicapIndex, sgTrend, clearHistory, localDay, RATINGS } from './history.js';
 import { firstRun } from './tutorial.js';
 import { QUALITY } from './post.js';
+import { fmtYd, fmtElev, windUnit, windValue, localizeText } from './units.js';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
@@ -57,12 +58,13 @@ export class UI {
     }
     const par = course.holes.reduce((s, h) => s + h.par, 0);
     const yds = course.holes.reduce((s, h) => s + h.yds, 0);
+    const units = g.settings.units;
     const bests = ['18', 'front', 'back'].map((m) => [m, bestFor(history, course.id, m)]).filter(([, b]) => b);
     const hero = $('courseHero');
     hero.style.setProperty('--accent', course.flag);
     hero.innerHTML = `
       <div class="cc-top"><span class="cc-flag"></span><div><div class="cc-name">${course.name}</div><div class="cc-loc">${course.location}</div></div></div>
-      <div class="cc-meta">Par ${par} · ${yds.toLocaleString()} yds · Stimp ${course.stimp} · Wind ${course.wind[0]}–${course.wind[1]} mph${RATINGS[course.id] ? ` · Rating ${RATINGS[course.id][0]} / ${RATINGS[course.id][1]}` : ''}</div>
+      <div class="cc-meta">Par ${par} · ${fmtYd(yds, units).replace(/d+/, (n) => (+n).toLocaleString())} · Stimp ${course.stimp} · Wind ${windValue(course.wind[0], units)}–${windValue(course.wind[1], units)} ${windUnit(units)}${RATINGS[course.id] ? ` · Rating ${RATINGS[course.id][0]} / ${RATINGS[course.id][1]}` : ''}</div>
       <p class="cc-blurb">${course.blurb}</p>
       <div class="cc-teach"><b>Teaches</b><ul>${course.teaches.map((t) => `<li>${t}</li>`).join('')}</ul></div>
       ${bests.length ? `<div class="cc-best">${bests.map(([m, b]) => `Best ${MODES[m].name}: ${toParStr(b.toPar)} (${b.strokes})`).join(' · ')}</div>` : ''}`;
@@ -125,7 +127,7 @@ export class UI {
     hs.classList.toggle('hidden', !pickHole);
     hs.innerHTML = course.holes.map((h, i) => {
       const ok = this.sel.mode === 'ctp' ? h.par === 3 : this.sel.mode === 'drive' ? h.par >= 4 : true;
-      return ok ? `<option value="${i + 1}" ${i + 1 === +this.sel.hole ? 'selected' : ''}>${i + 1}. ${h.name} – par ${h.par}, ${h.yds} yds</option>` : '';
+      return ok ? `<option value="${i + 1}" ${i + 1 === +this.sel.hole ? 'selected' : ''}>${i + 1}. ${h.name} – par ${h.par}, ${fmtYd(h.yds, units)}</option>` : '';
     }).join('');
     hs.onchange = () => { this.sel.hole = +hs.value; this.saveSel(); };
     const names = $('optNames');
@@ -217,7 +219,7 @@ export class UI {
         <div class="intro-name">${hole.name}</div>
         <div class="intro-meta">Par ${hole.par} · ${dist} · Wind ${wind} · Stimp ${hole.stimp.toFixed(1)}</div>
         ${extra ? `<div class="intro-extra">${esc(extra)}</div>` : ''}
-        ${def.tip ? `<p class="intro-tip">${def.tip}</p>` : ''}
+        ${def.tip ? `<p class="intro-tip">${localizeText(def.tip, this.game.settings.units)}</p>` : ''}
         <div class="intro-skip">${this.key('swing')} / click to skip the flyover</div>
       </div>`;
     i.classList.remove('hidden');
@@ -226,6 +228,7 @@ export class UI {
 
   // ------------------------------------------------------------ HUD
   hud(d) {
+    const units = this.game.settings.units;
     $('hcNum').textContent = d.hole;
     $('hcName').textContent = d.name;
     $('hcPar').textContent = `Par ${d.par} · ${this.game.fmtDist(d.yards * YD)}`;
@@ -237,7 +240,7 @@ export class UI {
     if (d.plays) sub = `Plays like <b>${d.plays}</b>`;
     else if (d.puttEq != null) sub = `Stroke it <b>${d.puttEq.toFixed(0)} ft</b><br><small>to finish 17 in past</small>`;
     const e = Math.round(d.elev);
-    if (Math.abs(e) >= 1) sub += `<span class="elev">${e > 0 ? '▲' : '▼'} ${Math.abs(e)} ft ${e > 0 ? 'uphill' : 'downhill'}</span>`;
+    if (Math.abs(e) >= 1) sub += `<span class="elev">${e > 0 ? '▲' : '▼'} ${fmtElev(e, units)} ${e > 0 ? 'uphill' : 'downhill'}</span>`;
     const sl = d.slope, parts = [];
     if (Math.abs(sl.up) >= 1.5) parts.push(`${sl.up > 0 ? 'Uphill' : 'Downhill'} ${Math.abs(sl.up).toFixed(0)}°`);
     if (Math.abs(sl.side) >= 1.5) parts.push(`Ball ${sl.side > 0 ? 'above' : 'below'} feet ${Math.abs(sl.side).toFixed(0)}°`);
@@ -250,7 +253,8 @@ export class UI {
     $('hud').dataset.state = d.state;
     const w = d.wind;
     $('windArrow').style.transform = `rotate(${w.ang}rad)`;
-    $('windMph').textContent = `${Math.round(d.windMph)}`;
+    $('windMph').textContent = `${windValue(d.windMph, units)}`;
+    $('windUnit').textContent = ` ${windUnit(units)}`;
     const wt = [];
     if (Math.abs(w.along) >= 1.5) wt.push(w.along > 0 ? 'Helping' : 'Into');
     if (Math.abs(w.side) >= 1.5) wt.push(w.side > 0 ? 'L → R' : 'R → L');
@@ -376,7 +380,7 @@ export class UI {
     const ld = info.ld;
     if (info.putt) {
       rows.push(['Putt length', `${info.startFt.toFixed(0)} ft`]);
-      rows.push(['Result', info.holed ? '<b class="good">Holed</b>' : `${info.afterFt.toFixed(1)} ft ${info.shortFt > 0 ? 'short' : 'past'}`]);
+      rows.push(['Result', info.holed ? '<b class="good">Holed</b>' : `${Math.abs(info.shortFt).toFixed(1)} ft ${info.shortFt > 0 ? 'short' : 'past'}${Math.abs(info.lateralFt) >= 0.4 ? ` · ${Math.abs(info.lateralFt).toFixed(1)} ft ${info.lateralFt > 0 ? 'right' : 'left'}` : ''}`]);
       rows.push(['Start speed', `${(ld.speed * 2.237).toFixed(1)} mph`]);
       rows.push(['Face at impact', `${Math.abs(ld.face).toFixed(1)}° ${ld.face > 0.05 ? 'open' : ld.face < -0.05 ? 'closed' : 'square'}`]);
     } else {
@@ -392,7 +396,7 @@ export class UI {
       rows.push(['Carry', d(info.carryYd)]);
       rows.push(['Total', d(info.totalYd)]);
       rows.push(['Offline', `${d(Math.abs(info.offlineYd))} ${info.offlineYd >= 0 ? 'R' : 'L'}`]);
-      rows.push(['Apex', `${Math.max(0, info.apexFt).toFixed(0)} ft`]);
+      rows.push(['Apex', u === 'm' ? `${Math.max(0, info.apexFt * 0.3048).toFixed(0)} m` : `${Math.max(0, info.apexFt).toFixed(0)} ft`]);
       if (info.descent != null) rows.push(['Land angle', `${info.descent.toFixed(0)}°`]);
     }
     const sgHtml = sg ? `<div class="sg ${sg.sg >= 0 ? 'pos' : 'neg'}"><span>Strokes gained</span><b>${sgn(sg.sg)}</b><em>${{ OTT: 'Off the tee', APP: 'Approach', ARG: 'Around the green', PUTT: 'Putting' }[sg.cat]}</em><small>Tour avg from there: ${sg.eb.toFixed(2)} → ${sg.ea.toFixed(2)}</small></div>` : '';
@@ -434,10 +438,16 @@ export class UI {
     if (!course) { s.classList.add('hidden'); this.scModal = false; return; }
     const players = round.players;
     const multi = players.length > 1;
+    const metric = this.game.settings.units === 'm';
+    const yd = (y) => (metric ? Math.round(y * 0.9144) : y);
     const cls = (d) => (d == null ? '' : d <= -2 ? 'eagle' : d === -1 ? 'birdie' : d === 0 ? 'par' : d === 1 ? 'bogey' : 'dbl');
+    // only the holes in this round get a column; a half with none of them is left out
+    const inRound = new Set(round.holes);
     const half = (from) => {
-      const holes = course.holes.slice(from, from + 9);
-      const nums = holes.map((h, i) => from + i + 1);
+      const idx = course.holes.map((h, i) => i).slice(from, from + 9).filter((i) => inRound.has(i));
+      if (!idx.length) return '';
+      const holes = idx.map((i) => course.holes[i]);
+      const nums = idx.map((i) => i + 1);
       const scoreRow = (pl) => {
         const byNum = {};
         for (const x of pl.scores) byNum[x.number] = x;
@@ -450,8 +460,8 @@ export class UI {
         }).join('');
         return `<tr class="sc"><th>${multi ? esc(pl.name) : 'Score'}</th>${cells}<th>${any ? tot : ''}</th></tr>`;
       };
-      return `<table><tr class="num"><th>Hole</th>${nums.map((n) => `<td>${n}</td>`).join('')}<th>${from ? 'In' : 'Out'}</th></tr>
-        <tr class="yd"><th>Yards</th>${holes.map((h) => `<td>${h.yds}</td>`).join('')}<th>${holes.reduce((a, h) => a + h.yds, 0)}</th></tr>
+      return `<table><tr class="num"><th>Hole</th>${nums.map((n) => `<td>${n}</td>`).join('')}<th>${holes.length < 9 ? 'Tot' : from ? 'In' : 'Out'}</th></tr>
+        <tr class="yd"><th>${metric ? 'Metres' : 'Yards'}</th>${holes.map((h) => `<td>${yd(h.yds)}</td>`).join('')}<th>${yd(holes.reduce((a, h) => a + h.yds, 0))}</th></tr>
         <tr class="par"><th>Par</th>${holes.map((h) => `<td>${h.par}</td>`).join('')}<th>${holes.reduce((a, h) => a + h.par, 0)}</th></tr>
         ${players.map(scoreRow).join('')}</table>`;
     };
@@ -516,7 +526,7 @@ export class UI {
         const v = t.sg[k], w = (Math.abs(v) / max) * 50;
         return `<div class="sg-row"><span>${nm}</span><div class="bar"><i class="${v >= 0 ? 'pos' : 'neg'}" style="width:${w}%;${v >= 0 ? 'left:50%' : `left:${50 - w}%`}"></i></div><b>${sgn(v)}</b></div>`;
       }).join('')}</div>
-      <p class="sum-total">Total: <b>${sgn(t.sgTotal)}</b> strokes vs. a tour player over ${n} holes.</p>
+      <p class="sum-total">Total: <b>${sgn(t.sgTotal)}</b> strokes vs. a tour player over ${n} hole${n === 1 ? '' : 's'}.</p>
       <div class="tip"><b>Where to improve: ${worst[1]}</b><p>${advice}</p></div>
       <div class="row wrap"><button class="btn primary" id="sumAgain">Play again</button><button class="btn" id="sumShare">Copy challenge link</button><button class="btn" id="sumMenu">Main menu</button></div>`;
     s.classList.remove('hidden');
@@ -550,8 +560,22 @@ export class UI {
     $('sumMenu').onclick = () => { s.classList.add('hidden'); this.game.quitToMenu(); };
     $('sumShare').onclick = async () => {
       const url = location.origin + location.pathname + challengeHash(round);
-      try { await navigator.clipboard.writeText(url); this.toast('Challenge link copied – same pins and wind for whoever opens it', 'good'); }
-      catch (e) { prompt('Copy this challenge link:', url); }
+      try {
+        await navigator.clipboard.writeText(url);
+        this.toast('Challenge link copied – same pins and wind for whoever opens it', 'good');
+      } catch (e) {
+        // no clipboard access (insecure context, permissions, embedded browser): show the link, selected, to copy by hand
+        let box = $('shareBox');
+        if (!box) {
+          box = el('div', 'share-box', '<span>Copy this challenge link</span><input id="shareUrl" readonly aria-label="Challenge link">');
+          box.id = 'shareBox';
+          $('sumShare').closest('.row').before(box);
+        }
+        const inp = $('shareUrl');
+        inp.value = url;
+        inp.focus(); inp.select();
+        this.toast('Press Ctrl+C to copy the selected link');
+      }
     };
   }
 
@@ -663,7 +687,7 @@ export class UI {
         <div><span>Handicap index (est.)</span><b>${hcp != null ? hcp.toFixed(1) : '—'}</b></div>
         <div><span>Rounds played</span><b>${mine.length}</b></div>
         <div><span>Holes played</span><b>${mine.reduce((s, r) => s + r.holes, 0)}</b></div>
-        <div><span>SG / 18 (last ${trend.length})</span><b class="${avg('total') >= 0 ? 'good' : 'bad'}">${trend.length ? sgn(avg('total'), 1) : '—'}</b></div>
+        <div><span>SG / 18${trend.length ? ` (last ${trend.length})` : ''}</span><b class="${avg('total') >= 0 ? 'good' : 'bad'}">${trend.length ? sgn(avg('total'), 1) : '—'}</b></div>
       </div>
       ${hcp == null ? '<p class="muted small">Play three 18-hole rounds (or six 9s) for a handicap estimate.</p>' : '<p class="muted small">World Handicap System method with approximate course ratings – an estimate, not an official index.</p>'}
       <h3>Strokes gained per 18 – trend</h3>
@@ -673,7 +697,7 @@ export class UI {
       <div class="bests">${bests.map(([c, m, b]) => `<div><span>${c.name} · ${MODES[m]?.name || m}</span><b>${toParStr(b.toPar)} (${b.strokes})</b><small>${b.date}</small></div>`).join('') || '<p class="muted">None yet.</p>'}</div>
       <h3>Recent rounds</h3>
       <table class="hist"><tr><th>Date</th><th>Course</th><th>Mode</th><th>Score</th><th>Putts</th><th>SG</th></tr>
-      ${mine.slice(-12).reverse().map((r) => `<tr><td>${r.date.slice(0, 10)}</td><td>${r.course === 'gen' ? 'Random course' : r.course === 'custom' ? 'Custom course' : courseById(r.course)?.name || r.course}</td><td>${MODES[r.mode]?.name || r.mode}</td><td>${toParStr(r.strokes - r.par)} (${r.strokes})</td><td>${r.putts}</td><td class="${r.sgTotal >= 0 ? 'good' : 'bad'}">${sgn(r.sgTotal, 1)}</td></tr>`).join('')}</table>
+      ${mine.slice(-12).reverse().map((r) => `<tr><td>${localDay(r.date)}</td><td>${r.course === 'gen' ? 'Random course' : r.course === 'custom' ? 'Custom course' : courseById(r.course)?.name || r.course}</td><td>${MODES[r.mode]?.name || r.mode}</td><td>${toParStr(r.strokes - r.par)} (${r.strokes})</td><td>${r.putts}</td><td class="${r.sgTotal >= 0 ? 'good' : 'bad'}">${sgn(r.sgTotal, 1)}</td></tr>`).join('')}</table>
       ` : '<p class="muted">No rounds yet. Finish a round and your scores, strokes-gained trends and a handicap estimate appear here.</p>'}
       <div class="row wrap"><button class="btn primary" id="stClose">Close</button>${mine.length ? '<button class="btn danger" id="stClear">Clear history</button>' : ''}</div>`;
     $('stClose').onclick = () => this.showStats(false);

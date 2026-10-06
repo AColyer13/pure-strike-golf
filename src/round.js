@@ -17,7 +17,8 @@ export const MODES = {
   random: { name: 'Random holes', desc: 'Procedurally generated holes – a new course every time.' },
 };
 
-export const dateKey = (d = new Date()) => d.toISOString().slice(0, 10);
+// the player's local calendar day, so "today" rolls over at their midnight, not UTC's
+export const dateKey = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 export function seedFrom(str) {
   let h = 2166136261;
   for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }

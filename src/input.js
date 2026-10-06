@@ -140,7 +140,7 @@ export class Input {
     if (g.state === 'replay') { g.endReplay(); return; }
     if (g.cam.targetView && g.state === 'address') { this.aimAtScreen(x, y); return; }
     if (g.settings.control === 'mouse' && g.state === 'address' && e) {
-      if (g.mouseSwing.down(e)) { g.state = 'swing'; g.caddie.analysis = null; }
+      if (!g.addressSettling && g.mouseSwing.down(e)) { g.state = 'swing'; g.caddie.analysis = null; }
       return;
     }
     if (g.state === 'address' || g.state === 'swing') g.meterClick();
@@ -164,7 +164,7 @@ export class Input {
     this.showTouch(true);
     // analog swing: a finger drag on the view is the swing itself, not an orbit
     if (g.settings.control === 'mouse' && g.state === 'address' && !g.cam.targetView && !g.ui.paused && !g.ui.modalOpen()) {
-      if (g.mouseSwing.down(e)) { g.state = 'swing'; g.caddie.analysis = null; }
+      if (!g.addressSettling && g.mouseSwing.down(e)) { g.state = 'swing'; g.caddie.analysis = null; }
       return;
     }
     const t0 = { x: e.clientX, y: e.clientY, time: performance.now(), yaw: g.cam.orbit.yaw, pitch: g.cam.orbit.pitch };

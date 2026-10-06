@@ -84,6 +84,7 @@ export class Caddie {
   constructor(game) {
     this.g = game;
     this.analysis = null;
+    this.results = null; // last lay-up analysis, kept so the note can follow a club change
     this.msg = '';
   }
 
@@ -108,6 +109,7 @@ export class Caddie {
     g.pl = null;
     this.msg = '';
     this.analysis = null;
+    this.results = null;
     if (wantsPutter(h, b)) {
       g.setClub(g.bag.length - 1);
       if (b.surface !== 'green') this.msg = 'Putt it from here. A poor putt usually finishes closer than a poor chip.';
@@ -200,20 +202,41 @@ export class Caddie {
     if (!A.results.length) { this.msg = ''; return; }
     A.results.sort((a, b) => a.es - b.es);
     const best = A.results[0];
-    const longest = A.results.find((r) => r.club === A.cands[0]);
+    this.longestCand = A.cands[0];
     if (!g.userClub) {
       g.setClub(g.bag.indexOf(best.club));
       g.aim = best.aim;
       g.placeGolfer();
       g.previewDirty = true;
     }
-    const fmt = (r) => `${r.club.name} ${r.es.toFixed(2)}`;
-    let msg = `Caddie: ${best.club.name} – expected score from here ${best.es.toFixed(2)}.`;
-    if (longest && longest !== best) {
-      msg += ` ${fmt(longest)}${longest.notes.length ? ` (brings ${longest.notes.join(' & ')} into play)` : ''}.`;
-    }
-    this.msg = msg;
+    this.results = A.results;
+    this.msg = this.noteForClub(g.club);
     g.updateHUD(true);
+  }
+
+  // The caddie's line for the club in the player's hands: the lay-up analysis ranks every
+  // candidate, so a club the player picks gets its own number next to the caddie's choice.
+  noteForClub(club) {
+    const R = this.results;
+    if (!R?.length) return '';
+    const best = R[0];
+    const fmt = (r) => `${r.club.name} ${r.es.toFixed(2)}`;
+    const mine = R.find((r) => r.club === club);
+    if (!mine) return `Caddie's pick from here: ${fmt(best)}.`;
+    if (mine === best) {
+      let msg = `Caddie: ${best.club.name} – expected score from here ${best.es.toFixed(2)}.`;
+      const longest = R.find((r) => r.club === this.longestCand);
+      if (longest && longest !== best) msg += ` ${fmt(longest)}${longest.notes.length ? ` (brings ${longest.notes.join(' & ')} into play)` : ''}.`;
+      return msg;
+    }
+    return `${mine.club.name}: expected score ${mine.es.toFixed(2)}${mine.notes.length ? ` (brings ${mine.notes.join(' & ')} into play)` : ''}. Caddie's pick: ${fmt(best)}.`;
+  }
+
+  // the player took a different club: drop notes written for the previous one
+  clubChanged() {
+    if (this.analysis) return; // still deciding – the message is "checking…"
+    this.msg = this.noteForClub(this.g.club);
+    this.g.caddieNote();
   }
 
   // Deterministic outcome of a shot (used by the caddie and previews)

@@ -128,6 +128,7 @@ export class Tutorial {
     const k = (a) => this.ui.key(a);
     this.el.querySelector('h4').textContent = step.title;
     this.el.querySelector('p').textContent = step.text(this.g, k);
+    this.el.querySelector('.cm-skip').classList.toggle('hidden', !!step.finish);
     this.el.querySelector('.cm-next').textContent = step.finish ? 'Finish' : step.done ? 'Got it' : 'Next';
     this.el.classList.remove('hidden');
     this.focus(step.anchor);

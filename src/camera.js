@@ -94,7 +94,9 @@ export class CameraDirector {
     const putt = g.club.putter;
     const f = dirOf(g.aim + this.orbit.yaw);
     const z = this.orbit.zoom;
-    const back = (putt ? 3.3 : 3.9) * z, up = 1.35 * z + this.orbit.pitch * 4;
+    // a tap-in is framed from close behind the ball so the cup stays in view and the ball is not a speck
+    const toCup = putt ? Math.hypot(h.cup.x - b.p[0], h.cup.z - b.p[2]) : 99;
+    const back = (putt ? clamp(1.5 + toCup * 0.9, 1.9, 3.3) : 3.9) * z, up = (putt && toCup < 2.5 ? 0.9 : 1.35) * z + this.orbit.pitch * 4;
     const side = putt ? 0.55 : 0.3; // shift right of the line, away from the golfer
     const px = b.p[0] - f.x * back - f.z * side, pz = b.p[2] - f.z * back + f.x * side;
     const py = Math.max(h.height(px, pz) + 0.6, b.p[1] + up);
@@ -149,7 +151,7 @@ export class CameraDirector {
     }
     if (putt || totalD < 45) {
       // low follow camera
-      const back = putt ? 3.2 : 8;
+      const back = putt ? clamp(1.4 + totalD * 0.9, 1.9, 3.2) : 8;
       this.tPos.set(b0[0] - dir.x * back + (p[0] - b0[0]) * 0.55, Math.max(p[1], h.height(p[0], p[2])) + (putt ? 1.3 : 3), b0[2] - dir.z * back + (p[2] - b0[2]) * 0.55);
       this.tLook.copy(pv);
       this.k = 3;
@@ -192,7 +194,7 @@ export class CameraDirector {
   // after a skipped flight: a view of where the ball finished
   snapToRest(sim, shot) {
     const h = this.g.hole, p = sim.p, dir = dirOf(shot.aim);
-    const back = shot.club.putter ? 3 : 14;
+    const back = shot.club.putter ? clamp(1.4 + Math.hypot(p[0] - shot.p[0], p[2] - shot.p[2]) * 0.9, 1.9, 3) : 14;
     const cx = p[0] - dir.x * back, cz = p[2] - dir.z * back;
     this.tPos.set(cx, h.height(cx, cz) + (shot.club.putter ? 1.2 : 5), cz);
     this.tLook.set(p[0], p[1], p[2]);

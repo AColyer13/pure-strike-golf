@@ -2,6 +2,8 @@
 // numbers a launch monitor or a coach would use. Each lesson is shown a
 // limited number of times per round so the advice stays fresh.
 
+import { fmtYd, fmtElev, localizeText, isMetric } from './units.js';
+
 const seen = new Map();
 export function resetCoach() { seen.clear(); }
 
@@ -21,8 +23,9 @@ function pick(list, max = 2) {
 const f1 = (x) => (Math.round(x * 10) / 10).toFixed(1);
 const i0 = (x) => Math.round(x);
 
-export function coachShot(s) {
+export function coachShot(s, units = 'yd') {
   const L = [];
+  const D = (yd) => fmtYd(yd, units);
   if (s.putt) {
     const ft = s.afterFt;
     if (s.holed) {
@@ -30,11 +33,11 @@ export function coachShot(s) {
       return pick(L);
     }
     if (s.shortFt > 0.2) {
-      L.push({ id: 'short', pri: 8, limit: 3, title: 'Never up, never in', text: `Left ${f1(s.shortFt)} ft short. A putt that stops short has a 0% chance. Dave Pelz's research: the best speed rolls ~17 in (43 cm) past the cup – it holds its line through footprints and the lumpy area around the hole.` });
+      L.push({ id: 'short', pri: 8, limit: 3, title: 'Never up, never in', text: `Finished ${f1(s.shortFt)} ft short. A putt that stops short has a 0% chance. Dave Pelz's research: the best speed rolls ~17 in (43 cm) past the cup – it holds its line through footprints and the lumpy area around the hole.` });
     } else if (ft > 5 && s.startFt > 25) {
       L.push({ id: 'lag', pri: 7, title: 'Lag putting', text: `From ${i0(s.startFt)} ft the goal is to two-putt: picture a 3-foot circle around the hole. Distance errors cost more than line errors on long putts.` });
-    } else if (ft > 4) {
-      L.push({ id: 'firm', pri: 6, title: 'Too firm', text: `Rolled ${f1(ft)} ft past. On fast greens (Stimp ${s.stimp}) a putt hit ~20% too hard runs several feet by – and takes less break, so it misses high.` });
+    } else if (-s.shortFt > 4) {
+      L.push({ id: 'firm', pri: 6, title: 'Too firm', text: `Rolled ${f1(-s.shortFt)} ft past. On fast greens (Stimp ${s.stimp}) a putt hit ~20% too hard runs several feet by – and takes less break, so it misses high.` });
     }
     if (Math.abs(s.lateralFt) > 0.4 && s.startFt < 30) {
       const low = s.missLow;
@@ -75,7 +78,7 @@ export function coachShot(s) {
   // strike quality
   if (s.club && !s.club.putter && (ld.strikeSmash ?? ld.smash) < s.club.smash * 0.93 && s.lie !== 'splash' && s.lie !== 'deep') {
     const lost = ld.clubMph * (s.club.smash - (ld.strikeSmash ?? ld.smash));
-    L.push({ id: 'smash', pri: 6, title: 'Off-centre strike', text: `Smash factor ${ld.smash.toFixed(2)} (max for this club ≈ ${s.club.smash.toFixed(2)}). Missing the sweet spot cost ~${i0(lost)} mph of ball speed, about ${i0(lost * 2.2)} yards.` });
+    L.push({ id: 'smash', pri: 6, title: 'Off-centre strike', text: `Smash factor ${ld.smash.toFixed(2)} (max for this club ≈ ${s.club.smash.toFixed(2)}). Missing the sweet spot cost ~${i0(lost)} mph of ball speed, about ${D(lost * 2.2)}.` });
   }
   // lie
   if (s.lie === 'rough' || s.lie === 'second') {
@@ -93,21 +96,21 @@ export function coachShot(s) {
   }
   // approach distance control
   if (s.approach && s.result === 'ok') {
-    if (s.shortYd > 8) L.push({ id: 'shortapp', pri: 6, title: 'Came up short', text: `Finished ${i0(s.shortYd)} yds short of the pin. Most amateur approach misses are short: they choose clubs by their best shot, not their average. Pick the club whose *average carry* reaches the middle of the green.` });
-    else if (s.longYd > 12 && s.totalYd - s.carryYd > 12 && s.longYd - (s.totalYd - s.carryYd) < 8) L.push({ id: 'release', pri: 5, title: 'Flew it the right distance – then it ran', text: `It carried to about pin-high but released ${i0(s.totalYd - s.carryYd)} yds after landing at ${i0(s.descent)}°. On a raised or firm green, play for the finish, not the carry: land it short and let it feed on, or use more loft for a steeper landing.` });
-    else if (s.longYd > 12) L.push({ id: 'longapp', pri: 4, title: 'Long', text: `Finished ${i0(s.longYd)} yds past the pin. Remember the plays-like number: downhill and downwind shots fly further.` });
+    if (s.shortYd > 8) L.push({ id: 'shortapp', pri: 6, title: 'Came up short', text: `Finished ${D(s.shortYd)} short of the pin. Most amateur approach misses are short: they choose clubs by their best shot, not their average. Pick the club whose *average carry* reaches the middle of the green.` });
+    else if (s.longYd > 12 && s.totalYd - s.carryYd > 12 && s.longYd - (s.totalYd - s.carryYd) < 8) L.push({ id: 'release', pri: 5, title: 'Flew it the right distance – then it ran', text: `It carried to about pin-high but released ${D(s.totalYd - s.carryYd)} after landing at ${i0(s.descent)}°. On a raised or firm green, play for the finish, not the carry: land it short and let it feed on, or use more loft for a steeper landing.` });
+    else if (s.longYd > 12) L.push({ id: 'longapp', pri: 4, title: 'Long', text: `Finished ${D(s.longYd)} past the pin. Remember the plays-like number: downhill and downwind shots fly further.` });
   }
   if (s.windAdj != null && Math.abs(s.windAdj) >= 6) {
     L.push({ id: s.windAdj > 0 ? 'headwind' : 'tailwind', pri: 3, title: s.windAdj > 0 ? 'Into the wind' : 'Downwind', text: s.windAdj > 0 ? 'A headwind hurts more than a tailwind helps: it increases lift and drag, so the ball balloons. Swing smoother and take more club – a lower-spinning, lower shot holds its line better.' : 'Downwind the ball flies further, but the wind reduces the lift from backspin – it lands with less bite and releases more on firm ground.' });
   }
   if (s.elevAdj != null && Math.abs(s.elevAdj) >= 6) {
-    L.push({ id: 'elev', pri: 3, title: s.elevAdj > 0 ? 'Uphill shot' : 'Downhill shot', text: `The target was ${Math.abs(i0(s.elevFt))} ft ${s.elevAdj > 0 ? 'above' : 'below'} you: that is worth ~${Math.abs(i0(s.elevAdj))} yards. Rule of thumb ≈ 1 yard per 3 feet of elevation.` });
+    L.push({ id: 'elev', pri: 3, title: s.elevAdj > 0 ? 'Uphill shot' : 'Downhill shot', text: `The target was ${fmtElev(s.elevFt, units)} ${s.elevAdj > 0 ? 'above' : 'below'} you: that is worth ~${D(Math.abs(s.elevAdj))}. Rule of thumb ≈ ${isMetric(units) ? '1 m of distance per 3 m' : '1 yard per 3 feet'} of elevation.` });
   }
   if ((s.onGreen || s.approach) && s.descent != null && s.descent < 36 && !s.club.putter && s.carryYd > 120) {
     L.push({ id: 'descent', pri: 3, title: 'Shallow landing', text: `Descent angle ${i0(s.descent)}° – below ~40° a ball releases on firm greens. Higher launch and more spin produce steeper landings that stop quickly.` });
   }
   if (s.isTee && s.par >= 4 && s.result === 'ok') {
-    if (s.after === 'fairway') L.push({ id: 'fir', pri: 2, limit: 1, title: 'Fairway hit', text: 'From the fairway tour players hit the green ~70% of the time from 150 yds; from the rough only ~55%. Position is worth strokes.' });
+    if (s.after === 'fairway') L.push({ id: 'fir', pri: 2, limit: 1, title: 'Fairway hit', text: localizeText('From the fairway tour players hit the green ~70% of the time from 150 yds; from the rough only ~55%. Position is worth strokes.', units) });
   }
   if (ld.launch && s.club?.key === 'DR' && ld.spinRpm > 3500 && s.result === 'ok') {
     L.push({ id: 'drspin', pri: 2, title: 'Driver spin', text: `Spin ${i0(ld.spinRpm)} rpm. The optimal driver window is ~2,200–2,700 rpm with 12–15° launch: excess spin makes the ball climb and lose carry and roll.` });

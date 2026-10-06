@@ -12,6 +12,13 @@ export const RATINGS = {
   sawgrass: [76.4, 155],
 };
 
+// local calendar day (YYYY-MM-DD) of a stored ISO timestamp
+export function localDay(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso).slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 function storage() {
   try { return globalThis.localStorage || null; } catch (e) { return null; }
 }
@@ -53,7 +60,7 @@ export function bestFor(history, courseId, mode) {
   for (const r of history) {
     if (r.course !== courseId || r.mode !== mode || r.player) continue;
     const toPar = r.strokes - r.par;
-    if (!best || toPar < best.toPar) best = { toPar, strokes: r.strokes, date: r.date.slice(0, 10) };
+    if (!best || toPar < best.toPar) best = { toPar, strokes: r.strokes, date: localDay(r.date) };
   }
   return best;
 }
@@ -95,6 +102,6 @@ export function handicapIndex(history) {
 export function sgTrend(history, last = 20) {
   return history.filter((r) => !r.player && r.holes >= 9).slice(-last).map((r) => {
     const k = 18 / r.holes;
-    return { date: r.date.slice(0, 10), course: r.course, OTT: r.sg.OTT * k, APP: r.sg.APP * k, ARG: r.sg.ARG * k, PUTT: r.sg.PUTT * k, total: r.sgTotal * k, toPar: r.strokes - r.par, holes: r.holes };
+    return { date: localDay(r.date), course: r.course, OTT: r.sg.OTT * k, APP: r.sg.APP * k, ARG: r.sg.ARG * k, PUTT: r.sg.PUTT * k, total: r.sgTotal * k, toPar: r.strokes - r.par, holes: r.holes };
   });
 }

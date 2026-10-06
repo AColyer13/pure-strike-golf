@@ -23,6 +23,7 @@ export class SwingMeter {
     this.onCancel = null;
     this.autoPower = null; // one-button swing: power is set automatically here
     this.onAuto = null;
+    this.cueFn = null; // (putt) => the "how to start" prompt for the current input method
     this.resize();
   }
   resize() {
@@ -145,7 +146,7 @@ export class SwingMeter {
     g.font = '700 12px Barlow, system-ui, sans-serif';
     g.fillStyle = '#e8f5ec';
     let msg = '';
-    if (this.state === 'ready') msg = this.putt ? 'SPACE / click to start the stroke' : 'SPACE / click to start the swing';
+    if (this.state === 'ready') msg = this.cueFn ? this.cueFn(this.putt) : `SPACE / click to start the ${this.putt ? 'stroke' : 'swing'}`;
     else if (this.state === 'power') msg = 'Set POWER';
     else if (this.state === 'accuracy') msg = 'Hit the IMPACT zone';
     else if (this.state === 'done') {
