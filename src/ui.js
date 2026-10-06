@@ -64,7 +64,7 @@ export class UI {
     hero.style.setProperty('--accent', course.flag);
     hero.innerHTML = `
       <div class="cc-top"><span class="cc-flag"></span><div><div class="cc-name">${course.name}</div><div class="cc-loc">${course.location}</div></div></div>
-      <div class="cc-meta">Par ${par} · ${fmtYd(yds, units).replace(/d+/, (n) => (+n).toLocaleString())} · Stimp ${course.stimp} · Wind ${windValue(course.wind[0], units)}–${windValue(course.wind[1], units)} ${windUnit(units)}${RATINGS[course.id] ? ` · Rating ${RATINGS[course.id][0]} / ${RATINGS[course.id][1]}` : ''}</div>
+      <div class="cc-meta">Par ${par} · ${fmtYd(yds, units).replace(/\d+/, (n) => (+n).toLocaleString())} · Stimp ${course.stimp} · Wind ${windValue(course.wind[0], units)}–${windValue(course.wind[1], units)} ${windUnit(units)}${RATINGS[course.id] ? ` · Rating ${RATINGS[course.id][0]} / ${RATINGS[course.id][1]}` : ''}</div>
       <p class="cc-blurb">${course.blurb}</p>
       <div class="cc-teach"><b>Teaches</b><ul>${course.teaches.map((t) => `<li>${t}</li>`).join('')}</ul></div>
       ${bests.length ? `<div class="cc-best">${bests.map(([m, b]) => `Best ${MODES[m].name}: ${toParStr(b.toPar)} (${b.strokes})`).join(' · ')}</div>` : ''}`;
