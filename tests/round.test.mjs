@@ -100,7 +100,7 @@ for (const [courseId, idx] of CASES) {
     const h = r.stats.holes[0];
     assert.equal(h.strokes, r.strokes);
     assert.equal(h.penalties, r.penalties);
-    assert.equal(h.putts, r.log.filter((e) => e.lie === 'green').length, 'strokes from the green are putts');
+    assert.equal(h.putts, r.log.filter((e) => e.club === 'PT').length, 'every putter stroke is a putt, from the fringe too');
     // every stroke (and every penalty) is a Strokes Gained record
     assert.equal(h.shots.length, r.log.length, 'one SG record per stroke');
     assert.equal(h.shots.reduce((s, x) => s + x.penalty, 0), r.penalties);

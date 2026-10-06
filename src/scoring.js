@@ -34,7 +34,7 @@ export function settleShot({ hole, shotStart: S, sim, info, stats, strokes }) {
   const cur = stats?.cur;
   if (cur) {
     cur.penalties += penalty;
-    sg = stats.recordShot(before, after, result === 'holed', penalty);
+    sg = stats.recordShot(before, after, result === 'holed', penalty, !!info.putt);
     if (S.isTee && hole.par >= 4) cur.fir = info.after === 'fairway';
     if ((info.after === 'green' || result === 'holed') && strokes <= hole.par - 2) cur.gir = true;
   }

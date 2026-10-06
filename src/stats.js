@@ -64,8 +64,9 @@ export class RoundStats {
     this.cur = { number, par, yards, strokes: 0, putts: 0, fir: null, gir: false, penalties: 0, sg: { OTT: 0, APP: 0, ARG: 0, PUTT: 0 }, shots: [] };
     return this.cur;
   }
-  // before/after: { surface, yards, isTee }, holed: bool, penalty: strokes added
-  recordShot(before, after, holed, penalty = 0) {
+  // before/after: { surface, yards, isTee }, holed: bool, penalty: strokes added,
+  // putter: the stroke was played with the putter (a fringe putt is still a putt)
+  recordShot(before, after, holed, penalty = 0, putter = false) {
     const h = this.cur;
     const eb = expectedStrokes(before.surface, before.yards, before.isTee);
     const ea = holed ? 0 : expectedStrokes(after.surface, after.yards, false);
@@ -73,7 +74,7 @@ export class RoundStats {
     const cat = sgCategory(before, h.par);
     h.sg[cat] += sg;
     h.shots.push({ ...before, after, sg, cat, penalty });
-    if (cat === 'PUTT') h.putts++;
+    if (cat === 'PUTT' || putter) h.putts++;
     return { sg, cat, eb, ea };
   }
   finishHole(strokes) {
