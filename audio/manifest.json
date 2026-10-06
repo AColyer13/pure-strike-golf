@@ -1,0 +1,100 @@
+{
+  "_readme": [
+    "Sample slots for src/audio.js. Every slot is optional: an empty list keeps the synthesized sound.",
+    "Paths are relative to this file. Any format the browser can decode works (ogg, mp3, wav, m4a).",
+    "List 2-3 variants per slot where 'want' says so; playback picks one at random with a +-4% pitch jitter.",
+    "Only add files you have the rights to ship (your own recordings or CC0 packs)."
+  ],
+  "slots": {
+    "driver": {
+      "want": 3,
+      "files": [],
+      "note": "driver/wood strike, flushed"
+    },
+    "wood": {
+      "want": 2,
+      "files": [],
+      "note": "fairway wood; falls back to driver"
+    },
+    "iron": {
+      "want": 3,
+      "files": [],
+      "note": "iron strike with turf"
+    },
+    "wedge": {
+      "want": 2,
+      "files": [],
+      "note": "wedge strike; falls back to iron"
+    },
+    "putter": {
+      "want": 2,
+      "files": [],
+      "note": "putter click"
+    },
+    "sand": {
+      "want": 2,
+      "files": [],
+      "note": "bunker splash shot; falls back to wedge"
+    },
+    "whoosh": {
+      "want": 2,
+      "files": [],
+      "note": "club swish before impact"
+    },
+    "land": {
+      "want": 2,
+      "files": [],
+      "note": "ball landing on turf"
+    },
+    "land-green": {
+      "want": 1,
+      "files": [],
+      "note": "landing on a green; falls back to land"
+    },
+    "land-sand": {
+      "want": 1,
+      "files": [],
+      "note": "landing in sand; falls back to land"
+    },
+    "land-path": {
+      "want": 1,
+      "files": [],
+      "note": "ball on a cart path; falls back to land"
+    },
+    "cup": {
+      "want": 2,
+      "files": [],
+      "note": "ball dropping in the hole"
+    },
+    "pin": {
+      "want": 1,
+      "files": [],
+      "note": "ball hits the flagstick"
+    },
+    "tree": {
+      "want": 2,
+      "files": [],
+      "note": "ball through branches"
+    },
+    "splash": {
+      "want": 1,
+      "files": [],
+      "note": "water"
+    },
+    "cheer": {
+      "want": 1,
+      "files": [],
+      "note": "crowd roar (great shot)"
+    },
+    "applause": {
+      "want": 1,
+      "files": [],
+      "note": "polite golf clap"
+    },
+    "groan": {
+      "want": 1,
+      "files": [],
+      "note": "crowd groan (water, lip-out)"
+    }
+  }
+}

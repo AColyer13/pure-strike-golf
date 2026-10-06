@@ -60,6 +60,7 @@ export class Input {
     if (a === 'pause') { if (g.round && st !== 'menu' && st !== 'summary') g.ui.togglePause(); return true; }
     if (g.ui.paused || g.ui.modalOpen()) return false;
     if (a === 'mute') { g.toggleMute(); return true; }
+    if (a === 'hudDetail') { if (g.round) g.toggleHudDetail(); return true; }
     if (a === 'scorecard') { if (!repeat) g.peekScorecard(); return true; }
     if (repeat) return a !== 'swing' && a !== 'skip' && a !== 'replay' ? this.dispatchAddress(a) : true;
     if (st === 'flyover' && (a === 'swing' || a === 'skip')) { g.endFlyover(); return true; }
@@ -85,8 +86,10 @@ export class Input {
       case 'clubDown': g.setClub(g.clubIdx + 1, true); break;
       case 'shapeLeft': g.cycleShape(-1); break;
       case 'shapeRight': g.cycleShape(1); break;
+      case 'shapeCycle': g.cycleShape(1, true); break; // touch: one button walks draw → straight → fade → draw
       case 'trajUp': g.setTraj(g.traj + 1); break;
       case 'trajDown': g.setTraj(g.traj - 1); break;
+      case 'trajCycle': g.setTraj(g.traj >= 1 ? -1 : g.traj + 1); break;
       case 'targetView': g.toggleTargetView(); break;
       case 'grid': g.toggleGrid(); break;
       case 'caddie': g.caddieNote(); break;
@@ -159,6 +162,11 @@ export class Input {
   touchDown(e) {
     const g = this.g;
     this.showTouch(true);
+    // analog swing: a finger drag on the view is the swing itself, not an orbit
+    if (g.settings.control === 'mouse' && g.state === 'address' && !g.cam.targetView && !g.ui.paused && !g.ui.modalOpen()) {
+      if (g.mouseSwing.down(e)) { g.state = 'swing'; g.caddie.analysis = null; }
+      return;
+    }
     const t0 = { x: e.clientX, y: e.clientY, time: performance.now(), yaw: g.cam.orbit.yaw, pitch: g.cam.orbit.pitch };
     const move = (ev) => {
       if (ev.pointerId !== e.pointerId) return;

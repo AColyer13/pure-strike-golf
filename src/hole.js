@@ -493,6 +493,17 @@ export class Hole {
     return [nx / l, ny / l, nz / l];
   }
 
+  // rendered water surface height at (x, z), or null when not over water
+  waterLevel(x, z) {
+    const { d, w } = this.waterSdf(x, z);
+    if (!w || d > 0.5) return null;
+    if (w.kind === 'ocean') return this.seaLevel;
+    if (w.kind === 'pond') return w.level;
+    let bi = 0, bd2 = Infinity;
+    w.pts.forEach((p, i) => { const d2 = (p.x - x) ** 2 + (p.z - z) ** 2; if (d2 < bd2) { bd2 = d2; bi = i; } });
+    return w.levels[bi];
+  }
+
   // ------------------------------------------------------------ surface type
   surface(x, z) {
     if (!this.inBounds(x, z)) return 'ob';

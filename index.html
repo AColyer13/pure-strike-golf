@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Pure Strike Golf</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Barlow+Condensed:wght@600;700;800&display=swap">
+<link rel="preload" href="fonts/barlow-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/barlow-condensed-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="styles.css">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#14281b">
@@ -77,7 +77,7 @@
   <div id="clubBox" class="panel">
     <div class="club-top"><span class="club-key" id="clubKey"></span><span class="club-name" id="clubName"></span><span class="club-arrows">↑↓</span></div>
     <div class="sub" id="clubDist"></div>
-    <div class="club-row" id="shapeRow"><span>Shape <b id="shapeVal"></b> <kbd>Q</kbd><kbd>E</kbd></span><span>Flight <b id="trajVal"></b> <kbd>R</kbd><kbd>F</kbd></span></div>
+    <div class="club-row" id="shapeRow"><span>Shape <b id="shapeVal"></b> <kbd id="kShapeL"></kbd><kbd id="kShapeR"></kbd></span><span>Flight <b id="trajVal"></b> <kbd id="kTrajU"></kbd><kbd id="kTrajD"></kbd></span></div>
   </div>
   <div id="lieBox" class="panel">
     <div class="lbl">Lie</div><div class="lie-name" id="lieName"></div>
@@ -99,9 +99,11 @@
   </div>
   <div class="tc-right">
     <button data-act="menu" aria-label="Menu">☰</button>
-    <button data-act="shapeRight" aria-label="Change shot shape">⤳</button>
     <button data-act="targetView" aria-label="Target view">👁</button>
     <button data-act="skip" aria-label="Skip">⏭</button>
+    <button data-act="shapeCycle" aria-label="Shot shape: draw, straight, fade">⤳<small>shape</small></button>
+    <button data-act="trajCycle" aria-label="Ball flight: low, standard, high">⤒<small>flight</small></button>
+    <button data-act="aimPin" aria-label="Aim at the pin">⚑<small>pin</small></button>
     <button data-act="swing" data-hold class="tc-swing" aria-label="Swing">SWING</button>
   </div>
 </div>

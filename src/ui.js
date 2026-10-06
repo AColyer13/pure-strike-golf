@@ -6,6 +6,8 @@ import { SURFACES } from './physics.js';
 import { DEFAULT_KEYS, ACTION_LABELS } from './config.js';
 import { MODES, SIGNATURE, dailySpec, holesFor, challengeHash } from './round.js';
 import { loadHistory, bestFor, handicapIndex, sgTrend, clearHistory, RATINGS } from './history.js';
+import { firstRun } from './tutorial.js';
+import { QUALITY } from './post.js';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
@@ -25,7 +27,7 @@ export class UI {
     this.toasts = $('toasts');
     $('minimap').addEventListener('pointerdown', (e) => this.minimapClick(e));
   }
-  attach(game, academy, editor) { this.game = game; this.academy = academy; this.editor = editor; }
+  attach(game, academy, editor, tutorial) { this.game = game; this.academy = academy; this.editor = editor; this.tutorial = tutorial; }
 
   // is a dialog open that should swallow game input?
   modalOpen() {
@@ -68,8 +70,14 @@ export class UI {
     // quick play: the signature hole, no setup
     const sig = SIGNATURE[course.id] ?? 0;
     const sh = course.holes[sig];
-    $('btnQuick').innerHTML = `Play a hole now ▶<small>${sig + 1}. ${sh.name} · par ${sh.par}</small>`;
-    $('btnQuick').onclick = () => this.start({ courseId: course.id, holes: [sig], mode: 'single' });
+    if (this.tutorial && firstRun()) {
+      // never played: the primary button is the guided hole
+      $('btnQuick').innerHTML = 'Start here: guided first hole ▶<small>Augusta 12 · par 3 · about 5 minutes</small>';
+      $('btnQuick').onclick = () => this.tutorial.start();
+    } else {
+      $('btnQuick').innerHTML = `Play a hole now ▶<small>${sig + 1}. ${sh.name} · par ${sh.par}</small>`;
+      $('btnQuick').onclick = () => this.start({ courseId: course.id, holes: [sig], mode: 'single' });
+    }
     $('btnPlay').innerHTML = `Tee off ▶<small>${MODES[this.sel.mode].name}${this.sel.players > 1 ? ` · ${this.sel.players} players` : ''}</small>`;
     $('btnPlay').onclick = () => this.play();
 
@@ -161,7 +169,7 @@ export class UI {
   start(opts) {
     $('menu').classList.add('hidden');
     document.body.classList.add('in-round');
-    const players = opts.mode !== 'daily' && this.sel.players > 1 ? this.sel.names.slice(0, this.sel.players).map((n, i) => (n || '').trim() || `Player ${i + 1}`) : null;
+    const players = opts.mode !== 'daily' && !opts.solo && this.sel.players > 1 ? this.sel.names.slice(0, this.sel.players).map((n, i) => (n || '').trim() || `Player ${i + 1}`) : null;
     this.game.startRound({ ...opts, players });
   }
 
@@ -181,13 +189,18 @@ export class UI {
   helpBar() {
     const mouse = this.game.settings.control === 'mouse';
     const k = (a) => this.key(a);
-    $('helpBar').innerHTML = [
-      mouse ? '<b>Hold LMB</b> pull back, push up to swing' : `<b>${k('swing')}</b> swing`,
-      `<b>${k('aimLeft')}${k('aimRight')}</b> aim (${k('aimFine')} fine)`, `<b>${k('clubUp')}${k('clubDown')}</b> club`,
+    // key hints inside the club box follow the player's bindings
+    $('kShapeL').textContent = k('shapeLeft'); $('kShapeR').textContent = k('shapeRight');
+    $('kTrajU').textContent = k('trajUp'); $('kTrajD').textContent = k('trajDown');
+    const swing = mouse ? '<b>Hold LMB</b> pull back, push up to swing' : `<b>${k('swing')}</b> swing`;
+    const basics = [swing, `<b>${k('aimLeft')}${k('aimRight')}</b> aim (${k('aimFine')} fine)`, `<b>${k('clubUp')}${k('clubDown')}</b> club`];
+    const items = this.game.settings.hudDetail === 'full' ? [
+      ...basics,
       `<b>${k('shapeLeft')}/${k('shapeRight')}</b> draw/fade`, `<b>${k('trajUp')}/${k('trajDown')}</b> high/low`,
       `<b>${k('targetView')}</b> target view`, `<b>${k('grid')}</b> green grid`, `<b>${k('aimPin')}</b> aim at pin`,
-      `<b>${k('scorecard')}</b> card`, `<b>${k('pause')}</b> menu`,
-    ].map((x) => `<span>${x}</span>`).join('');
+      `<b>${k('scorecard')}</b> card`, `<b>${k('hudDetail')}</b> essential HUD`, `<b>${k('pause')}</b> menu`,
+    ] : [...basics, `<b>${k('hudDetail')}</b> full HUD`, `<b>${k('pause')}</b> menu · all keys`];
+    $('helpBar').innerHTML = items.map((x) => `<span>${x}</span>`).join('');
   }
 
   // ------------------------------------------------------------ loading / intro
@@ -225,7 +238,16 @@ export class UI {
     else if (d.puttEq != null) sub = `Stroke it <b>${d.puttEq.toFixed(0)} ft</b><br><small>to finish 17 in past</small>`;
     const e = Math.round(d.elev);
     if (Math.abs(e) >= 1) sub += `<span class="elev">${e > 0 ? '▲' : '▼'} ${Math.abs(e)} ft ${e > 0 ? 'uphill' : 'downhill'}</span>`;
+    const sl = d.slope, parts = [];
+    if (Math.abs(sl.up) >= 1.5) parts.push(`${sl.up > 0 ? 'Uphill' : 'Downhill'} ${Math.abs(sl.up).toFixed(0)}°`);
+    if (Math.abs(sl.side) >= 1.5) parts.push(`Ball ${sl.side > 0 ? 'above' : 'below'} feet ${Math.abs(sl.side).toFixed(0)}°`);
+    if (this.game.settings.hudDetail !== 'full') {
+      // essential HUD: the lie box is hidden, so its one useful line lives here
+      const lie = d.putter ? `Stimp ${d.stimp.toFixed(1)}` : [d.lieRange === '100–100%' ? '' : d.lieRange, ...parts].filter(Boolean).join(' · ');
+      sub += `<span class="lie-line" data-lie="${d.lieKey}"><b>${esc(d.lie)}</b> <span class="lie-range">${lie}</span></span>`;
+    }
     $('dSub').innerHTML = sub;
+    $('hud').dataset.state = d.state;
     const w = d.wind;
     $('windArrow').style.transform = `rotate(${w.ang}rad)`;
     $('windMph').textContent = `${Math.round(d.windMph)}`;
@@ -241,9 +263,6 @@ export class UI {
     $('shapeRow').classList.toggle('dim', d.putter);
     $('lieName').textContent = d.lie;
     $('lieRange').textContent = d.putter ? `Stimp ${d.stimp.toFixed(1)}` : d.lieRange;
-    const sl = d.slope, parts = [];
-    if (Math.abs(sl.up) >= 1.5) parts.push(`${sl.up > 0 ? 'Uphill' : 'Downhill'} ${Math.abs(sl.up).toFixed(0)}°`);
-    if (Math.abs(sl.side) >= 1.5) parts.push(`Ball ${sl.side > 0 ? 'above' : 'below'} feet ${Math.abs(sl.side).toFixed(0)}°`);
     $('lieSlope').textContent = d.putter ? '' : parts.join(' · ') || 'Flat lie';
     $('lieBox').dataset.lie = d.lieKey;
   }
@@ -324,14 +343,14 @@ export class UI {
     setTimeout(() => t.classList.add('out'), 1900);
     setTimeout(() => t.remove(), 2400);
   }
-  banner(text, kind = '') {
+  banner(text, kind = '', ms = 2600) {
     const b = $('banner');
     b.className = 'banner ' + kind;
     b.textContent = text;
     void b.offsetWidth; // restart the CSS transition
     b.classList.add('show');
     clearTimeout(this.bannerT);
-    this.bannerT = setTimeout(() => b.classList.remove('show'), 2600);
+    this.bannerT = setTimeout(() => b.classList.remove('show'), ms);
   }
   // text captions for sound cues (accessibility)
   caption(text) {
@@ -421,12 +440,13 @@ export class UI {
       const nums = holes.map((h, i) => from + i + 1);
       const scoreRow = (pl) => {
         const byNum = {};
-        for (const x of pl.scores) byNum[x.number] = x.strokes;
+        for (const x of pl.scores) byNum[x.number] = x;
         let tot = 0, any = false;
         const cells = holes.map((h, i) => {
-          const sc = byNum[nums[i]];
+          const rec = byNum[nums[i]], sc = rec?.strokes;
           if (sc != null) { tot += sc; any = true; }
-          return `<td><span class="${cls(sc != null ? sc - h.par : null)}">${sc ?? ''}</span></td>`;
+          const pick = rec?.pickedUp ? ' pickup" title="Picked up: maximum strokes reached' : '';
+          return `<td><span class="${cls(sc != null ? sc - h.par : null)}${pick}">${sc ?? ''}${rec?.pickedUp ? '<i>*</i>' : ''}</span></td>`;
         }).join('');
         return `<tr class="sc"><th>${multi ? esc(pl.name) : 'Score'}</th>${cells}<th>${any ? tot : ''}</th></tr>`;
       };
@@ -555,6 +575,10 @@ export class UI {
   }
 
   // ------------------------------------------------------------ settings (incl. accessibility + key remap)
+  qualityDesc() {
+    const q = this.game.settings.quality || 'auto', p = this.game.post;
+    return q === 'auto' ? `${QUALITY.auto.desc} Currently ${p.tier}.` : QUALITY[q].desc;
+  }
   showSettings(on) {
     const box = $('settings');
     box.classList.toggle('hidden', !on);
@@ -569,6 +593,8 @@ export class UI {
       ${chk('sTracer', 'Shot tracer', s.tracer)}
       <label class="set"><span>Swing control</span><select id="sCtl"><option value="meter" ${s.control === 'meter' ? 'selected' : ''}>3-click meter</option><option value="mouse" ${s.control === 'mouse' ? 'selected' : ''}>Analog mouse swing</option></select></label>
       <label class="set"><span>Assists</span><select id="sDiff">${['beginner', 'standard', 'pro'].map((d) => `<option value="${d}" ${s.difficulty === d ? 'selected' : ''}>${d[0].toUpperCase() + d.slice(1)}</option>`).join('')}</select></label>
+      <label class="set"><span>Graphics<small id="sQualDesc">${this.qualityDesc()}</small></span><select id="sQual">${Object.keys(QUALITY).map((q) => `<option value="${q}" ${(s.quality || 'auto') === q ? 'selected' : ''}>${QUALITY[q].name}</option>`).join('')}</select></label>
+      <label class="set"><span>HUD detail<small>Essential folds the lie into the distance panel and hides the minimap and shape row until you use them. ${this.key('hudDetail')} toggles in play.</small></span><select id="sHud"><option value="essential" ${s.hudDetail !== 'full' ? 'selected' : ''}>Essential</option><option value="full" ${s.hudDetail === 'full' ? 'selected' : ''}>Full</option></select></label>
       <h3>Accessibility</h3>
       ${chk('sOne', 'One-button swing', s.oneButton, 'Power is set to the caddie’s number – you only time the impact.')}
       ${chk('sReduce', 'Reduced motion', s.reducedMotion, 'No flyovers, slow-motion or camera punches.')}
@@ -586,6 +612,8 @@ export class UI {
     $('sTracer').onchange = (e) => { s.tracer = e.target.checked; save(); };
     $('sCtl').onchange = (e) => { s.control = e.target.value; save(); };
     $('sDiff').onchange = (e) => { s.difficulty = e.target.value; save(); };
+    $('sHud').onchange = (e) => { s.hudDetail = e.target.value; save(); g.updateHUD(true); };
+    $('sQual').onchange = (e) => { s.quality = e.target.value; g.saveSettings(); g.post.setQuality(s.quality); $('sQualDesc').textContent = this.qualityDesc(); };
     $('sOne').onchange = (e) => { s.oneButton = e.target.checked; save(); };
     $('sReduce').onchange = (e) => { s.reducedMotion = e.target.checked; save(); };
     $('sCap').onchange = (e) => { s.captions = e.target.checked; save(); };
@@ -679,7 +707,9 @@ export class UI {
       <h3>Learn while you play</h3>
         <p>After every shot you'll see launch-monitor numbers, <b>strokes gained</b> against a tour average, and coaching on why the ball did what it did. Open the <b>Golf Academy</b> from the menu to experiment in the ball-flight lab.</p></div>
       </div>
-      <button class="btn primary" id="helpClose">Got it</button>`;
+      <div class="help-btns">${this.tutorial && !this.game.round ? '<button class="btn" id="helpTut">Guided first hole</button>' : ''}<button class="btn primary" id="helpClose">Got it</button></div>`;
     $('helpClose').onclick = () => this.showHelp(false);
+    const t = $('helpTut');
+    if (t) t.onclick = () => { this.showHelp(false); this.tutorial.start(); };
   }
 }

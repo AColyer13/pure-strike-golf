@@ -48,6 +48,13 @@ export function coachShot(s) {
   }
 
   const ld = s.ld;
+  // a chunk or a top: the ball barely moved, so the usual flight analysis is noise
+  if (s.duffed || (s.carryFrac != null && s.carryFrac < 0.3 && s.result === 'ok' && s.lie !== 'splash' && s.lie !== 'deep')) {
+    L.push({ id: 'duff', pri: 9, limit: 3, title: s.duffed ? 'Chunked it' : 'Mishit', text: s.duffed
+      ? 'The power click came far too early, so the club was still decelerating at the ball – a heavy, fat strike. Let the meter run to the club\'s full-swing band before you set the power; a three-quarter swing is still 70–80% on the bar.'
+      : `Only ${i0(s.carryFrac * 100)}% of the club's normal carry. A strike that far off the sweet spot loses most of its ball speed – slow the tempo and hit the accuracy click inside the zone before chasing distance.` });
+    return pick(L);
+  }
   // penalty outcomes
   if (s.result === 'water') {
     L.push({ id: 'water', pri: 10, limit: 3, title: 'Penalty area', text: 'Red penalty area: 1 stroke. Options: replay from where you hit (stroke and distance), drop on the line back from the hole through where the ball crossed the edge, or drop within 2 club-lengths of the crossing point, no nearer the hole.' });

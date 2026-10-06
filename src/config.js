@@ -20,6 +20,11 @@ export const TRAJ = { '-1': 'Low', '0': 'Standard', '1': 'High' };
 
 export const MAX_STROKES = 12; // pick up after this many strokes on a hole
 
+// A full swing can't be slower than this fraction of the club's speed: a power
+// click far too early is a chunk (heavy strike, ball barely moves), not a
+// 4 mph swing. Putts are exempt.
+export const MIN_SWING = 0.22;
+
 // Default key bindings (KeyboardEvent.key, single characters lower-cased). The
 // player can rebind them in Settings; overrides are stored in settings.keys.
 export const DEFAULT_KEYS = {
@@ -42,6 +47,7 @@ export const DEFAULT_KEYS = {
   replay: ['x'],
   mute: ['m'],
   scorecard: ['Tab'],
+  hudDetail: ['h'],
   pause: ['Escape'],
 };
 
@@ -49,5 +55,5 @@ export const ACTION_LABELS = {
   swing: 'Swing / continue', clubUp: 'Longer club', clubDown: 'Shorter club', aimLeft: 'Aim left', aimRight: 'Aim right',
   aimFine: 'Fine aim (hold)', shapeLeft: 'Draw', shapeRight: 'Fade', trajUp: 'Higher flight', trajDown: 'Lower flight',
   targetView: 'Target view', grid: 'Green grid', caddie: 'Caddie advice', aimPin: 'Aim at pin', fastForward: 'Fast-forward (hold)',
-  skip: 'Skip to result', replay: 'Replay last shot', mute: 'Sound on/off', scorecard: 'Scorecard (hold)', pause: 'Pause',
+  skip: 'Skip to result', replay: 'Replay last shot', mute: 'Sound on/off', scorecard: 'Scorecard (hold)', hudDetail: 'Essential / full HUD', pause: 'Pause',
 };

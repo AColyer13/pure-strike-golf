@@ -1,3 +1,13 @@
+/* self-hosted fonts (copied from @fontsource by tools/vendor.mjs) */
+@font-face { font-family: "Barlow"; font-style: normal; font-weight: 400; font-display: swap; src: url("fonts/barlow-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-style: normal; font-weight: 500; font-display: swap; src: url("fonts/barlow-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-style: normal; font-weight: 600; font-display: swap; src: url("fonts/barlow-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-style: normal; font-weight: 700; font-display: swap; src: url("fonts/barlow-latin-700-normal.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-style: normal; font-weight: 800; font-display: swap; src: url("fonts/barlow-latin-800-normal.woff2") format("woff2"); }
+@font-face { font-family: "Barlow Condensed"; font-style: normal; font-weight: 600; font-display: swap; src: url("fonts/barlow-condensed-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Barlow Condensed"; font-style: normal; font-weight: 700; font-display: swap; src: url("fonts/barlow-condensed-latin-700-normal.woff2") format("woff2"); }
+@font-face { font-family: "Barlow Condensed"; font-style: normal; font-weight: 800; font-display: swap; src: url("fonts/barlow-condensed-latin-800-normal.woff2") format("woff2"); }
+
 :root {
   --bg: #0c1a12;
   --panel: rgba(10, 22, 16, 0.72);
@@ -144,6 +154,7 @@ select { font: 500 13px Barlow, sans-serif; background: #173022; color: var(--te
 .banner.great { color: #ff6b5e; }
 .banner.good { color: #fff; }
 .banner.bad { color: #9fd0ff; }
+.banner.pure { top: 26%; font-size: 44px; letter-spacing: .22em; color: #ffd84d; text-shadow: 0 0 18px rgba(255,216,77,.55), 0 2px 0 rgba(0,0,0,.4); transition: opacity .18s, transform .3s cubic-bezier(.2, 1.8, .4, 1); }
 
 /* ---------- hole intro ---------- */
 #intro { position: fixed; left: 50%; bottom: 60px; transform: translateX(-50%); display: flex; gap: 16px; align-items: stretch; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 14px 20px 14px 14px; z-index: 12; width: min(640px, 92vw); backdrop-filter: blur(8px); animation: tin .4s ease-out; }
@@ -199,6 +210,8 @@ td span.birdie { border: 2px solid #ff6b5e; border-radius: 50%; color: #ff8d83; 
 td span.eagle { border: 2px solid #ff6b5e; border-radius: 50%; box-shadow: 0 0 0 2px #0e1e15, 0 0 0 4px #ff6b5e; color: #ff8d83; }
 td span.bogey { border: 2px solid #8fc6ff; }
 td span.dbl { border: 2px solid #8fc6ff; box-shadow: 0 0 0 2px #0e1e15, 0 0 0 4px #8fc6ff; }
+td span.pickup { position: relative; color: var(--muted); }
+td span.pickup i { position: absolute; top: -6px; right: -7px; font: 700 12px Barlow, sans-serif; color: var(--red); font-style: normal; }
 .sc-head { display: flex; justify-content: space-between; align-items: center; }
 .sc-total { font: 800 44px 'Barlow Condensed', sans-serif; text-align: right; }
 .sc-total small { display: block; font-size: 14px; color: var(--muted); }
@@ -314,14 +327,91 @@ table.hist th { color: var(--muted); font-weight: 600; }
 
 /* ---------- touch controls ---------- */
 #touchControls { display: none; }
-body.touch.in-round #touchControls { display: flex; position: fixed; inset: auto 0 0 0; z-index: 14; justify-content: space-between; padding: 0 10px calc(10px + env(safe-area-inset-bottom)); pointer-events: none; }
+body.touch.in-round #touchControls { display: flex; position: fixed; inset: auto 0 0 0; z-index: 14; justify-content: space-between; align-items: flex-end; padding: 0 10px calc(10px + env(safe-area-inset-bottom)); pointer-events: none; }
 #touchControls > div { display: grid; gap: 8px; pointer-events: auto; }
-.tc-left { grid-template-columns: repeat(2, 58px); }
-.tc-right { grid-template-columns: repeat(2, 58px); align-content: end; }
+.tc-left { grid-template-columns: repeat(2, 58px); align-content: end; }
+.tc-right { grid-template-columns: repeat(3, 58px); align-content: end; }
 #touchControls button { width: 58px; height: 58px; border-radius: 50%; border: 1px solid rgba(255,255,255,.3); background: rgba(10,22,16,.65); color: #fff; font: 700 20px Barlow, sans-serif; touch-action: none; }
 #touchControls button.down { background: rgba(244,211,31,.6); }
-#touchControls .tc-swing { grid-column: span 2; width: 124px; height: 74px; border-radius: 40px; background: linear-gradient(180deg, #ffe25a, #f0b91c); color: #1b1a0c; font-size: 18px; }
+#touchControls .tc-swing { grid-column: span 3; width: 190px; height: 74px; border-radius: 40px; background: linear-gradient(180deg, #ffe25a, #f0b91c); color: #1b1a0c; font-size: 18px; }
+#touchControls button small { display: block; font: 600 10px Barlow, sans-serif; line-height: 1; margin-top: 2px; color: rgba(255,255,255,.75); }
 body.touch #helpBar { display: none; }
+body.touch #clubBox kbd { display: none; }
+/* the on-screen buttons fade with the HUD during the flyover and while the card is open */
+body.flyover #touchControls, body.sc-open #touchControls { opacity: 0; pointer-events: none; }
+body.touch.in-round #touchControls { transition: opacity .2s; }
+body.touch.in-round #clubBox { bottom: 150px; }
+body.touch.in-round #lieBox { bottom: 246px; }
+/* keep overlays out from under the button columns: portrait stacks them above, landscape narrows them */
+@media (orientation: portrait) {
+  body.touch.in-round #intro { bottom: 232px; width: min(640px, calc(100vw - 16px)); }
+  body.touch.in-round #shotPanel { bottom: 232px; max-height: calc(100vh - 300px); }
+  body.touch.in-round #meter { bottom: 232px; width: calc(100vw - 16px); }
+  body.touch.in-round #captions, body.touch.in-round #ffHint { bottom: 240px; }
+  /* the club box sits above the meter so it clears the right-hand button column */
+  body.touch.in-round #clubBox { bottom: 310px; }
+  body.touch.in-round #lieBox { bottom: 406px; }
+}
+@media (orientation: landscape) {
+  body.touch.in-round #intro { width: min(640px, calc(100vw - 420px)); bottom: 24px; }
+  body.touch.in-round #shotPanel { right: 210px; width: min(400px, calc(100vw - 440px)); }
+  body.touch.in-round #meter { width: min(620px, calc(100vw - 420px)); bottom: 24px; }
+}
+/* phone landscape: the top-left stack would run into the club box, so the distance panel moves beside the hole card */
+@media (orientation: landscape) and (max-height: 500px) {
+  body.touch.in-round #holeCard { top: 8px; left: 8px; min-width: 0; gap: 8px; }
+  body.touch.in-round #distBox { top: 8px; left: 246px; }
+  body.touch.in-round #lieBox { display: none; }
+  body.touch.in-round #windBox { top: 8px; right: 8px; }
+  body.touch.in-round #minimap { top: 8px; right: 150px; width: 72px; height: 120px; }
+  body.touch.in-round #caddie { bottom: auto; top: 8px; right: 230px; max-width: 260px; }
+}
+@media (max-width: 760px) and (orientation: landscape) {
+  #minimap { top: 8px; right: 8px; height: 120px; width: 72px; }
+  #caddie { bottom: auto; top: 8px; right: 90px; max-width: 260px; }
+  body.touch.in-round #minimap { right: 8px; }
+  body.touch.in-round #caddie { right: 90px; }
+}
+@media (max-width: 480px) {
+  #intro { flex-direction: column; gap: 8px; padding: 12px; }
+  .intro-num { min-width: 0; width: 60px; height: 60px; font-size: 38px; }
+  .intro-name { font-size: 24px; }
+}
+
+/* ---------- essential HUD (default): lie folded into the distance panel, minimap only in target view / flight, shape row on change ---------- */
+body.hud-essential.in-round #lieBox { display: none; }
+body.hud-essential.in-round #holeCard { min-width: 0; }
+body.hud-essential.in-round #windBox #windTxt { display: none; }
+body.hud-essential.in-round .wind-dial { width: 40px; height: 40px; }
+body.hud-essential.in-round #windArrow { font-size: 18px; }
+body.hud-essential.in-round #clubBox .club-row { display: none; }
+body.hud-essential.in-round #clubBox.show-row .club-row { display: flex; animation: tin .2s ease-out; }
+body.hud-essential.in-round:not(.target-view) #hud:not([data-state="flight"]) #minimap { display: none; }
+body.hud-essential.in-round:not(.target-view) #hud:not([data-state="flight"]) #caddie { right: 14px; }
+.lie-line { display: flex; gap: 6px; align-items: baseline; font-size: 12px; margin-top: 3px; padding-top: 4px; border-top: 1px solid var(--line); }
+.lie-line b { font: 700 15px 'Barlow Condensed', sans-serif; color: var(--text); }
+.lie-line .lie-range { font-size: 12px; }
+.lie-line[data-lie="deep"] .lie-range, .lie-line[data-lie="splash"] .lie-range { color: var(--red); }
+body:not(.hud-essential) .lie-line { display: none; }
+
+/* ---------- guided first hole ---------- */
+#coachMark { position: fixed; z-index: 30; width: min(340px, calc(100vw - 16px)); background: rgba(255, 250, 230, .97); color: #1d2a20; border-radius: 14px; padding: 12px 14px 10px; box-shadow: 0 12px 32px rgba(0,0,0,.4), 0 0 0 2px #ffe25a; font-size: 14px; line-height: 1.4; animation: tin .25s ease-out; pointer-events: auto; }
+#coachMark .cm-step { font: 700 11px Barlow, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #6a5a10; }
+#coachMark h4 { margin: 2px 0 4px; font: 700 20px 'Barlow Condensed', sans-serif; }
+#coachMark p { margin: 0 0 10px; }
+#coachMark .cm-btns { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+#coachMark .cm-skip { background: none; border: 0; color: #6a5a10; font: 600 13px Barlow, sans-serif; cursor: pointer; text-decoration: underline; padding: 4px 0; }
+#coachMark .cm-next { padding: 7px 18px; }
+#coachMark::before { content: ''; position: absolute; width: 14px; height: 14px; background: inherit; transform: rotate(45deg); box-shadow: -2px -2px 0 #ffe25a; }
+#coachMark[data-side="right"]::before { left: -8px; top: 22px; box-shadow: -2px 2px 0 #ffe25a; }
+#coachMark[data-side="left"]::before { right: -8px; top: 22px; box-shadow: 2px -2px 0 #ffe25a; }
+#coachMark[data-side="below"]::before { top: -8px; left: 28px; }
+#coachMark[data-side="above"]::before { bottom: -8px; left: 28px; box-shadow: 2px 2px 0 #ffe25a; }
+#coachMark[data-side="none"]::before { display: none; }
+.tut-focus { box-shadow: 0 0 0 3px #ffe25a, 0 0 24px 6px rgba(255, 226, 90, .55) !important; border-radius: var(--radius); }
+#meter.tut-focus { border-radius: 10px; }
+body.flyover #hud > .panel.tut-focus { opacity: 1; }
+.help-btns { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
 
 /* ---------- UI scale + reduced motion ---------- */
 #hud .panel, #caddie, #shotPanel, .modal, #helpBar, #intro { zoom: var(--ui-scale, 1); }
@@ -340,9 +430,6 @@ body.reduced-motion *, body.reduced-motion *::before, body.reduced-motion *::aft
   #minimap { width: 90px; height: 150px; }
   #shotPanel { max-height: 60vh; overflow-y: auto; }
 }
-body.touch.in-round #clubBox { bottom: 150px; }
-body.touch.in-round #lieBox { bottom: 246px; }
-body.touch.in-round #meter { bottom: 90px; }
 
 /* ---------- course editor ---------- */
 .ed-head { display: flex; justify-content: space-between; align-items: center; }

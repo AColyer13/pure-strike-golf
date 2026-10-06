@@ -1,11 +1,93 @@
-// Synthesized sound effects (no audio files): club strikes, ball landings,
-// the cup rattle, crowd reactions, birds and wind ambience.
+// Sound effects: sampled when a file is available, synthesized otherwise.
+// `audio/manifest.json` names the sample slots; each sound method asks the
+// SampleBank first and falls back to the Web Audio synthesis below, so the
+// game sounds the same whether or not any sample files have been supplied.
+
+// Normalise the manifest into [{ slot, files }], ignoring anything odd. Files
+// are resolved relative to the manifest's own URL.
+export function manifestEntries(manifest, base = '') {
+  const out = [];
+  const slots = manifest && typeof manifest === 'object' ? manifest.slots : null;
+  if (!slots || typeof slots !== 'object') return out;
+  for (const [slot, v] of Object.entries(slots)) {
+    const list = Array.isArray(v) ? v : (v && Array.isArray(v.files) ? v.files : []);
+    const files = list.filter((f) => typeof f === 'string' && f.length > 0).map((f) => base + f);
+    if (files.length) out.push({ slot, files });
+  }
+  return out;
+}
+
+class SampleBank {
+  constructor(ctx, dest) {
+    this.ctx = ctx;
+    this.dest = dest;
+    this.slots = new Map(); // slot -> AudioBuffer[]
+    this.loaded = 0;
+    this.missing = [];
+    this.ready = false;
+  }
+
+  async load(url = 'audio/manifest.json') {
+    let manifest = null;
+    try {
+      const r = await fetch(url);
+      if (r.ok) manifest = await r.json();
+    } catch { /* no manifest, no samples: synthesis only */ }
+    const base = url.slice(0, url.lastIndexOf('/') + 1);
+    const jobs = [];
+    for (const { slot, files } of manifestEntries(manifest, base)) {
+      for (const f of files) jobs.push(this.fetchOne(slot, f));
+    }
+    await Promise.all(jobs);
+    this.ready = true;
+    return this;
+  }
+
+  async fetchOne(slot, path) {
+    try {
+      const r = await fetch(path);
+      if (!r.ok) { this.missing.push(path); return; }
+      const buf = await this.ctx.decodeAudioData(await r.arrayBuffer());
+      if (!this.slots.has(slot)) this.slots.set(slot, []);
+      this.slots.get(slot).push(buf);
+      this.loaded++;
+    } catch {
+      this.missing.push(path);
+    }
+  }
+
+  has(slot) { return this.slots.has(slot); }
+
+  status() {
+    return { ready: this.ready, loaded: this.loaded, slots: Object.fromEntries([...this.slots].map(([k, v]) => [k, v.length])), missing: this.missing.slice() };
+  }
+
+  // Play one random variant of the first slot in `slots` that has a sample.
+  // rate is multiplied by a ±jitter random factor so repeats don't sound
+  // identical. Returns null when no sample exists (caller synthesizes).
+  play(slots, { gain = 1, rate = 1, jitter = 0.04, at = 0, dest = this.dest } = {}) {
+    const keys = Array.isArray(slots) ? slots : [slots];
+    const list = keys.map((k) => this.slots.get(k)).find((l) => l && l.length);
+    if (!list) return null;
+    const c = this.ctx;
+    const s = c.createBufferSource();
+    s.buffer = list[Math.floor(Math.random() * list.length)];
+    s.playbackRate.value = rate * (1 + (Math.random() * 2 - 1) * jitter);
+    const g = c.createGain();
+    g.gain.value = gain;
+    s.connect(g).connect(dest);
+    s.start(Math.max(c.currentTime, at));
+    return s;
+  }
+}
 
 export class SoundEngine {
   constructor() {
     this.ctx = null;
     this.enabled = true;
     this.volume = 0.7;
+    this.bank = null;
+    this.sampleManifest = 'audio/manifest.json';
   }
 
   init() {
@@ -22,6 +104,8 @@ export class SoundEngine {
     const d = this.noise.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
     this.startAmbience();
+    this.bank = new SampleBank(this.ctx, this.master);
+    this.bank.load(this.sampleManifest).catch(() => null);
   }
 
   setVolume(v) { this.volume = v; if (this.master) this.master.gain.value = v; }
@@ -45,6 +129,12 @@ export class SoundEngine {
     const c = this.ctx, t = c.currentTime;
     const out = c.createGain(); out.connect(this.master);
     out.gain.value = kind === 'putt' ? 0.35 : 0.9 * (0.5 + 0.5 * power);
+    const slot = { putt: ['putter'], sand: ['sand', 'wedge'], wood: ['wood', 'driver'], wedge: ['wedge', 'iron'] }[kind] || [kind];
+    if (this.bank?.play(slot, { gain: 0.5 + 0.5 * quality, rate: 1 - 0.06 * (1 - quality), dest: out })) {
+      if (quality < 0.7 && kind !== 'putt') this.thud(t, quality, out);
+      this.whoosh(t - 0.12, power);
+      return;
+    }
     // noisy transient
     const n = this.noiseSrc();
     const bp = c.createBiquadFilter();
@@ -68,25 +158,29 @@ export class SoundEngine {
       o.connect(og).connect(out);
       o.start(t); o.stop(t + 0.4);
     }
-    // thud for mishits
-    if (quality < 0.7 && kind !== 'putt') {
-      const o2 = c.createOscillator();
-      o2.type = 'sine';
-      o2.frequency.setValueAtTime(180, t);
-      o2.frequency.exponentialRampToValueAtTime(70, t + 0.15);
-      const g2 = c.createGain();
-      this.env(g2, t, 0.002, 0.5 * (1 - quality), 0.15);
-      o2.connect(g2).connect(out);
-      o2.start(t); o2.stop(t + 0.3);
-    }
+    if (quality < 0.7 && kind !== 'putt') this.thud(t, quality, out);
     // whoosh (swing)
     this.whoosh(t - 0.12, power);
+  }
+
+  // low thud layered under a mishit (fat or thin strike)
+  thud(t, quality, out) {
+    const c = this.ctx;
+    const o2 = c.createOscillator();
+    o2.type = 'sine';
+    o2.frequency.setValueAtTime(180, t);
+    o2.frequency.exponentialRampToValueAtTime(70, t + 0.15);
+    const g2 = c.createGain();
+    this.env(g2, t, 0.002, 0.5 * (1 - quality), 0.15);
+    o2.connect(g2).connect(out);
+    o2.start(t); o2.stop(t + 0.3);
   }
 
   whoosh(t, power = 1) {
     if (!this.ctx) return;
     const c = this.ctx;
     t = Math.max(t, c.currentTime);
+    if (this.bank?.play('whoosh', { gain: 0.3 + 0.5 * power, rate: 0.9 + 0.2 * power, at: t })) return;
     const n = this.noiseSrc();
     const f = c.createBiquadFilter();
     f.type = 'bandpass'; f.Q.value = 2;
@@ -103,6 +197,8 @@ export class SoundEngine {
     const c = this.ctx, t = c.currentTime;
     const v = Math.min(1, speed / 25);
     if (surface === 'water') return this.splash(v);
+    const slot = surface === 'bunker' ? ['land-sand', 'land'] : surface === 'path' ? ['land-path', 'land'] : surface === 'green' ? ['land-green', 'land'] : ['land'];
+    if (this.bank?.play(slot, { gain: 0.3 + 0.7 * v, rate: 1.1 - 0.2 * v, jitter: 0.06 })) return;
     const n = this.noiseSrc();
     const f = c.createBiquadFilter();
     f.type = 'lowpass';
@@ -122,6 +218,7 @@ export class SoundEngine {
 
   splash(v = 1) {
     const c = this.ctx, t = c.currentTime;
+    if (this.bank?.play('splash', { gain: 0.5 + 0.5 * v, rate: 1.1 - 0.2 * v })) return;
     const n = this.noiseSrc();
     const f = c.createBiquadFilter();
     f.type = 'bandpass'; f.Q.value = 0.7;
@@ -136,6 +233,7 @@ export class SoundEngine {
   tree() {
     if (!this.ctx || !this.enabled) return;
     const c = this.ctx, t = c.currentTime;
+    if (this.bank?.play('tree', { gain: 0.8, jitter: 0.08 })) return;
     const n = this.noiseSrc();
     const f = c.createBiquadFilter();
     f.type = 'highpass'; f.frequency.value = 2500;
@@ -153,6 +251,7 @@ export class SoundEngine {
   pin() {
     if (!this.ctx || !this.enabled) return;
     const c = this.ctx, t = c.currentTime;
+    if (this.bank?.play('pin', { gain: 0.7 })) return;
     for (const f of [2100, 3350]) {
       const o = c.createOscillator();
       o.frequency.value = f;
@@ -165,6 +264,7 @@ export class SoundEngine {
   cup() {
     if (!this.ctx || !this.enabled) return;
     const c = this.ctx, t0 = c.currentTime;
+    if (this.bank?.play('cup', { gain: 0.8 })) return;
     // rattle: a few decaying plastic clicks
     for (let i = 0; i < 4; i++) {
       const t = t0 + i * (0.07 - i * 0.012);
@@ -182,6 +282,7 @@ export class SoundEngine {
   crowd(level = 0.5, dur = 2.5) {
     if (!this.ctx || !this.enabled) return;
     const c = this.ctx, t = c.currentTime;
+    if (this.bank?.play(level > 0.6 ? ['cheer', 'applause'] : ['applause', 'cheer'], { gain: 0.25 + 0.6 * level, jitter: 0.02 })) return;
     const out = c.createGain();
     out.connect(this.master);
     out.gain.setValueAtTime(0.0001, t);
@@ -214,6 +315,7 @@ export class SoundEngine {
   groan() {
     if (!this.ctx || !this.enabled) return;
     const c = this.ctx, t = c.currentTime;
+    if (this.bank?.play('groan', { gain: 0.6, jitter: 0.02 })) return;
     const n = this.noiseSrc();
     const f = c.createBiquadFilter();
     f.type = 'bandpass'; f.Q.value = 2;
@@ -234,6 +336,22 @@ export class SoundEngine {
     const g = c.createGain();
     this.env(g, t, 0.002, 0.08, 0.07);
     o.connect(g).connect(this.master); o.start(t); o.stop(t + 0.12);
+  }
+
+  // flushed strike: two quick bell notes with a touch of shimmer
+  chime() {
+    if (!this.ctx || !this.enabled) return;
+    const c = this.ctx, t = c.currentTime;
+    [[1318.5, 0], [1975.5, 0.09]].forEach(([f, d], i) => {
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = 'sine'; o.frequency.value = f;
+      this.env(g, t + d, 0.003, i ? 0.14 : 0.09, 0.25);
+      o.connect(g).connect(this.master); o.start(t + d); o.stop(t + d + 0.5);
+      const o2 = c.createOscillator(), g2 = c.createGain();
+      o2.type = 'triangle'; o2.frequency.value = f * 2.01;
+      this.env(g2, t + d, 0.003, 0.025, 0.15);
+      o2.connect(g2).connect(this.master); o2.start(t + d); o2.stop(t + d + 0.3);
+    });
   }
 
   startAmbience() {

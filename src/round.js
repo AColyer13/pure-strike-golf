@@ -3,6 +3,8 @@
 // pins and wind – used for the daily challenge and for shareable challenge links.
 import { COURSES, courseById } from './courses/index.js';
 import { mulberry32 } from './hole.js';
+import { RoundStats } from './stats.js';
+import { MPH } from './util.js';
 
 export const MODES = {
   '18': { name: '18 holes' },
@@ -66,3 +68,41 @@ export function parseChallenge(hash) {
 
 // Each course's signature hole (0-based): the menu backdrop and "Play a hole now".
 export const SIGNATURE = { augusta: 11, standrews: 17, pebble: 6, sawgrass: 16 };
+
+// A round: course, hole list, per-hole pins and wind (all drawn from the seed up
+// front so a seed always reproduces the same round) and one entry per player.
+// opts: { courseId, holes, mode, seed?, players?: [names], daily?: dateKey }
+export function createRound(opts) {
+  const seed = opts.seed ?? ((Math.random() * 2 ** 32) >>> 0);
+  const course = courseById(opts.courseId, seed);
+  const rng = mulberry32(seed);
+  const windDir = rng() * Math.PI * 2;
+  const setup = {};
+  for (const idx of opts.holes) {
+    const [wmin, wmax] = course.wind;
+    setup[idx] = { pinIndex: Math.floor(rng() * 4), mph: wmin + (wmax - wmin) * Math.pow(rng(), 1.3), ang: windDir + (rng() - 0.5) * 1.4 };
+  }
+  const names = opts.players?.length ? opts.players : [null];
+  const balls = MODES[opts.mode]?.balls || 0;
+  return {
+    course, holes: opts.holes, i: 0, seed, mode: opts.mode, daily: opts.daily || null, setup, balls,
+    players: names.map((name) => ({ name, scores: [], stats: new RoundStats(), attempts: [] })),
+    p: 0,
+    get player() { return this.players[this.p]; },
+    get scores() { return this.player.scores; },
+    get stats() { return this.player.stats; },
+  };
+}
+
+// Physics environment for a hole from its round setup (wind blows TOWARD setup.ang)
+export function holeEnv(course, hole, setup) {
+  return { rho: course.rho, wind: [Math.sin(setup.ang) * setup.mph * MPH, 0, -Math.cos(setup.ang) * setup.mph * MPH], firmness: course.firmness, stimp: hole.stimp };
+}
+
+// extra line on the hole intro card
+export function introExtra(round) {
+  const r = round;
+  if (r.balls) return `${MODES[r.mode].name}: ${MODES[r.mode].desc}`;
+  if (r.players.length > 1) return `${r.player.name} to play`;
+  return '';
+}

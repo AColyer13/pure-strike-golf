@@ -8,6 +8,78 @@ import { dirOf, angOf } from './util.js';
 import { SHAPES } from './config.js';
 import { findEntry } from './rules.js';
 
+// Pure helpers (no game instance) so the rules can be tested and reused.
+// The caddie reaches for the putter on the green, or from the fringe / first
+// cut when a chip has more ways to go wrong than a putt.
+export function wantsPutter(hole, ball) {
+  const d = Math.hypot(hole.cup.x - ball.p[0], hole.cup.z - ball.p[2]);
+  const s = ball.surface;
+  return s === 'green' || (s === 'fringe' && d < 18) || (s === 'cut' && d < 12 && hole.greenSdf(ball.p[0], ball.p[2]) < 4);
+}
+// Where a putt is at least a sensible option: on or around the green (a
+// "Texas wedge" from the apron is fine; a 465 ft putt from the tee is not).
+export function canPutt(hole, ball) {
+  if (!hole || !ball || ball.isTee) return false;
+  const s = ball.surface;
+  if (s === 'green' || s === 'fringe') return true;
+  if (s === 'water' || s === 'ob' || s === 'bunker') return false;
+  return hole.greenSdf(ball.p[0], ball.p[2]) < 25;
+}
+
+// bisect on full green sims (slopes included) for the start speed that rolls `d` metres
+// from p along dir (unit, {x, z}). "Reaches d" is judged on the furthest point of the
+// roll, not where the ball stops: on a green with a rise beyond the hole a hot putt
+// runs up and back past its start, which would otherwise read as "not far enough".
+export function puttSpeedToReach(hole, env, p, dir, d) {
+  const h = hole;
+  let lo = 0.2, hi = 14;
+  const reach = (v) => {
+    const sim = new BallSim(h, env, mulberry32(3));
+    const oldPin = h.pinIn, cup = h.cup; h.pinIn = false;
+    h.cup = { ...cup, x: 1e6, z: 1e6 }; // measure the roll with the hole covered
+    sim.putt(p.slice(), [dir.x, 0, dir.z], v);
+    let n = 0, far = 0;
+    while (sim.state === 'roll' && n++ < 3000) {
+      sim.step(1 / 120);
+      far = Math.max(far, (sim.p[0] - p[0]) * dir.x + (sim.p[2] - p[2]) * dir.z);
+    }
+    h.pinIn = oldPin; h.cup = cup;
+    return far;
+  };
+  for (let it = 0; it < 12; it++) {
+    const v = it === 0 ? puttSpeedFor(d, h.greenRoll) : (lo + hi) / 2;
+    if (reach(v) >= d) hi = v; else lo = v;
+  }
+  return (lo + hi) / 2;
+}
+
+// Putt read for the ball's position. Effective (flat-equivalent) distance eqFt is the
+// speed that would finish ~17 in (43 cm) past the hole if it missed – Pelz's optimum,
+// and what the meter marker teaches. range is the meter's full-power distance in feet.
+export function puttSetup(hole, ball, env) {
+  const h = hole, b = ball;
+  const d = Math.hypot(h.cup.x - b.p[0], h.cup.z - b.p[2]) || 1e-6;
+  const dir = { x: (h.cup.x - b.p[0]) / d, z: (h.cup.z - b.p[2]) / d };
+  const v = puttSpeedToReach(h, env, b.p, dir, d + 0.43);
+  const eqFt = (v * v) / (2 * h.greenRoll * G) / FT;
+  const ranges = [10, 20, 40, 70, 120];
+  const range = ranges.find((r) => r >= eqFt * 1.15) || 150;
+  const elevIn = (h.height(h.cup.x, h.cup.z) - h.height(b.p[0], b.p[2])) / 0.0254;
+  return { eqFt, range, elevIn, aim: angOf(dir.x, dir.z), speed: v };
+}
+
+// meter power that carries `need` metres in still air from the given lie
+export function powerForCarry(club, need, { traj = 0, lie = 'fairway', rho = 1.2 } = {}) {
+  let lo = 0.1, hi = 1.1;
+  for (let i = 0; i < 12; i++) {
+    const p = (lo + hi) / 2;
+    const ld = computeLaunch(club, { power: p, face: 0, path: 0, strike: 1, traj, lie });
+    const c = simulateCarry(ld, { rho, wind: [0, 0, 0] }, { fwd: [0, 0, -1], dt: 1 / 120 }).carry;
+    if (c < need) lo = p; else hi = p;
+  }
+  return (lo + hi) / 2;
+}
+
 export class Caddie {
   constructor(game) {
     this.g = game;
@@ -36,7 +108,7 @@ export class Caddie {
     g.pl = null;
     this.msg = '';
     this.analysis = null;
-    if (b.surface === 'green' || (b.surface === 'fringe' && d < 18) || (b.surface === 'cut' && d < 12 && h.greenSdf(b.p[0], b.p[2]) < 4)) {
+    if (wantsPutter(h, b)) {
       g.setClub(g.bag.length - 1);
       if (b.surface !== 'green') this.msg = 'Putt it from here. A poor putt usually finishes closer than a poor chip.';
       return;
@@ -180,39 +252,14 @@ export class Caddie {
   // Effective (flat-equivalent) distance: the speed that would finish ~17 in (43 cm) past
   // the hole if it missed – Pelz's optimum, and what the meter marker teaches.
   setupPutt() {
-    const g = this.g, h = g.hole, b = g.ball;
-    const d = g.distToPin();
-    const dir = { x: (h.cup.x - b.p[0]) / d, z: (h.cup.z - b.p[2]) / d };
-    const v = this.puttSpeedToReach(dir, d + 0.43);
-    const eqFt = (v * v) / (2 * h.greenRoll * G) / FT;
-    g.puttEqFt = eqFt;
-    const ranges = [10, 20, 40, 70, 120];
-    g.puttRange = ranges.find((r) => r >= eqFt * 1.15) || 150;
-    g.puttElevIn = (h.height(h.cup.x, h.cup.z) - h.height(b.p[0], b.p[2])) / 0.0254;
+    const g = this.g;
+    const ps = puttSetup(g.hole, g.ball, g.env);
+    g.puttEqFt = ps.eqFt;
+    g.puttRange = ps.range;
+    g.puttElevIn = ps.elevIn;
     const R = g.puttRange;
     g.meter.configure({ labels: [[0.25, `${Math.round(R * 0.25)}ft`], [0.5, `${Math.round(R * 0.5)}ft`], [0.75, `${Math.round(R * 0.75)}ft`], [1, `${R}ft`]], rangeLabel: `Putter range ${R} ft` });
-    g.aim = angOf(dir.x, dir.z);
-  }
-
-  // bisect on full green sims (slopes included) for the start speed that rolls `d` metres
-  puttSpeedToReach(dir, d) {
-    const g = this.g, h = g.hole, b = g.ball;
-    let lo = 0.2, hi = 14;
-    const flat = puttSpeedFor(d, h.greenRoll);
-    for (let it = 0; it < 12; it++) {
-      const v = it === 0 ? flat : (lo + hi) / 2;
-      const sim = new BallSim(h, g.env, mulberry32(3));
-      const oldPin = h.pinIn, cup = h.cup; h.pinIn = false;
-      h.cup = { ...cup, x: 1e6, z: 1e6 }; // measure the roll with the hole covered
-      sim.putt(b.p.slice(), [dir.x, 0, dir.z], v);
-      let n = 0;
-      while (sim.state === 'roll' && n++ < 3000) sim.step(1 / 120);
-      h.pinIn = oldPin; h.cup = cup;
-      const along = (sim.p[0] - b.p[0]) * dir.x + (sim.p[2] - b.p[2]) * dir.z;
-      if (it === 0) { if (along < d && sim.state !== 'holed') lo = v; else hi = v; continue; }
-      if (sim.state === 'holed' || along >= d) hi = v; else lo = v;
-    }
-    return (lo + hi) / 2;
+    g.aim = ps.aim;
   }
 
   // ------------------------------------------------------------------ meter marker
@@ -243,13 +290,6 @@ export class Caddie {
 
   powerForCarry(need) {
     const g = this.g;
-    let lo = 0.1, hi = 1.1;
-    for (let i = 0; i < 12; i++) {
-      const p = (lo + hi) / 2;
-      const ld = computeLaunch(g.club, { power: p, face: 0, path: 0, strike: 1, traj: g.traj, lie: g.lieKey() });
-      const c = simulateCarry(ld, { rho: g.env.rho, wind: [0, 0, 0] }, { fwd: [0, 0, -1], dt: 1 / 120 }).carry;
-      if (c < need) lo = p; else hi = p;
-    }
-    return (lo + hi) / 2;
+    return powerForCarry(g.club, need, { traj: g.traj, lie: g.lieKey(), rho: g.env.rho });
   }
 }

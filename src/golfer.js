@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 
 const ease = (t) => t * t * (3 - 2 * t);
+const smooth = (a, b, x) => ease(Math.min(1, Math.max(0, (x - a) / (b - a))));
 
 function limb(len, r0, r1, mat) {
   const g = new THREE.Group();
@@ -23,10 +24,10 @@ function joint(r, mat) {
 
 // hot-seat players each get their own outfit so it's obvious whose turn it is
 export const OUTFITS = [
-  { shirt: '#d8403a', pants: '#e9e4d4', cap: '#1d2a44', skin: '#d9a27c', hair: '#3b2a1e' },
-  { shirt: '#2f6fd0', pants: '#2b2f3a', cap: '#f2f2f2', skin: '#a8714f', hair: '#1a1410' },
-  { shirt: '#f2c230', pants: '#3d4a33', cap: '#2a2a2a', skin: '#e8bf9c', hair: '#b88a4a' },
-  { shirt: '#f4f4f4', pants: '#6b7f99', cap: '#c22a52', skin: '#7a4b32', hair: '#111' },
+  { shirt: '#d8403a', trim: '#f6f1e6', pants: '#e9e4d4', cap: '#1d2a44', skin: '#d9a27c', hair: '#3b2a1e' },
+  { shirt: '#2f6fd0', trim: '#f2f2f2', pants: '#2b2f3a', cap: '#f2f2f2', skin: '#a8714f', hair: '#1a1410' },
+  { shirt: '#f2c230', trim: '#2a2a2a', pants: '#3d4a33', cap: '#2a2a2a', skin: '#e8bf9c', hair: '#b88a4a' },
+  { shirt: '#f4f4f4', trim: '#c22a52', pants: '#6b7f99', cap: '#c22a52', skin: '#7a4b32', hair: '#111' },
 ];
 
 export class Golfer {
@@ -39,7 +40,11 @@ export class Golfer {
     const sole = new THREE.MeshStandardMaterial({ color: '#2a2a2a', roughness: 0.9 });
     const belt = new THREE.MeshStandardMaterial({ color: '#1c1c1c', roughness: 0.5, metalness: 0.2 });
     const cap = new THREE.MeshStandardMaterial({ color: opts.cap, roughness: 0.7 });
-    this.mats = { shirt, pants, skin, hair, cap };
+    const trim = new THREE.MeshStandardMaterial({ color: opts.trim, roughness: 0.8 });
+    const eyeWhite = new THREE.MeshStandardMaterial({ color: '#f4f0ea', roughness: 0.4 });
+    const pupil = new THREE.MeshStandardMaterial({ color: '#1a1512', roughness: 0.3 });
+    const seam = new THREE.MeshStandardMaterial({ color: '#8d8d8d', roughness: 0.7 });
+    this.mats = { shirt, pants, skin, hair, cap, trim };
     this.outfit = 0;
     const glove = new THREE.MeshStandardMaterial({ color: '#fafafa', roughness: 0.6 });
     this.shaftMat = new THREE.MeshStandardMaterial({ color: '#c8ccd2', metalness: 0.9, roughness: 0.25 });
@@ -84,7 +89,7 @@ export class Golfer {
       for (const m of [upperShoe, toe, soleM]) { m.castShadow = true; foot.add(m); }
       this.body.add(thigh);
       thigh.position.y = 0.9;
-      this.legs.push({ thigh, shin, s });
+      this.legs.push({ thigh, shin, foot, s });
     }
 
     // torso (pivot at the base of the spine)
@@ -99,7 +104,15 @@ export class Golfer {
     this.chest = new THREE.Group();
     this.chest.position.y = 0.52;
     this.spine.add(this.chest);
-    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.062, 0.018, 6, 14), shirt);
+    const placket = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.15, 0.014), trim);
+    placket.position.set(0, 0.42, 0.122);
+    this.spine.add(placket);
+    for (const k of [0, 1]) {
+      const button = new THREE.Mesh(new THREE.SphereGeometry(0.007, 6, 4), pupil);
+      button.position.set(0, 0.47 - k * 0.05, 0.13);
+      this.spine.add(button);
+    }
+    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.062, 0.018, 6, 14), trim);
     collar.rotation.x = Math.PI / 2;
     collar.position.y = 0.035;
     this.chest.add(collar);
@@ -127,6 +140,19 @@ export class Golfer {
     const nose = new THREE.Mesh(new THREE.ConeGeometry(0.016, 0.04, 6).rotateX(Math.PI / 2), skin);
     nose.position.set(0, -0.015, 0.105);
     this.head.add(nose);
+    // eyes under the brim, brows just below it
+    for (const s of [-1, 1]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.015, 10, 8).scale(1, 0.85, 0.6), eyeWhite);
+      eye.position.set(0.04 * s, -0.006, 0.094);
+      this.head.add(eye);
+      const pu = new THREE.Mesh(new THREE.SphereGeometry(0.007, 8, 6), pupil);
+      pu.position.set(0.04 * s, -0.006, 0.105);
+      this.head.add(pu);
+      const brow = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.007, 0.008), hair);
+      brow.position.set(0.041 * s, 0.021, 0.095);
+      brow.rotation.z = -0.18 * s;
+      this.head.add(brow);
+    }
     const capM = new THREE.Mesh(new THREE.SphereGeometry(0.11, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), cap);
     capM.position.y = 0.02;
     this.head.add(capM);
@@ -141,18 +167,34 @@ export class Golfer {
       const sh = new THREE.Group();
       sh.position.set(0.2 * s, 0, 0);
       this.chest.add(sh);
-      const upper = limb(0.3, 0.055, 0.045, shirt);
+      // short sleeve in the trim colour over a bare upper arm: the shirt reads as two-tone
+      const upper = limb(0.3, 0.05, 0.042, skin);
       sh.add(upper);
+      const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(0.066, 0.06, 0.14, 10), trim);
+      sleeve.position.y = -0.07;
+      sleeve.castShadow = true;
+      upper.add(sleeve);
       const fore = limb(0.28, 0.042, 0.035, skin);
       fore.position.y = -0.3;
       upper.add(fore);
-      sh.add(joint(0.06, shirt));
+      sh.add(joint(0.062, trim));
       const elbow = joint(0.044, skin);
       elbow.position.y = -0.3;
       upper.add(elbow);
-      const hand = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), s < 0 ? glove : skin);
+      // a right-hander gloves the lead (left) hand, which is the one nearer the target
+      const lead = s > 0;
+      const hand = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 8), lead ? glove : skin);
       hand.position.y = -0.3;
       fore.add(hand);
+      if (lead) {
+        const cuff = new THREE.Mesh(new THREE.TorusGeometry(0.036, 0.005, 6, 14), seam);
+        cuff.rotation.x = Math.PI / 2;
+        cuff.position.y = -0.272;
+        fore.add(cuff);
+        const tab = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.012, 0.01), seam);
+        tab.position.set(0, -0.285, -0.042);
+        fore.add(tab);
+      }
       this.arms.push({ sh, upper, fore, s });
     }
     // club: attached to a "hands" pivot driven directly (arms aim at it)
@@ -165,6 +207,7 @@ export class Golfer {
     this.pose = 0;
     this.phase = 'idle';
     this.t = 0;
+    this.idleT = 0;
     this.onImpact = null;
     this.putting = false;
   }
@@ -226,28 +269,62 @@ export class Golfer {
     this.onImpact = onImpact;
   }
   // Pose parameter: 0 = address, -1 = top of backswing, +1 = finish.
+  // Slide the pelvis and torso sideways (body +x is the target side) while the
+  // feet stay planted: the legs lean to follow and the shoes stay flat.
+  setShift(dx) {
+    this.hips.position.x = dx;
+    this.spine.position.x = dx;
+    const lean = -Math.asin(Math.max(-0.4, Math.min(0.4, dx / 0.9)));
+    for (const L of this.legs) {
+      L.thigh.position.x = 0.1 * L.s + dx;
+      L.thigh.rotation.z = lean;
+      L.foot.rotation.z = -lean;
+    }
+  }
+
   apply(p) {
     const put = this.putting;
     const bw = Math.max(0, -p), fw = Math.max(0, p);
     const amp = put ? 0.18 : 1;
-    // spine tilt (bend over the ball) and rotation
+    // weight: loads a touch onto the trail side going back, drives onto the lead leg through
+    this.setShift(put ? 0 : (-bw * 0.03 + fw * 0.1));
+    // spine tilt (bend over the ball) and rotation; posture only rises once the arms are past the ball
     const bend = put ? 0.62 : 0.5;
-    this.spine.rotation.set(bend * (1 - fw * 0.9), 0, 0);
+    const upright = put ? 0 : smooth(0.1, 0.95, fw);
+    this.spine.rotation.set(bend * (1 - upright * 0.92), 0, 0);
     const turn = put ? 0 : (-bw * 1.45 + fw * 1.6);
     this.spine.rotation.y = turn * 0.95;
     this.chest.rotation.y = turn * 0.25;
     this.chest.rotation.z = put ? 0 : (-bw * 0.12 + fw * 0.15);
     this.hips.rotation.y = put ? 0 : (-bw * 0.6 + fw * 1.4);
-    this.head.rotation.x = -0.35 * (1 - fw) + 0.1;
-    this.head.rotation.y = -turn * 0.7 * (1 - fw * 0.5);
+    // head: stays down on the ball through impact and comes up late, behind the ball
+    const lift = put ? 0 : smooth(0.45, 0.9, fw);
+    this.head.rotation.x = -0.25 * (1 - lift) + 0.1 * lift;
+    this.head.rotation.y = -turn * 0.7 * (1 - lift * 0.55);
+    this.head.rotation.z = put ? 0 : (bw * 0.08 + fw * 0.12 * (1 - lift));
     for (const L of this.legs) {
+      const lead = L.s > 0;
       L.thigh.rotation.x = -0.25;
+      L.thigh.rotation.y = 0;
       L.shin.rotation.x = 0.35;
-      if (!put && L.s > 0) { L.thigh.rotation.y = fw * 0.5; L.shin.rotation.x = 0.35 + fw * 0.35; }
+      L.foot.rotation.x = 0;
+      if (put) continue;
+      if (lead) {
+        // posts up straight at the finish
+        L.thigh.rotation.x = -0.25 + fw * 0.2;
+        L.shin.rotation.x = 0.35 - fw * 0.3;
+      } else {
+        // trail knee kicks in toward the target and the heel comes up onto the toe
+        L.thigh.rotation.x = -0.25 - fw * 0.15 + bw * 0.03;
+        L.thigh.rotation.y = fw * 0.6;
+        L.shin.rotation.x = 0.35 + fw * 0.65;
+        L.foot.rotation.x = fw * 0.95;
+      }
     }
     // hands: arc in the chest's local frame; angle 0 = down at the ball
     const swingA = put ? (bw ? -bw * amp : fw * amp) : (bw ? -bw * 2.6 : fw * 3.4);
-    const armLen = 0.58;
+    // the arms fold at the finish so the hands end by the lead ear, not straight overhead
+    const armLen = 0.58 * (1 - 0.42 * smooth(1.7, 3.2, swingA));
     const hx = Math.sin(swingA) * armLen * 0.95;
     const hy = -Math.cos(swingA) * armLen - 0.02;
     const hz = 0.1 + (put ? 0.04 : 0) - Math.abs(Math.sin(swingA)) * 0.08;
@@ -255,8 +332,11 @@ export class Golfer {
     const b = this.spine.rotation.x;
     const cb = Math.cos(b), sb = Math.sin(b);
     this.hands.position.set(hx, hy * cb + hz * sb, -hy * sb + hz * cb);
-    // wrist hinge: club cocks up on the backswing and releases through
-    const hinge = put ? 0 : (bw * 1.35 * Math.min(1, bw * 1.6) - fw * 0.6 * Math.min(1, fw * 2));
+    // wrist hinge: set early going back, held through the downswing, then released
+    // late into the ball (the snap), with the club wrapping round at the finish
+    const cock = 1.35 * smooth(0.02, 0.45, bw);
+    const release = -0.7 * smooth(0, 0.16, fw) * (1 - 0.3 * smooth(0.55, 1, fw));
+    const hinge = put ? 0 : cock + release;
     this.hands.rotation.set(0, 0, 0);
     this.hands.rotation.z = swingA - hinge;
     const shaftLean = put ? 0.3 : 0.62 + (this.clubLen - 0.95) * 0.9; // shaft angle from vertical at address
@@ -275,7 +355,15 @@ export class Golfer {
   }
 
   update(dt) {
-    if (this.phase === 'idle') { this.apply(Math.sin(performance.now() / 700) * 0.004); return; }
+    if (this.phase === 'idle') {
+      // breathing, plus a two-stroke waggle every few seconds while settling over the ball
+      this.idleT += dt;
+      const c = this.idleT % 3.8;
+      const env = smooth(0, 0.15, c) * (1 - smooth(0.8, 0.95, c));
+      const wag = this.putting ? 0 : Math.sin(c * Math.PI * 2 * 2.3) * 0.04 * env;
+      this.apply(wag + Math.sin(this.idleT * 1.3) * 0.004);
+      return;
+    }
     const put = this.putting;
     const backDur = put ? 0.55 + this.power * 0.25 : 0.95;
     const downDur = put ? 0.35 : 0.28;

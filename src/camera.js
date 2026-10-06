@@ -21,9 +21,19 @@ export class CameraDirector {
     this.menuInit = false;
     this.fov = 50;               // target field of view (degrees)
     this.fovKick = 0;            // short zoom punch, decays to 0
+    this.shakeAmp = 0;           // positional shake: amplitude (m), time left and length (s)
+    this.shakeT = 0;
+    this.shakeDur = 0;
+    this.shakeClock = 0;
   }
 
   kick(deg) { this.fovKick = deg; }
+  // a short, decaying jolt: amp in metres, dur in seconds. Ignored under reduced motion.
+  shake(amp, dur = 0.35) {
+    if (this.g.settings?.reducedMotion) return;
+    if (amp < this.shakeAmp * (this.shakeT / (this.shakeDur || 1))) return; // a bigger one is still running
+    this.shakeAmp = amp; this.shakeDur = dur; this.shakeT = dur;
+  }
 
   set(pos, look, k) { this.tPos.copy(pos); this.tLook.copy(look); if (k != null) this.k = k; }
   snap() { this.pos.copy(this.tPos); this.look.copy(this.tLook); }
@@ -239,6 +249,17 @@ export class CameraDirector {
     }
     this.camera.position.copy(this.pos);
     this.camera.lookAt(this.look);
+    if (this.shakeT > 0) {
+      // three incommensurate sines per axis read as a jolt rather than a wobble; the envelope is quadratic
+      this.shakeT = Math.max(0, this.shakeT - dt);
+      this.shakeClock += dt;
+      const e = (this.shakeT / this.shakeDur) ** 2 * this.shakeAmp, t = this.shakeClock;
+      const ox = e * (Math.sin(t * 61) * 0.6 + Math.sin(t * 97 + 1.3) * 0.4);
+      const oy = e * (Math.sin(t * 83 + 0.7) * 0.7 + Math.sin(t * 131 + 2.1) * 0.3);
+      const oz = e * (Math.sin(t * 71 + 2.4) * 0.5);
+      this.camera.position.x += ox; this.camera.position.y += oy; this.camera.position.z += oz;
+      if (this.shakeT === 0) this.shakeAmp = 0;
+    }
     // field of view eases to its target; the impact kick decays quickly
     this.fovKick *= Math.exp(-dt * 5);
     if (Math.abs(this.fovKick) < 0.02) this.fovKick = 0;

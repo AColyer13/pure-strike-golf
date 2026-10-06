@@ -30,6 +30,7 @@ The game is an installable PWA. After the first load it works offline. The servi
 
 ## Ways to play
 
+- **Start here: guided first hole.** On a fresh install the big button runs a five-minute lesson on Augusta's 12th (beginner assists, calm wind): coach marks explain the distance and wind panels, the club, aiming, the three-click meter, the shot panel and putting as each comes up. Later it lives under How to play.
 - **Play a hole now.** Jumps straight onto the course's signature hole.
 - **Full 18, front 9, back 9 or a single hole.**
 - **Daily challenge.** Three holes, with the same pins and wind for everyone that day. Your best score for the day is kept.
@@ -64,6 +65,7 @@ All keys can be changed in **Settings → Controls**.
 | Enter | Skip to where the ball stops |
 | X | Replay the last shot |
 | Tab (hold) | Scorecard |
+| H | Essential / full HUD |
 | M | Sound on / off |
 | Esc | Pause menu |
 | Right-drag, mouse wheel | Orbit, zoom |
@@ -84,9 +86,11 @@ All keys can be changed in **Settings → Controls**.
 
 Settings → Accessibility has these options:
 - **One-button swing.** Power is set for you at the caddie's suggested level, so you only start the swing and time the accuracy click.
-- **Reduced motion.** No flyovers, slow-motion or camera punches. Also turns on automatically if your OS asks for reduced motion.
+- **Reduced motion.** No flyovers, slow-motion, camera shake or camera punches. Also turns on automatically if your OS asks for reduced motion.
 - **Captions** for crowd reactions and other sound cues.
 - **Interface size** from 80% to 150%.
+- **Graphics** (Settings → Game). *Auto* picks a tier for the device and watches the first seconds of play: if the median frame runs over 20 ms it steps down and says so. *Low* renders straight to the screen with no effects, *Medium* adds bloom on the sun and its glints on water, *High* adds half-resolution ground-truth ambient occlusion (contact shading under the golfer, tree trunks and bunker lips). Tone mapping is identical across tiers.
+- **HUD detail** (Settings → Game). *Essential*, the default, folds the lie into the distance panel and hides the minimap and the shape/flight row until you use them (target view, or change the shape or flight). *Full* shows every panel. `H` switches during play.
 - **Penalty areas** are marked with red stakes on the course and red hatching on the minimap, so you can find them without telling colours apart.
 
 ## What makes it realistic
@@ -100,6 +104,9 @@ Settings → Accessibility has these options:
 - **Stats.** After every shot you see Strokes Gained against the PGA Tour baseline (Mark Broadie's method), plus a launch-monitor readout and coaching tips. The round summary shows where you lost strokes.
 - **Rules.** Penalty areas offer stroke-and-distance, back-on-the-line and lateral relief. Each option shows its expected score. Out of bounds is stroke and distance.
 - **Determinism.** Each round has a seed that fixes every hole's pin and wind. That seed is what makes daily challenges and challenge links fair.
+- **Ground and light.** Mowing stripes carry a view-dependent sheen (light when the blades bend away from you, dark toward you, so they flip from the reverse angle), the turf has a micro normal that catches the low sun, and a tight shadow box keeps ball and tree shadows crisp.
+- **Golfer.** Weight loads onto the trail side and drives onto the lead leg, the head stays down through impact, the wrists hold their lag and release late, the trail heel comes up into a wrapped finish, and there is a waggle while settling over the ball. Two-tone shirt, gloved lead hand, a face with eyes and brows.
+- **Feel.** A flushed full swing hangs for a beat with a zoom punch; big drives and tree hits jolt the camera; swings leave divots, sand plumes, pitch marks and splashes; shots dying at the hole or going in from off the green play out in slow motion; a dead-centre strike at full power flashes PURE.
 - **Golf Academy.** A Ball Flight Lab with sliders for face, path, strike, wind and air density, plus ten short lessons: D-plane, smash factor, wind, altitude, lies, landing angle, putting, strokes gained and strategy.
 
 Difficulty levels (Beginner, Standard, Pro) change meter speed, the size of the sweet spot and how much the caddie previews.
@@ -116,24 +123,32 @@ Difficulty levels (Beginner, Standard, Pro) change meter speed, the size of the 
 ```
 index.html, styles.css    UI shell, menu and broadcast-style HUD
 sw.js, manifest.json      offline / installable PWA
-vendor/three/             three.js 0.169 (MIT), loaded through the import map
+vendor/three/             three.js 0.169 (MIT), loaded through the import map; copied by tools/vendor.mjs
+fonts/                    Barlow / Barlow Condensed (OFL), self-hosted so the game has no runtime CDN dependency
 src/main.js               boot: wires UI, game, academy and editor together
 src/game.js               game loop and round flow (state machine)
 src/camera.js             flyover, address, flight, landing and reverse-angle cameras
 src/input.js              keyboard (rebindable), mouse, touch and gamepad -> named actions
 src/caddie.js, rules.js   club advice and expected strokes; penalty relief
-src/round.js              modes, seeds, daily challenge, challenge links
+src/round.js              modes, seeds, daily challenge, challenge links, round setup
+src/tutorial.js           guided first hole: coach-mark steps polled from the game loop
+src/post.js               post-processing tiers (bloom, GTAO) and the auto quality probe
+src/fx.js                 impact effects: pooled particles (turf, sand, spray, dust) and decals (divots, pitch marks)
+src/foliage.js            tree crowns as alpha-tested leaf cards: painted leaf textures, leaf-shaped shadows, wind sway
+src/shot.js, scoring.js   pure shot pipeline (launch, forecast, result) and scoring
+                          – no DOM or renderer, used by the headless tests
 src/history.js            saved rounds, personal bests, handicap index, SG trends
 src/physics.js            ball flight, turf bounce/roll, putting, lie effects
 src/clubs.js              golfer profiles and bags (tour, scratch, 15 hcp, smooth swinger)
 src/hole.js, world.js     procedural terrain, hazards, trees and rendering for each hole
 src/courses/*.js          the four course definitions + the procedural course generator
-src/golfer.js             animated golfer
+src/golfer.js             animated golfer: keyframed swing with weight shift, late release and finish pose
 src/meter.js              3-click meter, one-button and analog mouse swing
 src/coach.js, stats.js    coaching tips, strokes gained, expected strokes
 src/academy.js            Golf Academy lessons and Ball Flight Lab
 src/editor.js             course editor
-src/ui.js, audio.js       menus, HUD, scorecard, stats, settings; synthesized SoundEngine
+src/ui.js, audio.js       menus, HUD, scorecard, stats, settings; SoundEngine (samples with synthesis fallback)
+audio/manifest.json       optional sample slots (strikes, landings, cup, crowd); empty slots stay synthesized
 tests/                    node:test suites (physics, hole geometry, rounds/history)
 tools/                    dev server and physics calibration scripts
 legacy/                   the earlier arcade mini-golf prototype
@@ -150,6 +165,12 @@ npm run check
 ```
 
 `npm run check` runs ESLint and the test suite. You can also run `npm test` or `npm run lint` on their own. `jsconfig.json` turns on type-checking from JSDoc comments in editors that support it (such as VS Code).
+
+Pushes and pull requests run the same checks in GitHub Actions (`.github/workflows/ci.yml`), plus `npm run vendor:check`.
+
+three.js and the fonts are pinned as dev dependencies and copied into the repo with `npm run vendor` (it walks each addon's imports, so adding an addon is one line in `tools/vendor.mjs`). `npm run vendor:check` fails if the vendored copies drift from `node_modules`.
+
+Sound is synthesized with Web Audio, so the repo ships no audio files. To use recorded samples instead, drop files into `audio/` and list them in `audio/manifest.json` under the matching slot (`driver`, `iron`, `wedge`, `putter`, `sand`, `cup`, `pin`, `tree`, `splash`, `cheer`, `applause`, `groan`, and so on; the file documents each one). A slot with two or three files plays a random variant with a slight pitch change each time; a slot left empty keeps the synthesized sound. Only ship files you have the rights to (your own recordings or CC0 packs). `game.audio.bank.status()` in the console shows what loaded.
 
 Physics scripts: `node tools/calibrate.mjs`, `node tools/bounce-test.mjs`, `node tools/holes-test.mjs`.
 

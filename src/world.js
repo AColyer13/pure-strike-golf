@@ -2,6 +2,8 @@
 // surface texture, surrounding landscape, water, trees, bunkers, flag and props.
 import * as THREE from 'three';
 import { Sky } from 'three/addons/objects/Sky.js';
+import { Effects } from './fx.js';
+import { Foliage, crownGeometry } from './foliage.js';
 import { Hole, fbm, vnoise, mulberry32, YD } from './hole.js';
 
 import { clamp, smooth } from './util.js';
@@ -56,26 +58,59 @@ function getWaterNormal() {
   return waterNormal;
 }
 
-// Terrain material: painted map + world-space detail noise + rocky slopes.
-function terrainMaterial(map, rockColor) {
-  const mat = new THREE.MeshStandardMaterial({ map, roughness: 0.93, metalness: 0 });
+// Terrain material: painted map + world-space detail noise + rocky slopes,
+// plus two things that only make sense in the shader: a view-dependent sheen on
+// the mowing stripes (blades bent away from you are light, toward you dark, so
+// the stripes flip from the reverse angle like they do on television) and a
+// micro normal from the detail noise so the grass catches a low sun.
+function terrainMaterial(map, rockColor, stripeMap, stripeDir) {
+  const mat = new THREE.MeshStandardMaterial({ map, roughness: 0.88, metalness: 0 });
+  mat.userData.uSheen = { value: 0.14 }; // stripe sheen strength
+  mat.userData.uMicro = { value: 1.8 };  // micro normal strength
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.detailMap = { value: getDetailTexture() };
     sh.uniforms.rockColor = { value: new THREE.Color(rockColor) };
+    sh.uniforms.stripeMap = { value: stripeMap };
+    sh.uniforms.stripeDir = { value: stripeDir };
+    sh.uniforms.uSheen = mat.userData.uSheen;
+    sh.uniforms.uMicro = mat.userData.uMicro;
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nvarying vec3 vWNorm;')
       .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWPos = (modelMatrix * vec4(transformed,1.0)).xyz;\nvWNorm = normalize(mat3(modelMatrix) * objectNormal);');
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nvarying vec3 vWNorm;\nuniform sampler2D detailMap;\nuniform vec3 rockColor;')
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nvarying vec3 vWNorm;\nuniform sampler2D detailMap;\nuniform vec3 rockColor;\nuniform sampler2D stripeMap;\nuniform vec2 stripeDir;\nuniform float uSheen;\nuniform float uMicro;')
       .replace('#include <map_fragment>', `#include <map_fragment>
         float d1 = texture2D(detailMap, vWPos.xz * 0.45).r;
         float d2 = texture2D(detailMap, vWPos.xz * 0.045).r;
         diffuseColor.rgb *= 0.86 + 0.2 * d1 + 0.12 * (d2 - 0.5);
         float slope = 1.0 - vWNorm.y;
-        diffuseColor.rgb = mix(diffuseColor.rgb, rockColor * (0.8 + 0.4 * d1), smoothstep(0.42, 0.62, slope));`);
+        float rock = smoothstep(0.42, 0.62, slope);
+        diffuseColor.rgb = mix(diffuseColor.rgb, rockColor * (0.8 + 0.4 * d1), rock);
+        // stripe sheen: phase is -1..1 on the fairway, 0 elsewhere
+        float ph = texture2D(stripeMap, vMapUv).r * 2.0 - 1.0;
+        vec2 toFrag = normalize(vWPos.xz - cameraPosition.xz);
+        diffuseColor.rgb *= 1.0 + uSheen * ph * dot(toFrag, stripeDir);`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        {
+          // micro normal: finite difference of the detail noise at ~9 m tiles, world space -> view space
+          vec2 duv = vWPos.xz * 0.11;
+          float e = 1.0 / 256.0;
+          float gx = texture2D(detailMap, duv + vec2(e, 0.0)).r - texture2D(detailMap, duv - vec2(e, 0.0)).r;
+          float gz = texture2D(detailMap, duv + vec2(0.0, e)).r - texture2D(detailMap, duv - vec2(0.0, e)).r;
+          float micro = 1.0 - smoothstep(0.42, 0.62, 1.0 - vWNorm.y);
+          normal = normalize(normal + mat3(viewMatrix) * vec3(-gx, 0.0, -gz) * (uMicro * micro));
+        }`);
   };
   return mat;
 }
+
+// Props use Standard rather than Lambert: only Standard materials receive the
+// scene environment, and without it the faces turned away from the sun (the
+// Road hole hotel seen from the tee) went nearly black.
+function propMaterial(color) { return new THREE.MeshStandardMaterial({ color, roughness: 0.9, metalness: 0 }); }
+
+// mowing stripe phase (0..1, soft-edged) at a distance s along the hole
+function stripePhase(s) { return smooth(0.3, 0.7, 0.5 + 0.5 * Math.sin((s / 9.5) * Math.PI)); }
 
 // ---------------------------------------------------------------- tree geometry
 function colorGeo(geo, color, jitter = 0.08, seed = 1) {
@@ -123,57 +158,55 @@ function blobGeo(r, detail, seed, squash = 1) {
   }
   return g;
 }
+// Each builder returns the wood geometry (trunk, vertex-coloured, may be null),
+// the leaf card geometry (see foliage.js) with its texture kind, and the
+// collision metrics physics uses. Clump positions are shared by both so the
+// crowns the ball hits are the crowns you see.
 const TREE_BUILDERS = {
   // Loblolly pine: tall bare trunk with a high, clumpy crown (Augusta)
   pine: () => {
-    const parts = [colorGeo(new THREE.CylinderGeometry(0.22, 0.42, 20, 7).translate(0, 10, 0), '#5a4330', 0.1, 1)];
     const clumps = [[0, 19, 0, 3.4], [1.8, 16.5, 0.6, 2.6], [-1.6, 17.2, -0.9, 2.7], [0.4, 22, 0.4, 2.5], [-0.8, 14.6, 1.2, 2.2], [1.1, 20.2, -1.5, 2.3]];
-    clumps.forEach(([x, y, z, r], i) => parts.push(colorGeo(blobGeo(r, 1, i + 3, 0.75).translate(x, y, z), i % 2 ? '#2e5a2a' : '#355f2d', 0.14, i)));
-    return { geo: merge(parts), h: 24.5, crownY: 12.5, crownR: 3.6, trunkR: 0.4, trunkH: 13, shape: 'ellipsoid', density: 0.22 };
+    const wood = colorGeo(new THREE.CylinderGeometry(0.22, 0.42, 20, 7).translate(0, 10, 0), '#5a4330', 0.1, 1);
+    return { wood, leaf: crownGeometry({ kind: 'pine', clumps, treeH: 24.5, seed: 3 }), leafKind: 'pine',
+      h: 24.5, crownY: 12.5, crownR: 3.6, trunkR: 0.4, trunkH: 13, shape: 'ellipsoid', density: 0.22 };
   },
   oak: () => {
-    const parts = [colorGeo(new THREE.CylinderGeometry(0.35, 0.6, 6, 7).translate(0, 3, 0), '#4d3a28', 0.1, 2)];
     const clumps = [[0, 8, 0, 4.6], [3, 7, 1, 3.4], [-3, 7.4, -1, 3.5], [1, 9.6, -2.4, 3.2], [-1.4, 9.2, 2.6, 3.2]];
-    clumps.forEach(([x, y, z, r], i) => parts.push(colorGeo(blobGeo(r, 1, i + 11, 0.8).translate(x, y, z), i % 2 ? '#3b6a2f' : '#447536', 0.14, i + 5)));
-    return { geo: merge(parts), h: 13, crownY: 4.5, crownR: 6.5, trunkR: 0.55, trunkH: 5, shape: 'ellipsoid', density: 0.35 };
+    const wood = colorGeo(new THREE.CylinderGeometry(0.35, 0.6, 6, 7).translate(0, 3, 0), '#4d3a28', 0.1, 2);
+    return { wood, leaf: crownGeometry({ kind: 'oak', clumps, treeH: 13, seed: 11 }), leafKind: 'oak',
+      h: 13, crownY: 4.5, crownR: 6.5, trunkR: 0.55, trunkH: 5, shape: 'ellipsoid', density: 0.35 };
   },
   dogwood: () => {
-    const parts = [colorGeo(new THREE.CylinderGeometry(0.12, 0.2, 2.6, 6).translate(0, 1.3, 0), '#5a4535', 0.1, 3)];
     const clumps = [[0, 3.8, 0, 2.2], [1.3, 3.3, 0.4, 1.6], [-1.2, 3.5, -0.4, 1.7]];
-    clumps.forEach(([x, y, z, r], i) => parts.push(colorGeo(blobGeo(r, 1, i + 21, 0.7).translate(x, y, z), i % 2 ? '#f3eef0' : '#f5d6e4', 0.08, i + 9)));
-    return { geo: merge(parts), h: 5.5, crownY: 2.2, crownR: 2.8, trunkR: 0.2, trunkH: 2.4, shape: 'ellipsoid', density: 0.4 };
+    const wood = colorGeo(new THREE.CylinderGeometry(0.12, 0.2, 2.6, 6).translate(0, 1.3, 0), '#5a4535', 0.1, 3);
+    return { wood, leaf: crownGeometry({ kind: 'dogwood', clumps, treeH: 5.5, seed: 21 }), leafKind: 'dogwood',
+      h: 5.5, crownY: 2.2, crownR: 2.8, trunkR: 0.2, trunkH: 2.4, shape: 'ellipsoid', density: 0.4 };
   },
   cypress: () => {
-    const parts = [colorGeo(new THREE.CylinderGeometry(0.3, 0.6, 7, 6).rotateZ(0.12).translate(0.4, 3.5, 0), '#5b4a3a', 0.1, 4)];
-    const layers = [[0.8, 7.5, 0, 5.2, 0.35], [-1.5, 8.5, 1, 4, 0.35], [2.5, 9, -1, 3.6, 0.35], [0.5, 10, 0.5, 3.4, 0.35]];
-    layers.forEach(([x, y, z, r, sq], i) => parts.push(colorGeo(blobGeo(r, 1, i + 31, sq).translate(x, y, z), i % 2 ? '#26482a' : '#2d5230', 0.14, i + 13)));
-    return { geo: merge(parts), h: 11, crownY: 6, crownR: 5.5, trunkR: 0.5, trunkH: 6.5, shape: 'ellipsoid', density: 0.35 };
+    const clumps = [[0.8, 7.5, 0, 5.2], [-1.5, 8.5, 1, 4], [2.5, 9, -1, 3.6], [0.5, 10, 0.5, 3.4]];
+    const wood = colorGeo(new THREE.CylinderGeometry(0.3, 0.6, 7, 6).rotateZ(0.12).translate(0.4, 3.5, 0), '#5b4a3a', 0.1, 4);
+    // wind-flattened Monterey cypress: wide, low cards
+    const leaf = crownGeometry({ kind: 'cypress', clumps, treeH: 11, seed: 31 });
+    leaf.scale(1, 0.55, 1); leaf.translate(0, 3.6, 0);
+    return { wood, leaf, leafKind: 'cypress', h: 11, crownY: 6, crownR: 5.5, trunkR: 0.5, trunkH: 6.5, shape: 'ellipsoid', density: 0.35 };
   },
   palm: () => {
-    const parts = [colorGeo(new THREE.CylinderGeometry(0.22, 0.3, 10, 6).translate(0, 5, 0), '#7a6a52', 0.15, 5)];
-    for (let i = 0; i < 9; i++) {
-      const a = (i / 9) * Math.PI * 2;
-      const leaf = new THREE.ConeGeometry(0.5, 3.6, 4).rotateZ(Math.PI / 2 + 0.35).translate(1.8, 0, 0).rotateY(a).translate(0, 10, 0);
-      leaf.scale(1, 0.35, 1);
-      leaf.translate(0, 6.5, 0);
-      parts.push(colorGeo(leaf, i % 2 ? '#3e7a33' : '#4a8a3a', 0.12, i + 40));
-    }
-    parts.push(colorGeo(blobGeo(0.8, 0, 50).translate(0, 10, 0), '#556b33', 0.1, 51));
-    return { geo: merge(parts), h: 11.5, crownY: 9, crownR: 3.4, trunkR: 0.3, trunkH: 10, shape: 'palm', density: 0.25 };
+    const wood = merge([
+      colorGeo(new THREE.CylinderGeometry(0.22, 0.3, 10, 6).translate(0, 5, 0), '#7a6a52', 0.15, 5),
+      colorGeo(blobGeo(0.6, 0, 50).translate(0, 10, 0), '#556b33', 0.1, 51),
+    ]);
+    const leaf = crownGeometry({ kind: 'frond', fronds: { y: 10.1, count: 9, tilt: 0.5, len: 3.8, width: 1.6 }, treeH: 11.5, seed: 41 });
+    return { wood, leaf, leafKind: 'frond', h: 11.5, crownY: 9, crownR: 3.4, trunkR: 0.3, trunkH: 10, shape: 'palm', density: 0.25 };
   },
   gorse: () => {
-    const parts = [];
     const clumps = [[0, 0.7, 0, 1.2], [0.9, 0.55, 0.3, 0.9], [-0.8, 0.6, -0.3, 0.95]];
-    clumps.forEach(([x, y, z, r], i) => parts.push(colorGeo(blobGeo(r, 1, i + 61, 0.7).translate(x, y, z), '#3a4f22', 0.2, i + 70)));
-    clumps.forEach(([x, y, z, r], i) => parts.push(colorGeo(blobGeo(r * 0.55, 0, i + 81, 0.6).translate(x + 0.2, y + r * 0.5, z), '#d9b92a', 0.15, i + 90)));
-    return { geo: merge(parts), h: 1.6, crownY: 0, crownR: 1.6, trunkR: 0, trunkH: 0, shape: 'ellipsoid', density: 1.2 };
+    return { wood: null, leaf: crownGeometry({ kind: 'gorse', clumps, treeH: 1.6, seed: 61 }), leafKind: 'gorse',
+      h: 1.6, crownY: 0, crownR: 1.6, trunkR: 0, trunkH: 0, shape: 'ellipsoid', density: 1.2 };
   },
   azalea: () => {
-    const parts = [];
-    const cols = ['#e0457b', '#c93a8f', '#f2f2f2', '#e86a9a'];
     const clumps = [[0, 0.8, 0, 1.2], [1.1, 0.6, 0.3, 0.9], [-1, 0.65, -0.3, 1]];
-    clumps.forEach(([x, y, z, r], i) => parts.push(colorGeo(blobGeo(r, 1, i + 101, 0.75).translate(x, y, z), cols[i % 4], 0.12, i + 110)));
-    return { geo: merge(parts), h: 1.8, crownY: 0, crownR: 1.6, trunkR: 0, trunkH: 0, shape: 'ellipsoid', density: 1.2 };
+    return { wood: null, leaf: crownGeometry({ kind: 'azalea', clumps, treeH: 1.8, seed: 101 }), leafKind: 'azalea',
+      h: 1.8, crownY: 0, crownR: 1.6, trunkR: 0, trunkH: 0, shape: 'ellipsoid', density: 1.2 };
   },
 };
 const treeProtos = {};
@@ -191,6 +224,11 @@ export class World {
     this.clock = 0;
     this.pmrem = new THREE.PMREMGenerator(renderer);
     this.initSkyAndLights();
+    // impact effects live outside the per-hole group so they survive rebuilds
+    this.fx = new Effects();
+    this.scene.add(this.fx.group);
+    // leaf materials are shared across holes (textures are painted once)
+    this.foliage = new Foliage();
   }
 
   initSkyAndLights() {
@@ -198,13 +236,14 @@ export class World {
     this.sky = new Sky();
     this.sky.scale.setScalar(20000);
     scene.add(this.sky);
-    this.hemi = new THREE.HemisphereLight(0xe4f1ff, 0x55683f, 0.95);
+    this.hemi = new THREE.HemisphereLight(0xe4f1ff, 0x55683f, 0.9);
     scene.add(this.hemi);
-    this.sun = new THREE.DirectionalLight(0xfff3e0, 2.6);
+    // late-afternoon sun: warm, with a tight shadow box around the action for crisp ball and tree shadows
+    this.sun = new THREE.DirectionalLight(0xffe6c2, 2.6);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
     const sc = this.sun.shadow.camera;
-    sc.left = -70; sc.right = 70; sc.top = 70; sc.bottom = -70; sc.near = 1; sc.far = 600;
+    sc.left = -50; sc.right = 50; sc.top = 50; sc.bottom = -50; sc.near = 1; sc.far = 600;
     this.sun.shadow.bias = -0.0004;
     this.sun.shadow.normalBias = 0.05;
     scene.add(this.sun);
@@ -230,19 +269,21 @@ export class World {
     if (this.envRT) this.envRT.dispose();
     this.envRT = this.pmrem.fromScene(skyScene);
     this.scene.environment = this.envRT.texture;
-    this.scene.environmentIntensity = 0.35;
+    this.scene.environmentIntensity = 0.5;
   }
 
   // Build a hole. Returns the Hole (physics/geometry) object.
   buildHole(course, index, opts = {}) {
     const t0 = performance.now();
     if (this.group) { this.disposeGroup(this.group); this.scene.remove(this.group); }
+    if (this.stripeTex) { this.stripeTex.dispose(); this.stripeTex = null; }
     this.group = new THREE.Group();
     this.scene.add(this.group);
     this.gridGroup = null;
     this.flow = null;
     const hole = new Hole(course.holes[index], course, index, opts);
     this.hole = hole;
+    this.fx.clear(hole, (x, z) => this.meshHeight(x, z));
     this.rnd = mulberry32(hole.seed + 1000);
     this.placeTrees(hole);
     this.buildTerrain(hole);
@@ -262,6 +303,7 @@ export class World {
       if (o.geometry) o.geometry.dispose();
       if (o.material) {
         const ms = Array.isArray(o.material) ? o.material : [o.material];
+        if (o.userData.shared) return; // material and map are owned by the World (foliage)
         for (const m of ms) { if (m.map && m.map !== detailTex) m.map.dispose(); m.dispose(); }
       }
     });
@@ -354,28 +396,39 @@ export class World {
     this.allTrees = trees;
   }
 
+  // two instanced meshes per type: wood (trunks) and leaf cards; both share the
+  // instance transforms, so a tree's crown always sits on its own trunk
   buildTreeMeshes() {
     const byType = {};
     for (const t of this.allTrees) (byType[t.type] ||= []).push(t);
-    const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
+    // Standard (not Lambert) so the sky environment fills the shadow side of a trunk
+    const woodMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 });
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
-    const col = new THREE.Color();
+    const col = new THREE.Color(), up = new THREE.Vector3(0, 1, 0);
     for (const [type, list] of Object.entries(byType)) {
       const pr = proto(type);
-      const mesh = new THREE.InstancedMesh(pr.geo, mat, list.length);
+      const { mat, depth } = this.foliage.material(pr.leafKind);
+      const meshes = [];
+      if (pr.wood) meshes.push(new THREE.InstancedMesh(pr.wood, woodMat, list.length));
+      const leaf = new THREE.InstancedMesh(pr.leaf, mat, list.length);
+      leaf.customDepthMaterial = depth; // leaf-shaped shadows
+      leaf.userData.shared = true;
+      leaf.userData.noAO = true; // see post.js: cards must stay out of the AO pre-pass
+      meshes.push(leaf);
       list.forEach((t, i) => {
-        q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), t.rot);
+        q.setFromAxisAngle(up, t.rot);
         s.setScalar(t.scale);
         p.set(t.x, t.y - 0.2, t.z);
         m4.compose(p, q, s);
-        mesh.setMatrixAt(i, m4);
         const v = 0.85 + ((t.rot * 1000) % 1) * 0.3;
         col.setRGB(v, v, v);
-        mesh.setColorAt(i, col);
+        for (const m of meshes) { m.setMatrixAt(i, m4); m.setColorAt(i, col); }
       });
-      mesh.castShadow = type !== 'gorse' && type !== 'azalea';
-      mesh.receiveShadow = true;
-      this.group.add(mesh);
+      for (const m of meshes) {
+        m.castShadow = type !== 'gorse' && type !== 'azalea';
+        m.receiveShadow = true;
+        this.group.add(m);
+      }
     }
   }
 
@@ -408,15 +461,28 @@ export class World {
     geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
     geo.setIndex(new THREE.BufferAttribute(idx, 1));
     geo.computeVertexNormals();
-    this.terrainGrid = { nx, nz, pos };
+    this.terrainGrid = { nx, nz, pos, minX: B.minX, minZ: B.minZ, sx: W / (nx - 1), sz: D / (nz - 1) };
 
     const tex = this.paintTexture(hole);
-    const mat = terrainMaterial(tex, hole.style.palette.dirt);
+    const dir = new THREE.Vector2(hole.cup.x - hole.tee.x, hole.cup.z - hole.tee.z).normalize();
+    const mat = terrainMaterial(tex, hole.style.palette.dirt, this.stripeTex, dir);
     const mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true;
     mesh.name = 'terrain';
     this.group.add(mesh);
     this.terrain = mesh;
+  }
+
+  // height of the rendered terrain mesh (triangle-interpolated), so decals sit exactly on it
+  meshHeight(x, z) {
+    const G = this.terrainGrid;
+    if (!G) return this.hole ? this.hole.height(x, z) : 0;
+    const fx = Math.min(Math.max((x - G.minX) / G.sx, 0), G.nx - 1.0001), fz = Math.min(Math.max((z - G.minZ) / G.sz, 0), G.nz - 1.0001);
+    const i = Math.floor(fx), j = Math.floor(fz), u = fx - i, v = fz - j;
+    const H = (ii, jj) => G.pos[(jj * G.nx + ii) * 3 + 1];
+    const ha = H(i, j), hb = H(i + 1, j), hc = H(i, j + 1), hd = H(i + 1, j + 1);
+    // same split as the index buffer: (a, c, b) below the diagonal, (b, c, d) above
+    return u + v <= 1 ? ha + (hb - ha) * u + (hc - ha) * v : hd + (hc - hd) * (1 - u) + (hb - hd) * (1 - v);
   }
 
   paintTexture(hole) {
@@ -432,7 +498,9 @@ export class World {
     const col = {
       fw: [hex(P.fairway[0]), hex(P.fairway[1])], cut: hex(P.cut), second: hex(P.second || P.rough), rough: hex(P.rough), deep: hex(P.deep),
       green: [hex(P.green[0]), hex(P.green[1])], fringe: hex(P.fringe), bunker: hex(P.bunker), waste: hex(P.waste), straw: hex(P.straw),
-      tee: [hex(P.tee[0]), hex(P.tee[1])], dirt: hex(P.dirt), path: hex(P.path), strawDark: mix3(hex(P.straw), [40, 25, 12], 0.35), strawLight: mix3(hex(P.straw), [220, 180, 120], 0.3), water: hex(P.water), mud: [70, 80, 60], rock: [120, 112, 98], sand: hex(hole.style.sand || '#e8dcb8'),
+      tee: [hex(P.tee[0]), hex(P.tee[1])], dirt: hex(P.dirt),
+      // stripes: push the palette pair apart so the mow pattern reads from the address camera
+      fwDark: mix3(hex(P.fairway[0]), [0, 0, 0], 0.07), fwLight: mix3(hex(P.fairway[1]), [255, 255, 255], 0.07), path: hex(P.path), strawDark: mix3(hex(P.straw), [40, 25, 12], 0.35), strawLight: mix3(hex(P.straw), [220, 180, 120], 0.3), water: hex(P.water), mud: [70, 80, 60], rock: [120, 112, 98], sand: hex(hole.style.sand || '#e8dcb8'),
     };
     const st = hole.style;
     const roughKind = st.roughType || 'rough';
@@ -459,8 +527,8 @@ export class World {
         // fairway with mowing stripes
         if (fsd < 0.6) {
           // soft-edged stripes: the mower's light/dark passes blend over ~1 m
-          const sv = smooth(0.3, 0.7, 0.5 + 0.5 * Math.sin((pr.s / 9.5) * Math.PI));
-          let fc = mix3(col.fw[0], col.fw[1], sv);
+          const sv = stripePhase(pr.s);
+          let fc = mix3(col.fwDark, col.fwLight, sv);
           if (st.crossMow) fc = mix3(fc, mix3(col.fw[0], col.fw[1], smooth(0.3, 0.7, 0.5 + 0.5 * Math.sin(((pr.o + 200) / 14) * Math.PI))), 0.3);
           c3 = mix3(c3, fc, 1 - smooth(-0.3, 0.3, fsd));
         }
@@ -538,6 +606,22 @@ export class World {
     }
     g.globalCompositeOperation = 'source-over';
     this.textureCanvas = c;
+    // stripe phase at ~1 m, for the view-dependent sheen in terrainMaterial (128 = no stripe)
+    const sw = Math.min(1024, Math.ceil(W)), sh = Math.min(1024, Math.ceil(D));
+    const sdata = new Uint8Array(sw * sh).fill(128);
+    for (let j = 0; j < sh; j++) {
+      const z = B.minZ + ((j + 0.5) / sh) * D;
+      for (let i = 0; i < sw; i++) {
+        const x = B.minX + ((i + 0.5) / sw) * W;
+        const pr = hole.project(x, z);
+        const fsd = hole.fairwaySdf(x, z, pr);
+        if (fsd < 0.6) sdata[j * sw + i] = Math.round(128 + (stripePhase(pr.s) - 0.5) * 254 * (1 - smooth(-0.3, 0.3, fsd)));
+      }
+    }
+    const stripeTex = new THREE.DataTexture(sdata, sw, sh, THREE.RedFormat, THREE.UnsignedByteType);
+    stripeTex.minFilter = stripeTex.magFilter = THREE.LinearFilter;
+    stripeTex.needsUpdate = true;
+    this.stripeTex = stripeTex;
     const hc = document.createElement('canvas');
     hc.width = tw; hc.height = th;
     hc.getContext('2d').putImageData(hz, 0, 0);
@@ -820,12 +904,12 @@ export class World {
           add(b, q.x, q.z, faceAng);
         }
       } else if (p.type === 'wall') {
-        const m = new THREE.Mesh(new THREE.BoxGeometry(p.len || 40, 1.4, 0.6), new THREE.MeshLambertMaterial({ color: '#8a8378' }));
+        const m = new THREE.Mesh(new THREE.BoxGeometry(p.len || 40, 1.4, 0.6), propMaterial('#8a8378'));
         const g = new THREE.Group(); g.add(m); m.position.y = 0.7;
         add(g, w.x, w.z, Math.atan2(hole.gf.fx, hole.gf.fz) + Math.PI / 2 - 0.4);
       } else if (p.type === 'bridge') {
         const g = new THREE.Group();
-        const mat = new THREE.MeshLambertMaterial({ color: '#9d9588' });
+        const mat = propMaterial('#9d9588');
         const arch = new THREE.Mesh(new THREE.TorusGeometry(3.2, 0.9, 6, 16, Math.PI), mat);
         arch.scale.set(1, 0.55, 1.8);
         g.add(arch);
@@ -836,9 +920,9 @@ export class World {
   }
   building(w, h, d, wall, roof) {
     const g = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color: wall }));
+    const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), propMaterial(wall));
     body.position.y = h / 2;
-    const r = new THREE.Mesh(new THREE.CylinderGeometry(0.01, d * 0.72, h * 0.35, 4, 1).rotateY(Math.PI / 4).scale(w / d, 1, 1), new THREE.MeshLambertMaterial({ color: roof }));
+    const r = new THREE.Mesh(new THREE.CylinderGeometry(0.01, d * 0.72, h * 0.35, 4, 1).rotateY(Math.PI / 4).scale(w / d, 1, 1), propMaterial(roof));
     r.position.y = h + h * 0.175;
     g.add(body, r);
     // windows
@@ -977,6 +1061,8 @@ export class World {
   // ------------------------------------------------------------ per-frame
   update(dt, wind, focus) {
     this.clock += dt;
+    this.fx.update(dt);
+    this.foliage.update(dt, wind);
     // water ripple
     for (const m of this.waterMats || []) {
       if (m.normalMap) { m.normalMap.offset.x = this.clock * 0.01; m.normalMap.offset.y = this.clock * 0.006; }
