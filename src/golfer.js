@@ -197,11 +197,16 @@ export class Golfer {
       }
       this.arms.push({ sh, upper, fore, s });
     }
-    // club: attached to a "hands" pivot driven directly (arms aim at it)
+    // club: the "hands" pivot sits at the butt of the grip, in the body frame; the arms
+    // reach for it with two-bone IK each frame
     this.hands = new THREE.Group();
-    this.chest.add(this.hands);
+    this.body.add(this.hands);
     this.club = new THREE.Group();
     this.hands.add(this.club);
+    this.groundY = 0;  // ground under the ball, relative to the feet (body frame)
+    this.bendAdj = 0;  // extra bend over a ball below the feet
+    this.bendX = 0;    // extra bend so the hands reach a short club
+    this.tiltX = 0;    // extra shoulder tilt so the trail hand reaches
     this.setClub({ loft: 30 });
 
     this.pose = 0;
@@ -209,7 +214,6 @@ export class Golfer {
     this.t = 0;
     this.idleT = 0;
     this.onImpact = null;
-    this.putting = false;
   }
 
   setOutfit(i) {
@@ -224,41 +228,79 @@ export class Golfer {
     const putter = !!club.putter;
     const wood = club.loft && club.loft <= 20 && !putter;
     const len = putter ? 0.86 : wood ? 1.1 : 0.95 - (club.loft - 20) * 0.003;
+    // club local frame: +y runs up the shaft to the butt (the origin) and the head is at
+    // -len, in its own group whose sole lies flat at the group's y = 0
     const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.011, len, 6), this.shaftMat);
     shaft.position.y = -len / 2;
     shaft.castShadow = true;
     this.club.add(shaft);
     const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.013, 0.26, 8), new THREE.MeshStandardMaterial({ color: '#222' }));
-    grip.position.y = -0.1;
+    grip.position.y = -0.13;
     this.club.add(grip);
-    let head;
-    if (putter) head = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.03, 0.03), this.headMat);
-    else if (wood) head = new THREE.Mesh(new THREE.SphereGeometry(0.055, 14, 10).scale(1.1, 0.6, 1), new THREE.MeshStandardMaterial({ color: '#1e1f22', metalness: 0.6, roughness: 0.3 }));
-    else head = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 0.012), this.headMat);
-    head.position.set(putter ? 0.04 : 0.03, -len, 0);
+    const headG = new THREE.Group();
+    headG.position.y = -len;
+    this.club.add(headG);
+    let head, sweet, depth;
+    if (putter) {
+      head = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.026, 0.03), this.headMat);
+      head.position.set(0.045, 0.013, 0); sweet = 0.045; depth = 0.03;
+    } else if (wood) {
+      head = new THREE.Mesh(new THREE.SphereGeometry(0.055, 14, 10).scale(1.1, 0.6, 1), new THREE.MeshStandardMaterial({ color: '#1e1f22', metalness: 0.6, roughness: 0.3 }));
+      head.position.set(0.05, 0.033, 0.01); sweet = 0.05; depth = 0.1;
+    } else {
+      head = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.05, 0.012), this.headMat);
+      head.position.set(0.035, 0.025, 0); sweet = 0.035; depth = 0.012;
+    }
     head.castShadow = true;
-    this.club.add(head);
+    headG.add(head);
     this.clubHead = head;
+    this.headG = headG;
+    this.sweet = new THREE.Vector3(sweet, 0, 0); // middle of the sole, in the head group
+    this.headDepth = depth;
     this.clubLen = len;
     this.putting = putter;
+    // address geometry: lie (shaft angle from the ground, degrees), spine bend, how far
+    // the hands sit ahead of the head
+    this.lie = putter ? 71 : wood ? 50 : 58 + Math.min(40, Math.max(0, club.loft - 20)) * 0.12;
+    this.bend = putter ? 0.8 : wood ? 0.62 : 0.72;
+    this.handsAhead = putter ? 0.02 : wood ? 0.0 : 0.06;
+    this.calibrate();
   }
 
-  // Place at the ball, facing the target direction (unit x,z)
-  place(ball, dir, y) {
+  // Place at the ball, facing the target direction (unit x,z). `y` is the ground under
+  // the ball; heightAt(x, z), when given, stands the feet on the slope too.
+  place(ball, dir, y, heightAt = null) {
     this.root.position.set(ball.x, y, ball.z);
     this.root.rotation.y = Math.atan2(-dir.x, -dir.z); // local -z -> dir
     // body stands to the left of the ball, facing +x (local) toward the ball
     const stance = this.putting ? 0.62 : 0.55 + this.clubLen * 0.35;
     this.body.position.set(-stance, 0, 0);
     this.body.rotation.y = Math.PI / 2; // body's +z (face) points to local +x (the ball)
-    this.apply(0);
-    // shuffle the feet so the clubhead soles right behind the ball
+    const tmp = new THREE.Vector3();
+    const phase = this.phase;
+    this.phase = 'idle'; // the address pose, whatever the last swing left behind
+    for (let it = 0; it < 3; it++) {
+      // feet on their own ground; the address re-solves so the sole still rests at the ball
+      let dy = 0;
+      if (heightAt) {
+        this.root.updateMatrixWorld(true);
+        const f = this.body.getWorldPosition(tmp);
+        dy = Math.max(-0.18, Math.min(0.18, heightAt(f.x, f.z) - y));
+      }
+      this.body.position.y = dy;
+      this.groundY = -dy;
+      this.bendAdj = Math.max(-0.12, Math.min(0.22, dy * 1.4));
+      this.calibrate();
+      this.apply(0);
+      // shuffle so the middle of the sole rests just behind the ball
+      this.root.updateMatrixWorld(true);
+      const hp = this.headG.localToWorld(this.sweet.clone());
+      this.root.worldToLocal(hp);
+      this.body.position.x -= hp.x;
+      this.body.position.z -= hp.z - (0.0214 + this.headDepth / 2 + 0.004);
+    }
+    this.phase = phase;
     this.root.updateMatrixWorld(true);
-    const hp = this.clubHead.getWorldPosition(new THREE.Vector3());
-    this.root.worldToLocal(hp);
-    this.body.position.x -= hp.x;
-    this.body.position.z -= hp.z - 0.03;
-    this.headDrop = hp.y; // < 0: clubhead below the ground at address
   }
 
   // Swing timeline: 'back' (0..1 of backswing at given power) -> 'down' -> 'through'
@@ -268,7 +310,6 @@ export class Golfer {
     this.power = Math.max(0.25, Math.min(1.1, power));
     this.onImpact = onImpact;
   }
-  // Pose parameter: 0 = address, -1 = top of backswing, +1 = finish.
   // Slide the pelvis and torso sideways (body +x is the target side) while the
   // feet stay planted: the legs lean to follow and the shoes stay flat.
   setShift(dx) {
@@ -282,76 +323,186 @@ export class Golfer {
     }
   }
 
-  apply(p) {
+  // Torso, legs and head for pose p (0 address, -1 top, +1 finish). `f` is how far
+  // through the downswing we are (null outside it): the hips lead the way down.
+  poseBody(p, f = null) {
     const put = this.putting;
     const bw = Math.max(0, -p), fw = Math.max(0, p);
-    const amp = put ? 0.18 : 1;
-    // weight: loads a touch onto the trail side going back, drives onto the lead leg through
-    this.setShift(put ? 0 : (-bw * 0.03 + fw * 0.1));
-    // spine tilt (bend over the ball) and rotation; posture only rises once the arms are past the ball
-    const bend = put ? 0.62 : 0.5;
-    const upright = put ? 0 : smooth(0.1, 0.95, fw);
-    this.spine.rotation.set(bend * (1 - upright * 0.92), 0, 0);
-    const turn = put ? 0 : (-bw * 1.45 + fw * 1.6);
+    const swinging = f !== null || this.phase === 'through' || this.phase === 'hold';
+    let shift = -bw * 0.03 + fw * 0.1;
+    if (f !== null) shift = -bw * 0.03 + 0.07 * smooth(0, 0.7, f);
+    else if (swinging) shift = 0.07 + fw * 0.03;
+    this.setShift(put ? 0 : shift);
+    // spine bent over the ball; posture only rises once the arms are well past it
+    const bend = this.bend + this.bendAdj + this.bendX;
+    const upright = put ? 0 : smooth(0.15, 0.95, fw);
+    this.spine.rotation.set(bend * (1 - upright * 0.8), 0, 0);
+    // shoulders turn ~90° going back and face the target at the finish
+    const turn = put ? 0 : (-bw * 1.5 + fw * 1.65);
     this.spine.rotation.y = turn * 0.95;
-    this.chest.rotation.y = turn * 0.25;
-    this.chest.rotation.z = put ? 0 : (-bw * 0.12 + fw * 0.15);
-    this.hips.rotation.y = put ? 0 : (-bw * 0.6 + fw * 1.4);
-    // head: stays down on the ball through impact and comes up late, behind the ball
-    const lift = put ? 0 : smooth(0.45, 0.9, fw);
-    this.head.rotation.x = -0.25 * (1 - lift) + 0.1 * lift;
-    this.head.rotation.y = -turn * 0.7 * (1 - lift * 0.55);
+    // the trail shoulder sits lower at address (the trail hand is lower on the grip): the
+    // shoulder line tilts about the line from the chest to the ball
+    const tilt = this.tiltX + (put ? 0.04 : 0.12 - bw * 0.1 + fw * 0.05);
+    const qs = this.spine.quaternion;
+    _q.setFromAxisAngle(_z, tilt);
+    this.chest.quaternion.copy(qs).invert().multiply(_q).multiply(qs).multiply(_q2.setFromAxisAngle(_y, turn * 0.05));
+    // hips: a half turn going back; in the downswing they unwind first and are open at impact
+    let hip = -bw * 0.75 + fw * 1.5;
+    if (f !== null) hip = -bw * 0.75 * (1 - smooth(0, 0.5, f)) + 0.45 * smooth(0.15, 1, f);
+    else if (swinging) hip = 0.45 + fw * 1.05;
+    this.hips.rotation.y = put ? 0 : hip;
+    // head: stays down on the ball through impact and comes up late
+    const lift = put ? 0 : smooth(0.4, 0.9, fw);
+    this.head.rotation.x = -0.35 * (1 - lift) + 0.1 * lift;
+    this.head.rotation.y = -turn * 0.75 * (1 - lift * 0.5);
     this.head.rotation.z = put ? 0 : (bw * 0.08 + fw * 0.12 * (1 - lift));
     for (const L of this.legs) {
       const lead = L.s > 0;
-      L.thigh.rotation.x = -0.25;
+      L.thigh.rotation.x = -0.28;
       L.thigh.rotation.y = 0;
-      L.shin.rotation.x = 0.35;
+      L.shin.rotation.x = 0.4;
       L.foot.rotation.x = 0;
       if (put) continue;
       if (lead) {
-        // posts up straight at the finish
-        L.thigh.rotation.x = -0.25 + fw * 0.2;
-        L.shin.rotation.x = 0.35 - fw * 0.3;
+        // the lead knee flexes in going back, then posts up straight at the finish
+        L.thigh.rotation.y = -bw * 0.25;
+        L.thigh.rotation.x = -0.28 + fw * 0.24;
+        L.shin.rotation.x = 0.4 + bw * 0.1 - fw * 0.35;
       } else {
         // trail knee kicks in toward the target and the heel comes up onto the toe
-        L.thigh.rotation.x = -0.25 - fw * 0.15 + bw * 0.03;
+        L.thigh.rotation.x = -0.28 - fw * 0.15 + bw * 0.04;
         L.thigh.rotation.y = fw * 0.6;
-        L.shin.rotation.x = 0.35 + fw * 0.65;
+        L.shin.rotation.x = 0.4 + fw * 0.6;
         L.foot.rotation.x = fw * 0.95;
       }
     }
-    // hands: arc in the chest's local frame; angle 0 = down at the ball
-    const swingA = put ? (bw ? -bw * amp : fw * amp) : (bw ? -bw * 2.6 : fw * 3.4);
-    // the arms fold at the finish so the hands end by the lead ear, not straight overhead
-    const armLen = 0.58 * (1 - 0.42 * smooth(1.7, 3.2, swingA));
-    const hx = Math.sin(swingA) * armLen * 0.95;
-    const hy = -Math.cos(swingA) * armLen - 0.02;
-    const hz = 0.1 + (put ? 0.04 : 0) - Math.abs(Math.sin(swingA)) * 0.08;
-    // the arms hang from the shoulders under gravity, so undo the spine's forward bend
-    const b = this.spine.rotation.x;
-    const cb = Math.cos(b), sb = Math.sin(b);
-    this.hands.position.set(hx, hy * cb + hz * sb, -hy * sb + hz * cb);
-    // wrist hinge: set early going back, held through the downswing, then released
-    // late into the ball (the snap), with the club wrapping round at the finish
-    const cock = 1.35 * smooth(0.02, 0.45, bw);
-    const release = -0.7 * smooth(0, 0.16, fw) * (1 - 0.3 * smooth(0.55, 1, fw));
-    const hinge = put ? 0 : cock + release;
-    this.hands.rotation.set(0, 0, 0);
-    this.hands.rotation.z = swingA - hinge;
-    const shaftLean = put ? 0.3 : 0.62 + (this.clubLen - 0.95) * 0.9; // shaft angle from vertical at address
-    this.hands.rotation.x = -(shaftLean + b) * (1 - Math.abs(Math.sin(swingA)) * 0.45);
-    // arms point at the hands
-    const tmp = new THREE.Vector3();
-    for (const A of this.arms) {
-      tmp.copy(this.hands.position).sub(A.sh.position);
-      const dist = tmp.length();
-      A.sh.quaternion.setFromUnitVectors(new THREE.Vector3(0, -1, 0), tmp.clone().normalize());
-      const bendElbow = Math.acos(Math.min(1, dist / 0.6)) * 2;
-      A.upper.rotation.set(0, 0, 0);
-      A.upper.rotation.x = -bendElbow * 0.5;
-      A.fore.rotation.x = bendElbow;
+  }
+
+  // Body-frame shoulder positions (trail, lead) for the torso as currently posed.
+  shoulders() {
+    this.spine.updateMatrix();
+    this.chest.updateMatrix();
+    return this.arms.map((A) => { A.sh.updateMatrix(); return A.sh.position.clone().applyMatrix4(this.chest.matrix).applyMatrix4(this.spine.matrix); });
+  }
+
+  // Address: the lead arm hangs almost straight from the shoulder and the shaft runs
+  // from the hands down to the ground at the club's lie, so the sole rests on the turf.
+  calibrate() {
+    // bend over further (short clubs) until the lead hand reaches the grip low enough,
+    // and drop the trail shoulder until the trail hand reaches its spot below it
+    this.bendX = 0;
+    this.tiltX = 0;
+    const phase = this.phase;
+    this.phase = 'idle';
+    const l = this.clubLen - GRIP_LEAD; // lead hand to the sole
+    const lie = this.lie * Math.PI / 180, lean = this.handsAhead;
+    const reach = this.putting ? 0.575 : 0.59; // lead arm nearly straight in a full swing
+    let S;
+    for (let it = 0; it < 24; it++) {
+      this.poseBody(0);
+      S = this.shoulders();
+      const lead = S[LEAD], trail = S[TRAIL];
+      const H = new THREE.Vector3(lean, this.groundY + l * Math.sin(lie), 0);
+      const dx = H.x - lead.x, dy = H.y - lead.y;
+      if (dx * dx + dy * dy > reach * reach - 0.012 && this.bendX < 0.45) { this.bendX += 0.025; continue; }
+      H.z = lead.z + Math.sqrt(Math.max(0.0025, reach * reach - dx * dx - dy * dy));
+      const drop = H.y - this.groundY;
+      const horiz = Math.sqrt(Math.max(0.01, l * l - lean * lean - drop * drop));
+      const C = new THREE.Vector3(-lean, -drop, horiz).normalize();
+      this.H0 = H;
+      this.C0 = C;
+      // sole flat at address: tilt the head by the shaft's actual lie
+      this.headG.rotation.z = -(Math.PI / 2 - Math.atan2(drop, Math.hypot(horiz, lean)));
+      const T = H.clone().addScaledVector(C, GRIP_TRAIL - GRIP_LEAD);
+      if (T.distanceTo(trail) > REACH && this.tiltX < 0.3) { this.tiltX += 0.02; continue; }
+      break;
     }
+    this.hub = S[0].clone().add(S[1]).multiplyScalar(0.5);
+    this.phase = phase;
+  }
+
+  // Club pose for p: lead-hand grip point H and shaft direction C (hands → head) in the
+  // body frame, plus a reference for the face. The full swing follows keyframes; the
+  // downswing holds the wrist cock ("lag") until late and releases it into the ball.
+  clubPose(p, f) {
+    const H = new THREE.Vector3(), C = new THREE.Vector3(), F = new THREE.Vector3();
+    if (this.putting) {
+      // pendulum: the arms-and-club triangle rocks about the point between the shoulders
+      const arm = this.H0.clone().sub(this.hub);
+      const axis = new THREE.Vector3(1, 0, 0).cross(arm).normalize();
+      const q = new THREE.Quaternion().setFromAxisAngle(axis, -p * PUTT_ARC);
+      H.copy(arm).applyQuaternion(q).add(this.hub);
+      C.copy(this.C0).applyQuaternion(q);
+      F.set(1, 0, 0).applyQuaternion(q);
+      return { H, C, F };
+    }
+    spline(H_KEYS, p, H).add(this.H0);
+    C_KEYS[4] = this.C0;
+    spline(C_KEYS, p, C).normalize();
+    spline(F_KEYS, p, F);
+    if (f !== null && p < 0) {
+      // lag: keep the angle between the arms and the shaft from the top until ~half way
+      // down, then fire it out so the shaft is back in line at impact
+      const top = Math.max(-1, -this.power);
+      const armTop = spline(H_KEYS, top, new THREE.Vector3()).add(this.H0).sub(this.hub);
+      const angTop = armTop.angleTo(spline(C_KEYS, top, new THREE.Vector3()));
+      const arm = H.clone().sub(this.hub);
+      const extra = Math.max(0, angTop - arm.angleTo(C)) * (1 - smooth(0.5, 0.97, f));
+      if (extra > 1e-4) {
+        const k = arm.cross(C).normalize();
+        C.applyAxisAngle(k, extra);
+        F.applyAxisAngle(k, extra);
+      }
+    }
+    return { H, C, F };
+  }
+
+  apply(p, f = null) {
+    this.poseBody(p, f);
+    const { H, C, F } = this.clubPose(p, f);
+    if (this.putting) this.rock(p);
+    // the hands travel with the weight shift while the head keeps to its arc, which
+    // leans the shaft toward the target through impact
+    const L = this.clubLen - GRIP_LEAD;
+    const headP = H.clone().addScaledVector(C, L);
+    H.x += this.hips.position.x;
+    C.copy(headP).sub(H).normalize();
+    // the arms are only so long: pull the club in toward any shoulder it has run away from
+    const S = this.shoulders();
+    for (let it = 0; it < 3; it++) {
+      for (let i = 0; i < 2; i++) {
+        const T = H.clone().addScaledVector(C, i === LEAD ? 0 : GRIP_TRAIL - GRIP_LEAD);
+        const d = T.distanceTo(S[i]);
+        if (d > REACH) H.addScaledVector(S[i].clone().sub(T), (d - REACH) / d);
+      }
+    }
+    // the club: butt just above the lead hand, shaft along C, face toward F
+    const y = C.clone().negate();
+    const x = new THREE.Vector3().crossVectors(F, y);
+    if (x.lengthSq() < 1e-6) x.set(0, 0, 1);
+    x.normalize();
+    const z = new THREE.Vector3().crossVectors(x, y);
+    this.hands.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+    this.hands.position.copy(H).addScaledVector(C, -GRIP_LEAD);
+    // arms: two-bone IK from each shoulder to its hand on the grip
+    const qChest = this.spine.quaternion.clone().multiply(this.chest.quaternion);
+    for (let i = 0; i < 2; i++) {
+      const T = H.clone().addScaledVector(C, i === LEAD ? 0 : GRIP_TRAIL - GRIP_LEAD);
+      ik(this.arms[i], S[i], T, qChest);
+    }
+  }
+
+  // Putting: the shoulders rock with the pendulum so the arms-and-club triangle stays
+  // fixed, while the head stays still over the ball.
+  rock(p) {
+    const arm = this.H0.clone().sub(this.hub);
+    const axis = new THREE.Vector3(1, 0, 0).cross(arm).normalize();
+    const q = new THREE.Quaternion().setFromAxisAngle(axis, -p * PUTT_ARC);
+    const qs = this.spine.quaternion;
+    const chestB = qs.clone().multiply(this.chest.quaternion);  // chest in the body frame
+    const headB = chestB.clone().multiply(this.head.quaternion);
+    this.chest.quaternion.copy(qs).invert().multiply(q).multiply(chestB);
+    this.head.quaternion.copy(q.multiply(chestB)).invert().multiply(headB);
   }
 
   update(dt) {
@@ -366,7 +517,7 @@ export class Golfer {
     }
     const put = this.putting;
     const backDur = put ? 0.55 + this.power * 0.25 : 0.95;
-    const downDur = put ? 0.35 : 0.28;
+    const downDur = put ? 0.35 : 0.3;
     const thruDur = put ? 0.6 : 0.9;
     this.t += dt;
     if (this.phase === 'back') {
@@ -375,7 +526,7 @@ export class Golfer {
       if (k >= 1) { this.phase = 'down'; this.t = 0; }
     } else if (this.phase === 'down') {
       const k = Math.min(1, this.t / downDur);
-      this.apply(-this.power * (1 - k * k));
+      this.apply(-this.power * (1 - k * k), put ? null : k);
       if (k >= 1) {
         this.phase = 'through'; this.t = 0;
         const cb = this.onImpact; this.onImpact = null;
@@ -389,3 +540,66 @@ export class Golfer {
     }
   }
 }
+
+const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion();
+const _y = new THREE.Vector3(0, 1, 0), _z = new THREE.Vector3(0, 0, 1);
+// grip: lead hand 5 cm below the butt, trail hand just below it
+const GRIP_LEAD = 0.05, GRIP_TRAIL = 0.14;
+const UPPER = 0.3, FORE = 0.3, REACH = 0.595;
+const TRAIL = 0, LEAD = 1; // this.arms order (built for s = -1, then +1)
+const PUTT_ARC = 0.42; // shoulder rock (rad) for a full-power putt
+const POLE = new THREE.Vector3(0, -1, -0.35).normalize(); // elbows point down and back at the hips
+
+// Two-bone arm IK in the body frame: shoulder S to hand target T, the elbow bending
+// toward the pole. Sets the shoulder and forearm rotations (the upper arm stays identity).
+function ik(A, S, T, qChest) {
+  const d = T.clone().sub(S);
+  const dist = Math.min(Math.max(d.length(), 0.08), UPPER + FORE - 1e-4);
+  const u = d.normalize();
+  const a1 = (dist * dist + UPPER * UPPER - FORE * FORE) / (2 * dist);
+  const h = Math.sqrt(Math.max(0, UPPER * UPPER - a1 * a1));
+  const side = POLE.clone().addScaledVector(u, -POLE.dot(u));
+  if (side.lengthSq() < 1e-6) side.set(0, 0, -1).addScaledVector(u, -u.z);
+  side.normalize();
+  const E = S.clone().addScaledVector(u, a1).addScaledVector(side, h);
+  const W = S.clone().addScaledVector(u, dist);
+  const n = new THREE.Vector3().crossVectors(u, side).normalize(); // elbow hinge axis
+  const basis = (from, to) => {
+    const y = from.clone().sub(to).normalize(); // limbs hang along their local -y
+    const x = n.clone().addScaledVector(y, -n.dot(y)).normalize();
+    const z = new THREE.Vector3().crossVectors(x, y);
+    return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(x, y, z));
+  };
+  const qU = basis(S, E), qF = basis(E, W);
+  A.sh.quaternion.copy(qChest).invert().multiply(qU);
+  A.upper.quaternion.identity();
+  A.fore.quaternion.copy(qU).invert().multiply(qF);
+}
+
+// Uniform Catmull-Rom through the 9 keys at p = -1, -0.75, ..., 1.
+function spline(keys, p, out) {
+  const u = (Math.max(-1, Math.min(1, p)) + 1) / 0.25;
+  const i = Math.min(keys.length - 2, Math.floor(u)), t = u - i;
+  const k0 = keys[Math.max(0, i - 1)], k1 = keys[i], k2 = keys[i + 1], k3 = keys[Math.min(keys.length - 1, i + 2)];
+  const t2 = t * t, t3 = t2 * t;
+  const w0 = -0.5 * t3 + t2 - 0.5 * t, w1 = 1.5 * t3 - 2.5 * t2 + 1, w2 = -1.5 * t3 + 2 * t2 + 0.5 * t, w3 = 0.5 * t3 - 0.5 * t2;
+  return out.set(0, 0, 0).addScaledVector(k0, w0).addScaledVector(k1, w1).addScaledVector(k2, w2).addScaledVector(k3, w3);
+}
+
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+// Full-swing keys at p = -1 (top), -0.75, -0.5, -0.25, 0 (address / impact), 0.25, 0.5,
+// 0.75, 1 (finish), in the body frame (+x target, +y up, +z toward the ball): the lead
+// hand's offset from address, the shaft direction (hands → head) and a face reference.
+// The address shaft (index 4) comes from the club's lie.
+const H_KEYS = [
+  V(-0.3, 0.92, -0.36), V(-0.42, 0.74, -0.24), V(-0.5, 0.42, -0.1), V(-0.34, 0.08, -0.02), V(0, 0, 0),
+  V(0.34, 0.1, -0.04), V(0.48, 0.45, -0.16), V(0.36, 0.82, -0.34), V(0.18, 0.92, -0.46),
+];
+const C_KEYS = [
+  V(1, 0.05, -0.2), V(0.55, 0.75, -0.15), V(0.05, 1, 0.05), V(-1, 0.12, 0.25), V(0, -1, 0),
+  V(1, -0.2, 0.35), V(0.05, 1, 0.1), V(-0.7, 0.6, -0.3), V(-0.6, -0.35, -0.7),
+];
+const F_KEYS = [
+  V(0, 0.7, 0.7), V(0, 0.3, 1), V(0, 0, 1), V(-0.1, 0.4, 1), V(1, 0, 0),
+  V(0.1, 0.4, -1), V(0, 0, -1), V(0, 0.3, -1), V(0, 0.6, -0.8),
+];

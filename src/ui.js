@@ -720,7 +720,7 @@ export class UI {
         <ol><li>Hold the left mouse button and pull <b>down</b> – that's the backswing length.</li><li>Push <b>up</b> past the start point to swing. A smooth, quick push gives full power.</li><li>Drifting left or right opens/closes the face; the stroke direction sets the club path.</li></ol>
         <p class="muted small">Gamepad: the right stick does the same – pull back, then push up.</p></div>
       <div><h3>Shot setup</h3>
-        <ul><li><b>${k('aimLeft')} ${k('aimRight')}</b> aim, <b>${k('aimFine')}</b> for fine aim. <b>${k('aimPin')}</b> re-aims at the pin. Click the mini-map, or press <b>${k('targetView')}</b> and click the ground.</li>
+        <ul><li><b>${k('aimLeft')} ${k('aimRight')}</b> aim, <b>${k('aimFine')}</b> for fine aim. <b>${k('aimPin')}</b> re-aims at the pin (on the green it flips between the caddie's read and the cup). Click the mini-map, or press <b>${k('targetView')}</b> and click the ground.</li>
         <li><b>${k('clubUp')} ${k('clubDown')}</b> change club. Carry / total distances are shown for a full swing.</li>
         <li><b>${k('shapeLeft')} / ${k('shapeRight')}</b> draw or fade: the club path is set in-to-out or out-to-in with the face between them (the D-plane).</li>
         <li><b>${k('trajUp')} / ${k('trajDown')}</b> high or low trajectory.</li>

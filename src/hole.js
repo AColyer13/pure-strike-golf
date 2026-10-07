@@ -12,6 +12,8 @@ import { clamp, smooth, lerp } from './util.js';
 
 export const YD = 0.9144;
 export const FT = 0.3048;
+// width (m) of the fringe collar around the green
+const FRINGE = 1.3;
 
 // ---------------------------------------------------------------- noise
 function hash(i, j, seed) {
@@ -158,6 +160,24 @@ export class Hole {
       const f = this.dirAt(s * YD);
       addB(w, rx, ry, { base: Math.atan2(-f.x, f.z) , deg: rot }, kind, kind === 'pot' ? 1.6 : kind === 'waste' ? 0.25 : 0.8, i + 20);
     });
+    // a bunker drawn over the edge of the green slides back out until its sand clears
+    // the fringe collar (sand on the putting surface can't be putted through)
+    const GAP = FRINGE + 0.7;
+    for (const k of this.bunkers) {
+      for (let it = 0; it < 12; it++) {
+        let m = 99;
+        for (let j = 0; j < 48; j++) {
+          const th = (j / 48) * Math.PI * 2;
+          const w = 1 + k.a1 * Math.sin(2 * th + k.p1) + k.a2 * Math.sin(3 * th + k.p2) + k.a3 * Math.sin(5 * th + k.p3);
+          const u = w * Math.cos(th) * k.rx, v = w * Math.sin(th) * k.ry;
+          m = Math.min(m, this.greenSdf(k.cx + u * k.c - v * k.s, k.cz + u * k.s + v * k.c));
+        }
+        if (m >= GAP - 0.05) break;
+        const ox = k.cx - this.gf.x, oz = k.cz - this.gf.z, ol = Math.hypot(ox, oz) || 1;
+        k.cx += (ox / ol) * (GAP - m);
+        k.cz += (oz / ol) * (GAP - m);
+      }
+    }
 
     // base elevation profile (feet, along s) sampled into a smooth field
     const elev = d.elev || [[0, 0], [d.yds, 0]];
@@ -209,16 +229,45 @@ export class Hole {
 
     // green pad height and pin
     this.greenBase = this.baseHeight(this.gf.x, this.gf.z) + (gd.raise || 0) * FT;
+    this.stimp = (this.course.stimp || 11) * (d.stimpMul || 1);
+    this.greenRoll = stimpToRoll(this.stimp);
     const pins = gd.pins || [[0, 0]];
     const pi = opts.pinIndex != null ? opts.pinIndex % pins.length : 0;
     const pw = this.gToW(pins[pi][0], pins[pi][1]);
     this.cup = { x: pw.x, z: pw.z };
     // make sure the pin is on the green
     if (this.greenSdf(pw.x, pw.z) > -1.5) { this.cup = { x: this.gf.x, z: this.gf.z }; }
-
-    this.stimp = (this.course.stimp || 11) * (d.stimpMul || 1);
-    this.greenRoll = stimpToRoll(this.stimp);
+    this.cup = this.pinnable(this.cup.x, this.cup.z);
     this.trees = [];
+  }
+
+  // Greenkeepers cut holes where a ball can come to rest: about 2.5% of slope on
+  // a stimp-10 green, less as the green gets faster, and clear of bunker lips and
+  // water banks. A pin drawn on a tier face or the side of a bump moves to the
+  // nearest spot within ~7 m that qualifies (or the flattest one found).
+  pinSlope(x, z) {
+    const n = this.normal(x, z);
+    return Math.hypot(n[0], n[2]) / n[1];
+  }
+  pinnable(x, z) {
+    const limit = clamp(0.25 / this.stimp, 0.016, 0.026);
+    const clear = this.bunkerSdf(x, z).d >= 3.5 && this.waterSdf(x, z).d >= 4;
+    if (clear && this.pinSlope(x, z) <= limit) return { x, z };
+    let best = { x, z }, bestS = this.pinSlope(x, z);
+    for (let r = 0.75; r <= 7; r += 0.75) {
+      const n = Math.ceil(r * 5);
+      let found = null;
+      for (let k = 0; k < n; k++) {
+        const a = (k / n) * Math.PI * 2;
+        const px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r;
+        if (this.greenSdf(px, pz) > -2 || this.bunkerSdf(px, pz).d < 3.5 || this.waterSdf(px, pz).d < 4) continue;
+        const s = this.pinSlope(px, pz);
+        if (s < bestS) { bestS = s; best = { x: px, z: pz }; }
+        if (s <= limit && (!found || s < found.s)) found = { x: px, z: pz, s };
+      }
+      if (found) return { x: found.x, z: found.z };
+    }
+    return best;
   }
 
   // ------------------------------------------------------------ frames
@@ -407,9 +456,17 @@ export class Hole {
     }
 
     // green complex
+    // The fringe stays at green level and the bank to the surrounding ground starts
+    // beyond it, widened with the height difference so a raised or sunken green's bank
+    // stays under ~25% (a steep collar is unputtable and barely chippable).
     const gsd = this.greenSdf(x, z);
-    const gw = 1 - smooth(0, this.green.apron ?? 9, gsd);
-    if (gw > 0) h = lerp(h, this.greenSurface(x, z), gw);
+    const apron = this.green.apron ?? 9;
+    if (gsd < FRINGE + apron + 12) {
+      const gs = this.greenSurface(x, z);
+      const bank = clamp(Math.abs(gs - h) * 6, apron, apron + 12);
+      const gw = 1 - smooth(FRINGE, FRINGE + bank, gsd);
+      if (gw > 0) h = lerp(h, gs, gw);
+    }
     for (const m of this.mounds) {
       const d2 = (x - m.x) ** 2 + (z - m.z) ** 2;
       if (d2 < 9 * m.r * m.r) h += m.h * Math.exp(-d2 / (m.r * m.r));
@@ -419,9 +476,11 @@ export class Hole {
     const { d: bd, b } = this.bunkerSdf(x, z);
     if (b && bd < 3) {
       const depth = b.depth;
-      if (b.kind === 'pot') h -= depth * smooth(0.2, -1.0, bd) + 0.25 * Math.exp(-((bd - 0.8) ** 2) / 0.6);
+      // the lip is lower on the green side, so the collar rolls into the bunker face
+      const lip = lerp(0.35, 1, smooth(0, 4, gsd));
+      if (b.kind === 'pot') h -= depth * smooth(0.2, -1.0, bd) + 0.25 * lip * Math.exp(-((bd - 0.8) ** 2) / 0.6);
       else if (b.kind === 'waste') h -= depth * smooth(1, -2, bd);
-      else h -= depth * smooth(0.6, -2.4, bd) - 0.28 * Math.exp(-((bd - 1.0) ** 2) / 1.2);
+      else h -= depth * smooth(0.6, -2.4, bd) - 0.28 * lip * Math.exp(-((bd - 1.0) ** 2) / 1.2);
     }
 
     // water
@@ -439,7 +498,10 @@ export class Hole {
           w.pts.forEach((p, i) => { const d2 = (p.x - x) ** 2 + (p.z - z) ** 2; if (d2 < bd2) { bd2 = d2; bi = i; } });
           level = w.levels[bi];
         }
-        const bank = level + 0.25 + (h - level - 0.25) * smooth(-0.5, 7, wd);
+        // next to a green the bank is cut short (a shaved bank or bulkhead) so the
+        // putting surface and its collar stay true right up to the edge
+        const bankW = lerp(2.5, 7, smooth(2, 12, gsd));
+        const bank = level + 0.25 + (h - level - 0.25) * smooth(-0.5, bankW, wd);
         h = Math.min(h, bank);
         if (wd < 0) h = Math.min(h, level - 0.2 - 1.2 * smooth(0, -5, wd));
       }
@@ -452,22 +514,36 @@ export class Hole {
     const { dx, dy } = this.wToG(x, z); // metres
     let h = this.greenBase;
     const tl = gd.tilt || [0, 1.5]; // % rise to the right, % rise to the back
-    h += (dx * tl[0] + dy * tl[1]) / 100;
+    // the overall tilt is capped by green speed (2.3% at stimp 13, 3% at stimp 10):
+    // steeper than that and a putt at a fast green never stops near the hole
+    const tMax = clamp(30 / (this.stimp || 11), 2, 3.2), tLen = Math.hypot(tl[0], tl[1]);
+    const tk = tLen > tMax ? tMax / tLen : 1;
+    h += (dx * tl[0] + dy * tl[1]) * tk / 100;
+    // Tiers and bumps are drawn at 60% of the course data's height: at full height
+    // most of a stimp-13 green was steeper than a ball can stop on.
+    const CONTOUR = 0.6;
     for (const t of gd.tiers || []) {
       // tier: [dirDeg (0 = back), offset yd from centre, rise ft, width yd]
+      // the face is at least 5 yd per foot of rise (about 10% at its steepest), so it
+      // reads as a ridge to putt over rather than a wall
       const a = (t[0] * Math.PI) / 180;
       const along = dx * Math.sin(a) + dy * Math.cos(a);
-      h += t[2] * FT * smooth(-(t[3] || 3) * YD / 2, (t[3] || 3) * YD / 2, along - t[1] * YD);
+      const rise = t[2] * CONTOUR;
+      const w = Math.max(t[3] || 3, Math.abs(rise) * 5);
+      h += rise * FT * smooth(-w * YD / 2, w * YD / 2, along - t[1] * YD);
     }
     for (const bm of gd.bumps || []) {
-      // bump: [dx yd, dy yd, radius yd, height ft]
+      // bump: [dx yd, dy yd, radius yd, height ft]; widened so its sides stay under ~7%
       const ddx = dx - bm[0] * YD, ddy = dy - bm[1] * YD;
-      h += bm[3] * FT * Math.exp(-(ddx * ddx + ddy * ddy) / ((bm[2] * YD) ** 2));
+      const bh = bm[3] * FT * CONTOUR;
+      const R = Math.max(bm[2] * YD, Math.abs(bh) * 12.3);
+      h += bh * Math.exp(-(ddx * ddx + ddy * ddy) / (R * R));
     }
     if (gd.ff) {
-      // false front: steep drop across the front edge
+      // false front: the front of the green runs off the edge, then the drop steepens
+      // in the apron (on the putting surface it stays a slope a ball can still climb)
       const front = -this.greenFrontDepth();
-      h -= gd.ff * FT * (1 - smooth(front - 2, front + 5, dy));
+      h -= gd.ff * FT * CONTOUR * (1 - smooth(front - 8, front + 2.5, dy));
     }
     // subtle micro contour
     h += fbm(x * 0.08, z * 0.08, this.seed + 55, 2) * 0.05;
@@ -513,7 +589,8 @@ export class Hole {
     if (bd < 0) return b.kind === 'waste' ? 'waste' : 'bunker';
     const gsd = this.greenSdf(x, z);
     if (gsd < 0) return 'green';
-    if (gsd < 1.3) return 'fringe';
+    // the collar, except where it runs into a bunker face or a water bank
+    if (gsd < FRINGE && bd > 1.6 && wd > 3) return 'fringe';
     if (this.teeSdf(x, z) < 0) return 'tee';
     if (this.roadSdf(x, z) < 0) return 'path';
     const fsd = this.fairwaySdf(x, z);

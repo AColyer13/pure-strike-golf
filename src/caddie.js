@@ -4,7 +4,7 @@
 import { BallSim, computeLaunch, simulateCarry, puttSpeedFor, BALL, G } from './physics.js';
 import { YD, FT, mulberry32 } from './hole.js';
 import { expectedStrokes } from './stats.js';
-import { dirOf, angOf } from './util.js';
+import { dirOf, angOf, clamp } from './util.js';
 import { SHAPES } from './config.js';
 import { findEntry } from './rules.js';
 
@@ -26,46 +26,189 @@ export function canPutt(hole, ball) {
   return hole.greenSdf(ball.p[0], ball.p[2]) < 25;
 }
 
+// Rolls a putt from p along `dir` at speed v with the hole covered, calling each(pos)
+// every step. Shared by the pace and break solvers below.
+function rollCovered(hole, env, p, dir, v, each) {
+  const h = hole;
+  const sim = new BallSim(h, env, mulberry32(3));
+  const oldPin = h.pinIn, cup = h.cup; h.pinIn = false;
+  h.cup = { ...cup, x: 1e6, z: 1e6 }; // measure the roll with the hole covered
+  try {
+    sim.putt(p.slice(), [dir.x, 0, dir.z], v);
+    let n = 0;
+    while (sim.state === 'roll' && n++ < 3000) { sim.step(1 / 120); if (each(sim.p) === false) break; }
+  } finally { h.pinIn = oldPin; h.cup = cup; }
+  return sim.p;
+}
+
 // bisect on full green sims (slopes included) for the start speed that rolls `d` metres
 // from p along dir (unit, {x, z}). "Reaches d" is judged on the furthest point of the
 // roll, not where the ball stops: on a green with a rise beyond the hole a hot putt
 // runs up and back past its start, which would otherwise read as "not far enough".
-export function puttSpeedToReach(hole, env, p, dir, d) {
-  const h = hole;
-  let lo = 0.2, hi = 14;
+// `launch` (default dir) starts the ball on a different line, for a putt aimed outside
+// the hole; `guess` narrows the bracket when a nearby answer is already known.
+export function puttSpeedToReach(hole, env, p, dir, d, launch = dir, guess = 0) {
+  const it = speedSteps(hole, env, p, dir, d, launch, guess);
+  for (;;) { const r = it.next(); if (r.done) return r.value; }
+}
+// the same bisection, yielding after each roll (for the time-sliced read)
+function* speedSteps(hole, env, p, dir, d, launch, guess) {
   const reach = (v) => {
-    const sim = new BallSim(h, env, mulberry32(3));
-    const oldPin = h.pinIn, cup = h.cup; h.pinIn = false;
-    h.cup = { ...cup, x: 1e6, z: 1e6 }; // measure the roll with the hole covered
-    sim.putt(p.slice(), [dir.x, 0, dir.z], v);
-    let n = 0, far = 0;
-    while (sim.state === 'roll' && n++ < 3000) {
-      sim.step(1 / 120);
-      far = Math.max(far, (sim.p[0] - p[0]) * dir.x + (sim.p[2] - p[2]) * dir.z);
-    }
-    h.pinIn = oldPin; h.cup = cup;
+    let far = 0;
+    rollCovered(hole, env, p, launch, v, (q) => { far = Math.max(far, (q[0] - p[0]) * dir.x + (q[2] - p[2]) * dir.z); });
     return far;
   };
-  for (let it = 0; it < 12; it++) {
-    const v = it === 0 ? puttSpeedFor(d, h.greenRoll) : (lo + hi) / 2;
+  let lo = 0.2, hi = 14, its = 12;
+  if (guess > 0) {
+    const short = reach(guess * 0.85) < d;
+    yield;
+    if (short && reach(guess * 1.2) >= d) { lo = guess * 0.85; hi = guess * 1.2; its = 7; }
+    yield;
+  }
+  for (let it = 0; it < its; it++) {
+    const v = it === 0 && !guess ? puttSpeedFor(d, hole.greenRoll) : (lo + hi) / 2;
     if (reach(v) >= d) hi = v; else lo = v;
+    yield;
   }
   return (lo + hi) / 2;
+}
+
+// The putter meter's full-power distance (ft) for a stroke of eqFt: the smallest
+// standard scale with some headroom, or a bigger one for a monster up a bank.
+export function puttRangeFor(eqFt) {
+  const need = eqFt * 1.15;
+  return [10, 20, 40, 70, 120, 150].find((r) => r >= need) || Math.ceil(need / 50) * 50;
 }
 
 // Putt read for the ball's position. Effective (flat-equivalent) distance eqFt is the
 // speed that would finish ~17 in (43 cm) past the hole if it missed – Pelz's optimum,
 // and what the meter marker teaches. range is the meter's full-power distance in feet.
+// This is the straight-at-the-cup read; puttRead() below adds the break.
 export function puttSetup(hole, ball, env) {
   const h = hole, b = ball;
   const d = Math.hypot(h.cup.x - b.p[0], h.cup.z - b.p[2]) || 1e-6;
   const dir = { x: (h.cup.x - b.p[0]) / d, z: (h.cup.z - b.p[2]) / d };
   const v = puttSpeedToReach(h, env, b.p, dir, d + 0.43);
   const eqFt = (v * v) / (2 * h.greenRoll * G) / FT;
-  const ranges = [10, 20, 40, 70, 120];
-  const range = ranges.find((r) => r >= eqFt * 1.15) || 150;
+  const range = puttRangeFor(eqFt);
   const elevIn = (h.height(h.cup.x, h.cup.z) - h.height(b.p[0], b.p[2])) / 0.0254;
   return { eqFt, range, elevIn, aim: angOf(dir.x, dir.z), speed: v };
+}
+
+// Sideways miss (metres, + = right of the cup as the player looks at it) of a putt
+// started along aim `a` at speed v: where the roll crosses the line through the cup
+// square to the putt, or where it stops if it never gets there.
+function puttMiss(hole, env, p, cupDir, d, a, v) {
+  const launch = dirOf(a);
+  const rx = -cupDir.z, rz = cupDir.x; // player's right when facing the cup
+  let hit = null;
+  const end = rollCovered(hole, env, p, launch, v, (q) => {
+    if ((q[0] - p[0]) * cupDir.x + (q[2] - p[2]) * cupDir.z >= d) { hit = q.slice(); return false; }
+  });
+  const q = hit || end;
+  return (q[0] - hole.cup.x) * rx + (q[2] - hole.cup.z) * rz;
+}
+
+// Where a putt along aim `a` at speed v really finishes, hole in play: 0 when it drops.
+function puttLeave(hole, env, p, a, v) {
+  const h = hole, d = dirOf(a);
+  const sim = new BallSim(h, env, mulberry32(3));
+  const oldPin = h.pinIn; h.pinIn = false;
+  try {
+    sim.putt(p.slice(), [d.x, 0, d.z], v);
+    let n = 0;
+    while (sim.state === 'roll' && n++ < 3000) sim.step(1 / 120);
+  } finally { h.pinIn = oldPin; }
+  if (sim.state === 'holed') return 0;
+  if (sim.state !== 'rest') return 1e3; // water, out of bounds
+  return Math.hypot(sim.p[0] - h.cup.x, sim.p[2] - h.cup.z);
+}
+
+// The caddie's full read: the start line and pace that roll the ball into the hole,
+// finishing ~17 in past if it lips out. Starts from the straight read, then walks the
+// aim with a secant on the sideways miss, re-solving the pace for the curved line.
+// Every candidate is checked with the hole in play (a line that crosses the cup too
+// fast to drop is no read), and the one that finishes closest wins.
+// `brk` is how far outside the cup the line starts (m, + = aim right of the hole).
+// A generator: it yields between rolls so the game can spread a hard read over a few
+// frames (see Caddie.setupPutt); puttRead() runs it straight through. The first yield
+// hands back the straight-at-the-cup setup to use while the read is still going.
+export function* puttReadSteps(hole, ball, env) {
+  const h = hole, b = ball;
+  const base = puttSetup(h, b, env);
+  yield base;
+  const d = Math.hypot(h.cup.x - b.p[0], h.cup.z - b.p[2]) || 1e-6;
+  const cupDir = { x: (h.cup.x - b.p[0]) / d, z: (h.cup.z - b.p[2]) / d };
+  const a0 = base.aim;
+  let v = base.speed, a = a0;
+  let best = { a, v, leave: puttLeave(h, env, b.p, a, v) };
+  let m = puttMiss(h, env, b.p, cupDir, d, a, v);
+  yield;
+  let aPrev = null, mPrev = null;
+  for (let it = 0; it < 6 && best.leave > 0 && Math.abs(m) > 0.012; it++) {
+    let next;
+    if (aPrev === null || Math.abs(m - mPrev) < 1e-5) next = a - m / Math.max(d, 0.5);
+    else next = a - m * (a - aPrev) / (m - mPrev);
+    // a putt never needs to start more than ~60° outside the hole
+    next = a0 + clamp(next - a0, -1, 1);
+    aPrev = a; mPrev = m; a = next;
+    if (it < 3) v = yield* speedSteps(h, env, b.p, cupDir, d + 0.43, dirOf(a), v);
+    const leave = puttLeave(h, env, b.p, a, v);
+    if (leave < best.leave) best = { a, v, leave };
+    m = puttMiss(h, env, b.p, cupDir, d, a, v);
+    yield;
+  }
+  // Over a ridge or down a tier the miss isn't smooth in aim and pace (a touch softer
+  // stops on the shelf, a touch firmer runs off the green), so fall back to a coarse
+  // search for the line that finishes closest, then a pattern search around it.
+  if (best.leave > 0.6) {
+    const try1 = (ca, cv) => { const leave = puttLeave(h, env, b.p, ca, cv); if (leave < best.leave) best = { a: ca, v: cv, leave }; };
+    // (the pace solve can overshoot on a bank – reaching the far point may mean running
+    // up and back – so the grid also tries much softer strokes, and lines well outside
+    // the hole for a putt along a tier face)
+    const offs = [0, -0.09, 0.09, -0.18, 0.18, -0.27, 0.27, -0.36, 0.36, -0.45, 0.45, -0.6, 0.6, -0.75, 0.75, -0.9, 0.9];
+    for (const o of offs) {
+      for (const f of [0.35, 0.5, 0.65, 0.8, 0.9, 1, 1.15, 1.3, 1.5, 1.75, 2.1]) { try1(a0 + o, base.speed * f); yield; }
+      if (best.leave === 0) break;
+    }
+    let da = 0.06, fv = 0.15;
+    for (let r = 0; r < 8 && best.leave > 0; r++) {
+      const c = best;
+      for (const [sa, sv] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { try1(c.a + sa * da, c.v * (1 + sv * fv)); yield; }
+      if (best === c) { da /= 2; fv /= 2; }
+    }
+  }
+  ({ a, v } = best);
+  const eqFt = (v * v) / (2 * h.greenRoll * G) / FT;
+  const range = puttRangeFor(eqFt);
+  const brk = Math.sin(a - a0) * d;
+  return { ...base, eqFt, range, aim: a, speed: v, cupAim: a0, brk, leave: best.leave };
+}
+export function puttRead(hole, ball, env) {
+  const it = puttReadSteps(hole, ball, env);
+  for (;;) { const r = it.next(); if (r.done) return r.value; }
+}
+
+// The caddie's read in words: where to start it (cup = 4.25 in), which way it
+// breaks, and how the slope changes the pace.
+export function puttNote(rd) {
+  const CUP = 0.108, side = rd.brk > 0 ? 'right' : 'left';
+  const out = Math.abs(rd.brk) - CUP / 2; // past the edge of the hole
+  let line;
+  if (Math.abs(rd.brk) < 0.02) line = 'Straight – hit it firm at the middle';
+  else if (out < -0.02) line = `Aim inside the ${side} edge`;
+  else if (out <= 0.03) line = `Aim at the ${side} edge`;
+  else if (out < CUP * 6) {
+    const n = Math.max(0.5, Math.round(out / CUP * 2) / 2);
+    const txt = (n % 1 ? (n > 1 ? `${Math.floor(n)}½` : '½') : `${n}`);
+    line = `Aim ${txt} cup${n > 1 ? 's' : ''} outside the ${side} edge`;
+  } else line = `Aim ${Math.round(Math.abs(rd.brk) / FT)} ft ${side} of the hole`;
+  const breaks = Math.abs(rd.brk) < 0.02 ? '' : `, breaks ${side === 'right' ? 'right to left' : 'left to right'}`;
+  const e = Math.round(rd.elevIn);
+  const slope = Math.abs(e) < 2 ? 'Level' : `${e > 0 ? 'Uphill' : 'Downhill'} ${Math.abs(e)} in`;
+  let msg = `Read: ${line}${breaks}. ${slope}, stroke it ${Math.round(rd.eqFt)} ft.`;
+  if (rd.leave > 0.9) msg += ' No easy line here – lag it close.';
+  return msg;
 }
 
 // meter power that carries `need` metres in still air from the given lie
@@ -84,6 +227,8 @@ export class Caddie {
   constructor(game) {
     this.g = game;
     this.analysis = null;
+    this.reading = null; // putt read in progress (see setupPutt)
+    this.puttLead = ''; // advice shown ahead of the putt read (e.g. why putt from the fringe)
     this.results = null; // last lay-up analysis, kept so the note can follow a club change
     this.msg = '';
   }
@@ -108,11 +253,13 @@ export class Caddie {
     const dh = h.height(h.cup.x, h.cup.z) - (b.p[1] - BALL.radius);
     g.pl = null;
     this.msg = '';
+    this.puttLead = '';
     this.analysis = null;
     this.results = null;
     if (wantsPutter(h, b)) {
+      // set before setClub so the putt read (which may finish a few frames later) keeps it
+      this.puttLead = b.surface !== 'green' ? 'Putt it from here. A poor putt usually finishes closer than a poor chip.' : '';
       g.setClub(g.bag.length - 1);
-      if (b.surface !== 'green') this.msg = 'Putt it from here. A poor putt usually finishes closer than a poor chip.';
       return;
     }
     const usable = g.bag.filter((c) => !c.putter && (c.key !== 'DR' || b.isTee));
@@ -273,16 +420,64 @@ export class Caddie {
 
   // ------------------------------------------------------------------ putting
   // Effective (flat-equivalent) distance: the speed that would finish ~17 in (43 cm) past
-  // the hole if it missed – Pelz's optimum, and what the meter marker teaches.
+  // the hole if it missed – Pelz's optimum, and what the meter marker teaches. On
+  // Beginner and Standard the caddie also reads the break and lines the putter up on
+  // it; a Pro reads their own greens (aimed at the cup, pace for the straight line).
   setupPutt() {
     const g = this.g;
-    const ps = puttSetup(g.hole, g.ball, g.env);
+    this.reading = null;
+    if (g.settings?.difficulty === 'pro') { this.applyPutt(puttSetup(g.hole, g.ball, g.env), false); return; }
+    // Most reads take a few ms. A putt over a ridge or along a tier face can take ~1 s,
+    // so after a short budget the rest is spread over the next frames (stepReading)
+    // with the putter lined up at the cup in the meantime.
+    const it = puttReadSteps(g.hole, g.ball, g.env);
+    const t0 = performance.now();
+    const base = it.next().value;
+    for (;;) {
+      const r = it.next();
+      if (r.done) { this.applyPutt(r.value, true); return; }
+      if (performance.now() - t0 > 30) break;
+    }
+    this.applyPutt(base, false);
+    this.msg = this.withLead('Caddie is reading the putt…');
+    if (g.ui) g.caddieNote();
+    this.reading = { it, aim: g.aim, ball: g.ball.p.slice() };
+  }
+
+  // a few ms of the putt read per frame; dropped if the swing starts or anything changes
+  stepReading() {
+    const R = this.reading, g = this.g;
+    if (!R) return;
+    const b = g.ball.p;
+    if (g.state !== 'address' || !g.club?.putter || b[0] !== R.ball[0] || b[2] !== R.ball[2]) { this.reading = null; return; }
+    const t0 = performance.now();
+    for (;;) {
+      const r = R.it.next();
+      if (r.done) {
+        this.reading = null;
+        const userAimed = Math.abs(g.aim - R.aim) > 1e-6;
+        this.applyPutt(r.value, true, userAimed);
+        if (!userAimed) g.placeGolfer();
+        g.previewDirty = true;
+        return;
+      }
+      if (performance.now() - t0 > 6) return;
+    }
+  }
+
+  withLead(m) { return [this.puttLead, m].filter(Boolean).join(' '); }
+
+  applyPutt(ps, read, keepAim = false) {
+    const g = this.g;
+    g.puttRead = read ? ps : null;
     g.puttEqFt = ps.eqFt;
     g.puttRange = ps.range;
     g.puttElevIn = ps.elevIn;
     const R = g.puttRange;
     g.meter.configure({ labels: [[0.25, `${Math.round(R * 0.25)}ft`], [0.5, `${Math.round(R * 0.5)}ft`], [0.75, `${Math.round(R * 0.75)}ft`], [1, `${R}ft`]], rangeLabel: `Putter range ${R} ft` });
-    g.aim = ps.aim;
+    if (!keepAim) g.aim = ps.aim;
+    this.msg = this.withLead(read ? puttNote(ps) : '');
+    if (g.ui) g.caddieNote();
   }
 
   // ------------------------------------------------------------------ meter marker

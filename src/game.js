@@ -313,7 +313,7 @@ export class Game {
     if (!this.club) return;
     const f = dirOf(this.aim);
     this.golfer.setOutfit(this.round?.p || 0);
-    this.golfer.place({ x: b.p[0], z: b.p[2] }, f, this.hole.height(b.p[0], b.p[2]));
+    this.golfer.place({ x: b.p[0], z: b.p[2] }, f, this.hole.height(b.p[0], b.p[2]), (x, z) => this.hole.height(x, z));
     const lift = ballLiftFor(b, this.club);
     this.ballLift = lift;
     this.tee.visible = b.isTee;
@@ -329,7 +329,17 @@ export class Game {
     this.previewDirty = true;
   }
   aimAtWorld(x, z) { this.setAim(angOf(x - this.ball.p[0], z - this.ball.p[2])); }
-  aimAtPin() { this.aimAtWorld(this.hole.cup.x, this.hole.cup.z); }
+  // With the putter out the key flips between the caddie's read and the cup itself.
+  aimAtPin() {
+    const rd = this.club?.putter && this.puttRead;
+    if (rd && Math.abs(rd.brk) >= 0.02 && Math.abs(this.aim - rd.aim) > 1e-4) {
+      this.setAim(rd.aim);
+      this.ui.toast('Aimed on the caddie’s read');
+      return;
+    }
+    this.aimAtWorld(this.hole.cup.x, this.hole.cup.z);
+    if (rd && Math.abs(rd.brk) >= 0.02) this.ui.toast('Aimed straight at the cup');
+  }
   cycleShape(d, wrap = false) {
     const order = ['draw', 'straight', 'fade'];
     const i = order.indexOf(this.shape) + d;
@@ -407,22 +417,29 @@ export class Game {
     }
     w.puttLine.visible = false;
     const out = this.caddie.simOutcome(this.club, this.aim, { power: 1, withWind: assist.wind, path: true, stopAtLand: !assist.roll });
-    if (!out.land) return;
     const land = out.land;
-    const n = h.normal(land[0], land[2]);
-    w.reticle.position.set(land[0], h.height(land[0], land[2]) + 0.06, land[2]);
-    w.reticle.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(...n));
-    const carry = Math.hypot(land[0] - b.p[0], land[2] - b.p[2]);
-    w.reticle.scale.setScalar(clamp(carry / 55, 0.6, 6));
-    w.reticle.visible = true;
-    w.setArc(out.path.concat([land]));
-    w.arc.visible = this.settings.difficulty !== 'pro';
-    this.previewLand = land;
-    this.previewCarry = carry;
-    this.previewRest = out.rest;
+    if (land) {
+      const n = h.normal(land[0], land[2]);
+      w.reticle.position.set(land[0], h.height(land[0], land[2]) + 0.06, land[2]);
+      w.reticle.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(...n));
+      const carry = Math.hypot(land[0] - b.p[0], land[2] - b.p[2]);
+      w.reticle.scale.setScalar(clamp(carry / 55, 0.6, 6));
+      w.reticle.visible = true;
+      w.setArc(out.path.concat([land]));
+      w.arc.visible = this.settings.difficulty !== 'pro';
+      this.previewCarry = carry;
+    } else {
+      // a full swing would fly out of bounds before landing (a wedge next to the boundary):
+      // no landing marker, but the power suggestion below still has to be for this shot
+      w.reticle.visible = false;
+      w.arc.visible = false;
+      this.previewCarry = null;
+    }
+    this.previewLand = land || null;
+    this.previewRest = land ? out.rest : null;
     // suggested power: what carries the plays-like distance to the pin (full swing if out of range)
     const need = this.pl ? this.pl.plays : this.distToPin();
-    const flatCarry = this.club.carry || carry;
+    const flatCarry = this.club.carry || this.previewCarry || need;
     this.suggestedPower = need < flatCarry * 1.12 && !(this.challenge && this.round.mode === 'drive') ? this.caddie.powerForFinish(need) : 1;
     this.meter.configure({ marker: assist.marker && this.suggestedPower < 1 ? this.suggestedPower : null });
     this.meter.configure({ labels: null, rangeLabel: `${this.club.name} · carry ${this.fmtDist(this.club.carry)}` });
@@ -470,6 +487,7 @@ export class Game {
     sw = normalizeSwing(sw, !!this.club.putter);
     this.state = 'backswing';
     this.caddie.analysis = null;
+    this.caddie.reading = null;
     this.pendingSwing = sw;
     this.golfer.startSwing(this.club.putter ? sw.power : clamp(sw.power, 0.35, 1.05), () => this.impact());
     if (this.settings.control === 'mouse' || this.golfer.phase === 'manual') { this.golfer.phase = 'down'; this.golfer.t = 0; }
@@ -947,6 +965,7 @@ export class Game {
       if (st === 'flyover') { if (this.cam.flyover(dt)) this.endFlyover(); }
       else if (st === 'address') {
         if (this.caddie.analysis) this.caddie.stepAnalysis();
+        if (this.caddie.reading) this.caddie.stepReading();
         if (this.previewDirty) { this.previewT = (this.previewT || 0) + dt; if (this.previewT > 0.06) { this.previewT = 0; this.updatePreview(); this.updateHUD(true); } }
         this.caddieTick = (this.caddieTick || 0) + dt;
         if (this.caddieTick > 0.5) { this.caddieTick = 0; this.caddieNote(); }
