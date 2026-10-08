@@ -7,6 +7,7 @@ import { Foliage, crownGeometry } from './foliage.js';
 import { Hole, fbm, vnoise, mulberry32, YD } from './hole.js';
 
 import { clamp, smooth } from './util.js';
+import { BALL } from './physics.js';
 // palette colours are sRGB hex; the painted canvas is tagged SRGBColorSpace, so keep them in sRGB 0-255
 const hex = (h) => { const c = new THREE.Color(h); const s = c.clone().convertLinearToSRGB(); return [s.r * 255, s.g * 255, s.b * 255]; };
 // cheap integer hash -> [0, 1) for per-texel grain
@@ -289,6 +290,7 @@ export class World {
     this.buildTerrain(hole);
     this.buildSkirt(hole);
     this.buildWater(hole);
+    this.buildOBStakes(hole);
     this.buildTreeMeshes(hole);
     this.buildFlag(hole);
     this.buildTeeMarkers(hole);
@@ -520,8 +522,9 @@ export class World {
         const gsd = hole.greenSdf(x, z);
         const n = fbm(x * 0.05, z * 0.05, 3, 2);
         // base: rough bands
-        let c3 = col[farKind === 'straw' ? 'second' : farKind] || col.deep;
-        if (farKind === 'straw') c3 = mix3(col.second, col.deep, 0.5);
+        // (a 'straw' course: open ground away from the trees plays as its rough, a shade darker)
+        let c3 = col[farKind] || col.deep;
+        if (farKind === 'straw') c3 = mix3(col[roughKind] || col.rough, col.deep, 0.25);
         c3 = mix3(c3, col[roughKind] || col.rough, 1 - smooth(roughW - 2, roughW + 2, fsd));
         c3 = mix3(c3, col.cut, 1 - smooth(cutW - 0.4, cutW + 0.4, Math.min(fsd, gsd - gCut + cutW)));
         // fairway with mowing stripes
@@ -832,6 +835,26 @@ export class World {
     this.group.add(inst);
   }
 
+  // White out-of-bounds stakes every ~11 m along the boundary (not in water or on a tee)
+  buildOBStakes(hole) {
+    const b = hole.playBounds, pts = [];
+    const edge = (x0, z0, x1, z1) => {
+      const n = Math.max(1, Math.round(Math.hypot(x1 - x0, z1 - z0) / 11));
+      for (let i = 0; i < n; i++) pts.push([x0 + ((x1 - x0) * i) / n, z0 + ((z1 - z0) * i) / n]);
+    };
+    edge(b.minX, b.minZ, b.maxX, b.minZ); edge(b.maxX, b.minZ, b.maxX, b.maxZ);
+    edge(b.maxX, b.maxZ, b.minX, b.maxZ); edge(b.minX, b.maxZ, b.minX, b.minZ);
+    const keep = pts.filter(([x, z]) => hole.waterSdf(x, z).d > 0.5 && hole.teeSdf(x, z) > 1 && hole.bunkerSdf(x, z).d > 0.3);
+    if (!keep.length) return;
+    const geo = new THREE.CylinderGeometry(0.03, 0.035, 1.0, 6).translate(0, 0.5, 0);
+    const mat = new THREE.MeshLambertMaterial({ color: '#f4f4f0' });
+    const inst = new THREE.InstancedMesh(geo, mat, keep.length);
+    const m4 = new THREE.Matrix4();
+    keep.forEach(([x, z], i) => { m4.makeTranslation(x, hole.height(x, z) - 0.05, z); inst.setMatrixAt(i, m4); });
+    inst.castShadow = true;
+    this.group.add(inst);
+  }
+
   pondSdf(w, x, z) { return this.hole.waterSdf(x, z).w === w ? this.hole.waterSdf(x, z).d : 5; }
 
   // ------------------------------------------------------------ flag, cup, tees
@@ -956,11 +979,16 @@ export class World {
     this.tracer = new THREE.Line(this.tracerGeo, new THREE.LineBasicMaterial({ color: 0xff4d3a, transparent: true, opacity: 0.95 }));
     this.tracer.frustumCulled = false;
     this.group.add(this.tracer);
-    // putt line
+    // putt line: a dashed, ball-wide ribbon on the green (a 1-px GL line is lost in the grid)
     this.puttGeo = new THREE.BufferGeometry();
-    this.puttGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3 * 600), 3));
-    this.puttLine = new THREE.Line(this.puttGeo, new THREE.LineDashedMaterial({ color: 0x9ff5ff, dashSize: 0.15, gapSize: 0.12, transparent: true, opacity: 0.9 }));
+    this.puttGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(3 * 4 * 600), 3));
+    this.puttGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(4 * 4 * 600), 4));
+    const idx = new Uint16Array(6 * 600);
+    for (let q = 0; q < 600; q++) idx.set([4 * q, 4 * q + 1, 4 * q + 2, 4 * q + 2, 4 * q + 1, 4 * q + 3], 6 * q);
+    this.puttGeo.setIndex(new THREE.BufferAttribute(idx, 1));
+    this.puttLine = new THREE.Mesh(this.puttGeo, new THREE.MeshBasicMaterial({ color: 0x9ff5ff, vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2 }));
     this.puttLine.frustumCulled = false;
+    this.puttLine.renderOrder = 2;
     this.puttLine.visible = false;
     this.group.add(this.puttLine);
   }
@@ -982,13 +1010,40 @@ export class World {
     a.needsUpdate = true;
   }
   setPuttLine(points) {
-    const a = this.puttGeo.attributes.position;
-    const n = Math.min(points.length, 600);
-    for (let i = 0; i < n; i++) a.setXYZ(i, points[i][0], points[i][1] + 0.02, points[i][2]);
-    this.puttGeo.setDrawRange(0, n);
-    a.needsUpdate = true;
-    this.puttLine.computeLineDistances();
-    this.puttLine.visible = n > 1;
+    const a = this.puttGeo.attributes.position, c = this.puttGeo.attributes.color;
+    const W = 0.022, DASH = 0.2, GAP = 0.1, R = BALL.radius; // half-width ≈ the ball's
+    const n = points.length;
+    let total = 0;
+    for (let i = 1; i < n; i++) total += Math.hypot(points[i][0] - points[i - 1][0], points[i][2] - points[i - 1][2]);
+    // one quad per dash, laid along the rolled path at turf level and fading toward its end
+    let q = 0, s = 0;
+    const at = (d) => {
+      let acc = 0;
+      for (let i = 1; i < n; i++) {
+        const p0 = points[i - 1], p1 = points[i], L = Math.hypot(p1[0] - p0[0], p1[2] - p0[2]);
+        if (acc + L >= d || i === n - 1) {
+          const t = L > 0 ? clamp((d - acc) / L, 0, 1) : 0;
+          return { x: p0[0] + (p1[0] - p0[0]) * t, y: p0[1] + (p1[1] - p0[1]) * t - R + 0.006, z: p0[2] + (p1[2] - p0[2]) * t, dx: (p1[0] - p0[0]) / (L || 1), dz: (p1[2] - p0[2]) / (L || 1) };
+        }
+        acc += L;
+      }
+      return null;
+    };
+    while (s < total && q < 600) {
+      const e = Math.min(total, s + DASH);
+      for (const [k, d] of [[0, s], [2, e]]) {
+        const p = at(d);
+        const al = 0.95 * (1 - 0.6 * (d / Math.max(total, 1e-6)));
+        a.setXYZ(4 * q + k, p.x - p.dz * W, p.y, p.z + p.dx * W);
+        a.setXYZ(4 * q + k + 1, p.x + p.dz * W, p.y, p.z - p.dx * W);
+        c.setXYZW(4 * q + k, 1, 1, 1, al); c.setXYZW(4 * q + k + 1, 1, 1, 1, al);
+      }
+      q++;
+      s = e + GAP;
+    }
+    this.puttGeo.setDrawRange(0, 6 * q);
+    a.needsUpdate = true; c.needsUpdate = true;
+    this.puttLine.visible = q > 0;
   }
 
   // Green-reading grid (Mario Golf style) with flowing slope dots

@@ -18,7 +18,7 @@ import { SwingMeter, MouseSwing, meterToStrike } from './meter.js';
 import { SoundEngine } from './audio.js';
 import { coachShot, resetCoach } from './coach.js';
 import { COURSES, courseById } from './courses/index.js';
-import { DIFFICULTY, SHAPES, TRAJ, MAX_STROKES } from './config.js';
+import { DIFFICULTY, SHAPES, TRAJ, MAX_STROKES, MIN_SWING } from './config.js';
 import { clamp, dirOf, angOf } from './util.js';
 import { Caddie, canPutt } from './caddie.js';
 import { CameraDirector } from './camera.js';
@@ -127,7 +127,8 @@ export class Game {
     this.camera.aspect = innerWidth / innerHeight;
     this.camera.updateProjectionMatrix();
     this.post.resize(innerWidth, innerHeight);
-    this.world.fx.setViewport(this.renderer.getDrawingBufferSize(new THREE.Vector2()).y, this.camera.fov);
+    // (portrait screens widen the field of view: see CameraDirector.fitFov)
+    this.world.fx.setViewport(this.renderer.getDrawingBufferSize(new THREE.Vector2()).y, this.cam ? this.cam.fitFov(50) : this.camera.fov);
     this.meter.resize(); this.meter.draw();
     this.mouseSwing.resize();
   }
@@ -382,7 +383,7 @@ export class Game {
   closeScorecardPeek() {
     if (this.round && this.state !== 'scorecard' && !this.ui.scModal) this.ui.scorecard(null);
   }
-  caddieNote() { this.ui.caddie(this.caddie.msg || ''); }
+  caddieNote() { this.ui.caddie([this.caddie.msg, this.caddie.lieNote()].filter(Boolean).join(' ')); }
 
   // ------------------------------------------------------------------ previews
   updatePreview() {
@@ -441,6 +442,8 @@ export class Game {
     const need = this.pl ? this.pl.plays : this.distToPin();
     const flatCarry = this.club.carry || this.previewCarry || need;
     this.suggestedPower = need < flatCarry * 1.12 && !(this.challenge && this.round.mode === 'drive') ? this.caddie.powerForFinish(need) : 1;
+    // never below the shortest real swing: under it every swing is a chunk (normalizeSwing)
+    this.suggestedPower = Math.max(this.suggestedPower, MIN_SWING + 0.01);
     this.meter.configure({ marker: assist.marker && this.suggestedPower < 1 ? this.suggestedPower : null });
     this.meter.configure({ labels: null, rangeLabel: `${this.club.name} · carry ${this.fmtDist(this.club.carry)}` });
     this.configureAuto();
@@ -930,7 +933,7 @@ export class Game {
     const lie = LIES[lk] || LIES.rough;
     this.ui.hud({
       hole: h.number, name: h.name, par: h.par, yards: this.course.holes[h.index].yds,
-      shot: this.challenge ? `Ball ${this.ballNo + 1}/${r.balls}` : holed ? `Holed in ${this.strokes}` : `Shot ${this.strokes + 1}`, toPar,
+      shot: this.challenge ? `Ball ${this.ballNo + 1}/${r.balls}` : holed ? `Holed in ${this.strokes}` : `Shot ${this.strokes + (this.state === 'flight' ? 0 : 1)}`, toPar,
       player: r.players.length > 1 ? r.player.name : null, challenge: this.challenge,
       dist: holed ? 'Holed' : feet ? `${(d / FT).toFixed(d / FT < 10 ? 1 : 0)} ft` : this.fmtDist(d),
       plays: this.pl && !this.club.putter && !resting ? this.fmtDist(this.pl.plays) : null,

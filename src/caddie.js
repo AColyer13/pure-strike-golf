@@ -14,7 +14,14 @@ import { findEntry } from './rules.js';
 export function wantsPutter(hole, ball) {
   const d = Math.hypot(hole.cup.x - ball.p[0], hole.cup.z - ball.p[2]);
   const s = ball.surface;
-  return s === 'green' || (s === 'fringe' && d < 18) || (s === 'cut' && d < 12 && hole.greenSdf(ball.p[0], ball.p[2]) < 4);
+  if (s === 'green' || (s === 'fringe' && d < 18)) return true;
+  // just off the green on short grass: putt it if the whole line to the hole is mown
+  if ((s !== 'cut' && s !== 'fairway') || d > 15 || hole.greenSdf(ball.p[0], ball.p[2]) > 4) return false;
+  for (let t = 0.1; t < 1; t += 0.1) {
+    const q = hole.surface(ball.p[0] + (hole.cup.x - ball.p[0]) * t, ball.p[2] + (hole.cup.z - ball.p[2]) * t);
+    if (q !== 'green' && q !== 'fringe' && q !== 'cut' && q !== 'fairway') return false;
+  }
+  return true;
 }
 // Where a putt is at least a sensible option: on or around the green (a
 // "Texas wedge" from the apron is fine; a 465 ft putt from the tee is not).
@@ -266,9 +273,11 @@ export class Caddie {
     // plays-like distance using the club that carries about the distance, then refine
     const club = usable.find((c) => c.carry <= d * 1.02) || usable[usable.length - 1];
     let pl = this.playsLike(club, d, dh, dir);
-    const pick = (need) => {
+    // a heavy lie takes distance off every club (deep rough ~25%): club up for it
+    const lieK = g.lieKey(), keep = lieK === 'fairway' || lieK === 'tee' || lieK === 'splash' ? 1 : this.lieCarry(club, lieK);
+    const pick = (need, k = keep) => {
       let best = null;
-      for (const c of usable) if (c.carry >= need * 0.985) best = c; // smallest club that carries
+      for (const c of usable) if (c.carry * k >= need * 0.985) best = c; // smallest club that carries
       return best;
     };
     let target = pick(pl.plays);
@@ -281,6 +290,10 @@ export class Caddie {
     }
     if (target && !(h.par >= 4 && b.isTee && pl.plays > target.carry + 30)) {
       g.setClub(g.bag.indexOf(target));
+      if (!this.msg && keep < 0.9) {
+        const short = `Heavy lie: the ball comes out ~${Math.round((1 - keep) * 100)}% short`;
+        this.msg = pick(pl.plays, 1) !== target ? `${short}, so take more club.` : `${short}: swing harder than the yardage says.`;
+      }
       return;
     }
     // pin out of range (tee shots / lay-ups): evaluate options by expected strokes
@@ -288,6 +301,13 @@ export class Caddie {
     g.setClub(g.bag.indexOf(longest));
     this.aimForClub(longest);
     this.startAnalysis(usable);
+  }
+
+  // fraction of a club's still-air carry left from the given lie
+  lieCarry(club, lie) {
+    const g = this.g;
+    const carry = (l) => simulateCarry(computeLaunch(club, { power: 1, face: 0, path: 0, strike: 1, traj: g.traj, lie: l }), { rho: g.env.rho, wind: [0, 0, 0] }, { fwd: [0, 0, -1] }).carry;
+    return clamp(carry(lie) / Math.max(1, carry('fairway')), 0.3, 1.1);
   }
 
   // point on the centre line `dist` metres from the ball (or the cup if the hole is shorter)
@@ -316,16 +336,42 @@ export class Caddie {
     this.msg = 'Caddie is checking the landing areas…';
   }
 
-  // one candidate club per frame so the game stays responsive
+  // one candidate club per frame so the game stays responsive, then lines up to 40 m either
+  // side of the centre for the two best clubs and any club that finds trouble (out of
+  // bounds or water hugging one side of a fairway moves the best line away from it)
   stepAnalysis() {
     const A = this.analysis, g = this.g;
     if (!A || g.state !== 'address') return;
-    if (A.i >= A.cands.length) { this.finishAnalysis(); return; }
-    const club = A.cands[A.i++];
     const b = g.ball;
-    const tgt = this.centreLineTarget(club.total);
-    if (!tgt) return;
-    const aim = angOf(tgt.x - b.p[0], tgt.z - b.p[2]);
+    if (A.i < A.cands.length) {
+      const club = A.cands[A.i++];
+      const tgt = this.centreLineTarget(club.total);
+      if (!tgt) return;
+      const aim = angOf(tgt.x - b.p[0], tgt.z - b.p[2]);
+      A.results.push({ club, aim, ...this.rateAim(club, aim) });
+      return;
+    }
+    if (!A.aimQ) {
+      // every club that brings trouble into play, plus the two best, looks for a better line
+      const top = A.results.slice().sort((p, q) => p.es - q.es).slice(0, 2);
+      A.aimQ = [];
+      for (const r of A.results) if (top.includes(r) || r.notes.length) for (const off of [-10, 10, -20, 20, -30, 30, -40, 40]) A.aimQ.push({ r, off, aim0: r.aim });
+    }
+    if (!A.aimQ.length) { this.finishAnalysis(); return; }
+    // two lines a frame: the target shifted sideways by `off` metres at the club's distance
+    // (in order of size, so a smaller shift wins a tie)
+    for (const q of A.aimQ.splice(0, 2)) {
+      const dir = dirOf(q.aim0), dist = q.r.club.total;
+      const aim = angOf(dir.x * dist - dir.z * q.off, dir.z * dist + dir.x * q.off);
+      const out = this.rateAim(q.r.club, aim);
+      if (out.es < q.r.es - 0.02) Object.assign(q.r, { aim, ...out });
+    }
+  }
+
+  // expected strokes (including this one) for a full swing on `aim`: straight and a
+  // typical miss either way, in the current wind
+  rateAim(club, aim) {
+    const g = this.g, b = g.ball;
     const spread = club.loft < 20 ? 3.2 : club.loft < 30 ? 2.4 : 1.8;
     let es = 0; const notes = [];
     for (const face of [-spread, 0, spread]) {
@@ -340,7 +386,7 @@ export class Caddie {
       }
       es += e / 3;
     }
-    A.results.push({ club, aim, es: es + 1, notes: [...new Set(notes)] });
+    return { es: es + 1, notes: [...new Set(notes)] };
   }
 
   finishAnalysis() {
@@ -377,6 +423,15 @@ export class Caddie {
       return msg;
     }
     return `${mine.club.name}: expected score ${mine.es.toFixed(2)}${mine.notes.length ? ` (brings ${mine.notes.join(' & ')} into play)` : ''}. Caddie's pick: ${fmt(best)}.`;
+  }
+
+  // A sloping lie turns a lofted face (physics.js lieFace): warn before the shot, not after
+  lieNote() {
+    const g = this.g;
+    if (!g.club || g.club.putter || g.state !== 'address') return '';
+    const f = computeLaunch(g.club, { power: 1, face: 0, path: 0, strike: 1, lie: g.lieKey(), slope: g.slope() }).lieFace;
+    if (Math.abs(f) < 3) return '';
+    return `Ball ${f < 0 ? 'above' : 'below'} your feet: the ${g.club.name} face points ~${Math.round(Math.abs(f))}° ${f < 0 ? 'left' : 'right'} – aim ${f < 0 ? 'right' : 'left'} of the target.`;
   }
 
   // the player took a different club: drop notes written for the previous one
@@ -484,6 +539,26 @@ export class Caddie {
   // Like a real caddie: the number that matters is where the ball FINISHES. Start from the
   // plays-like carry, then bisect on full terrain sims so the release (bounce + roll) is included.
   powerForFinish(need) {
+    const p = this.finishAtPin(need);
+    return this.g.club.putter ? p : this.clearOfTrouble(p);
+  }
+
+  // A swing ~4% off the number is an ordinary miss. If that miss on one side finds water
+  // or out of bounds (a front pin just over a creek), move the number away from it, the
+  // way a caddie says "take enough to carry the water" and accepts the longer putt.
+  clearOfTrouble(p) {
+    const g = this.g, M = 0.04;
+    const wet = (pw) => pw <= 1.05 && ['water', 'ob'].includes(this.simOutcome(g.club, g.aim, { power: pw, withWind: true, dt: 1 / 90 }).result);
+    const short = wet(p * (1 - M)), long = wet(p * (1 + M));
+    if (short === long) return p;
+    const step = short ? 0.01 : -0.01, side = short ? 1 - M : 1 + M;
+    for (let q = p + step, i = 0; i < 8 && q > 0.1 && q <= 1; q += step, i++) {
+      if (!wet(q * side)) return wet(q * (2 - side)) ? p : q;
+    }
+    return p;
+  }
+
+  finishAtPin(need) {
     const g = this.g, h = g.hole, b = g.ball;
     const p0 = this.powerForCarry(need);
     if (g.club.putter) return p0;

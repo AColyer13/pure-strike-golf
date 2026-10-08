@@ -355,6 +355,9 @@ body.touch.in-round #lieBox { bottom: 246px; }
   /* the club box sits above the meter so it clears the right-hand button column */
   body.touch.in-round #clubBox { bottom: 310px; }
   body.touch.in-round #lieBox { bottom: 406px; }
+  /* …and the caddie's note above the club box (and the lie box, when the full HUD shows it) */
+  body.touch.in-round #caddie { bottom: 392px; }
+  body.touch.in-round:not(.hud-essential) #caddie { bottom: 502px; }
 }
 @media (orientation: landscape) {
   body.touch.in-round #intro { width: min(640px, calc(100vw - 420px)); bottom: 24px; }

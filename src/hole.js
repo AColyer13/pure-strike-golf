@@ -14,6 +14,8 @@ export const YD = 0.9144;
 export const FT = 0.3048;
 // width (m) of the fringe collar around the green
 const FRINGE = 1.3;
+// rough (m) between the edge of a fairway and the out-of-bounds line
+const OB_RUN = 9;
 
 // ---------------------------------------------------------------- noise
 function hash(i, j, seed) {
@@ -225,6 +227,15 @@ export class Hole {
     for (const p of this.path) { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z); }
     const mL = (d.margin?.[0] ?? style.margin ?? 70) * YD, mR = (d.margin?.[1] ?? style.margin ?? 70) * YD;
     this.bounds = { minX: minX - mL, maxX: maxX + mR, minZ: minZ - 55, maxZ: maxZ + 30 };
+    // a green is never out of bounds: St Andrews' double greens run well wide of their hole
+    {
+      const B = this.bounds, G = 16;
+      for (let x = this.gf.x - 90; x <= this.gf.x + 90; x += 1.5) for (let z = this.gf.z - 90; z <= this.gf.z + 90; z += 1.5) {
+        if (this.greenSdf(x, z) >= 0) continue;
+        B.minX = Math.min(B.minX, x - G); B.maxX = Math.max(B.maxX, x + G);
+        B.minZ = Math.min(B.minZ, z - G); B.maxZ = Math.max(B.maxZ, z + G);
+      }
+    }
     this.playBounds = { minX: this.bounds.minX + 4, maxX: this.bounds.maxX - 4, minZ: this.bounds.minZ + 4, maxZ: this.bounds.maxZ - 4 };
 
     // green pad height and pin
@@ -348,7 +359,11 @@ export class Hole {
     }
     hw += fbm(s * 0.02, p.o > 0 ? 3 : 7, this.seed, 2) * 3.2;
     const off = (this.def.fwOff ? this.fwOffAt(s) : 0);
-    return Math.abs(p.o - off) - hw;
+    const d = Math.abs(p.o - off) - hw;
+    // the mown fairway stops short of the boundary, with rough between it and the stakes
+    const b = this.playBounds;
+    if (!b) return d;
+    return Math.max(d, OB_RUN - Math.min(x - b.minX, b.maxX - x, z - b.minZ, b.maxZ - z));
   }
   fwOffAt(s) {
     const e = this.def.fwOff; // [[s, o], ...] yards
@@ -599,7 +614,10 @@ export class Hole {
     if (fsd < (st.cutWidth ?? 2.2) || gsd < (st.greenCut ?? 5)) return 'cut';
     if (st.straw && this.nearTreeCluster(x, z)) return 'straw';
     if (fsd < (st.roughWidth ?? 20)) return st.roughType || 'rough';
-    return st.farType || 'deep';
+    // a 'straw' course has pine straw only under the trees (above); open ground away
+    // from them is the same grass as the rough, just as the terrain texture paints it
+    const far = st.farType || 'deep';
+    return far === 'straw' ? st.roughType || 'rough' : far;
   }
   nearTreeCluster(x, z) {
     if (!this.treeGrid) return false;
