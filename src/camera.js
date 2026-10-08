@@ -266,6 +266,15 @@ export class CameraDirector {
   }
 
   // ------------------------------------------------------------------ menu
+  // the scorecard and round summary sit over the same slow orbit of the green, picked up
+  // from where the camera is so it glides out instead of jumping
+  orbitGreen() {
+    const h = this.g.hole;
+    if (!h) return;
+    this.menuT = Math.atan2(this.pos.x - h.gf.x, this.pos.z - h.gf.z) / 0.06;
+    this.menuInit = true;
+  }
+
   menu(dt) {
     const h = this.g.hole;
     if (!h) return;

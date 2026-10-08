@@ -376,7 +376,7 @@ export class Caddie {
 
   // the caddie's line for the aim it chose: off the pin for the wind, away from trouble
   aimNote(pinAim, wind, side) {
-    const g = this.g, yd = Math.round(Math.sin(g.aim - pinAim) * g.distToPin() * YD);
+    const g = this.g, yd = Math.round(Math.sin(g.aim - pinAim) * g.distToPin() / YD);
     const lr = (right) => (right ? 'right' : 'left');
     const miss = side ? `a miss ${lr(!side.right)} finds ${side.what}` : '';
     if (wind && Math.abs(yd) >= 3) {

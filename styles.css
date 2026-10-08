@@ -99,6 +99,7 @@ kbd { display: inline-block; font: 600 10px Barlow, sans-serif; padding: 1px 4px
 .seg { font: 600 13px Barlow, sans-serif; color: var(--text); background: rgba(255,255,255,.06); border: 1px solid var(--line); padding: 6px 10px; border-radius: 8px; cursor: pointer; }
 .seg:hover { background: rgba(255,255,255,.14); }
 .seg.on { background: var(--accent); color: #1b1a0c; border-color: var(--accent); }
+.sum-tabs { margin: 14px 0 2px; }
 select { font: 500 13px Barlow, sans-serif; background: #173022; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
 #profileDesc { max-width: 320px; }
 .menu-btns { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -436,6 +437,18 @@ body.reduced-motion *, body.reduced-motion *::before, body.reduced-motion *::aft
   #lieBox, #windBox { display: none; }
   #minimap { width: 90px; height: 150px; }
   #shotPanel { max-height: 60vh; overflow-y: auto; }
+}
+/* portrait phone: the golfer stands left of the ball, so the distance panel moves to the right-hand column
+   under a compact wind dial (wind matters on every shot, so it stays on screen) */
+@media (max-width: 760px) and (orientation: portrait) {
+  body.in-round #windBox { display: flex; top: 8px; right: 8px; gap: 8px; }
+  body.in-round #windBox #windTxt { display: none; }
+  body.in-round .wind-dial { width: 38px; height: 38px; }
+  body.in-round #windArrow { font-size: 17px; }
+  body.in-round #distBox { top: 62px; left: auto; right: 8px; min-width: 0; max-width: 150px; text-align: right; }
+  body.in-round #distBox .sub { align-items: flex-end; }
+  body.in-round #distBox .lie-line { justify-content: flex-end; }
+  body.in-round #minimap { top: 206px; right: 8px; }
 }
 
 /* ---------- course editor ---------- */

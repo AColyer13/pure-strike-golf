@@ -854,6 +854,7 @@ export class Game {
       return;
     }
     this.state = 'scorecard';
+    this.cam.orbitGreen();
     const last = turn === 'end';
     this.ui.scorecard(this.course, r, true, () => {
       if (last) this.endRound();
@@ -874,6 +875,7 @@ export class Game {
   endRound() {
     const r = this.round;
     this.state = 'summary';
+    this.cam.orbitGreen();
     this.meter.hide();
     this.tutorial?.end();
     if (this.challenge) { this.ui.challengeSummary(this.course, r, (m) => this.fmtDist(m)); return; }
@@ -981,7 +983,7 @@ export class Game {
         const c = this.cam.targetView ? this.cam.target() : this.cam.address();
         this.cam.set(c.pos, c.look, this.cam.targetView ? 3 : 5);
         this.cam.fov = 50;
-      } else if (st === 'menu') this.cam.menu(dt);
+      } else if (st === 'menu' || st === 'scorecard' || st === 'summary') this.cam.menu(dt);
       this.cam.apply(dt);
       if (st === 'address' && this.meter.state !== 'hidden') this.meter.draw();
     }

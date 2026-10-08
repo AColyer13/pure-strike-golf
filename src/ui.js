@@ -496,23 +496,24 @@ export class UI {
     this.game.meter.hide();
     const s = $('summary');
     const multi = round.players.length > 1;
-    const toPar = t.strokes - t.par;
     const cats = [['OTT', 'Off the tee'], ['APP', 'Approach'], ['ARG', 'Around the green'], ['PUTT', 'Putting']];
-    const max = Math.max(1, ...cats.map(([k]) => Math.abs(t.sg[k])));
-    const worst = cats.slice().sort((a, b) => t.sg[a[0]] - t.sg[b[0]])[0];
     const advice = {
       OTT: 'Your tee shots cost the most. Accuracy matters, but so does distance: Broadie found driving explains ~28% of the scoring gap between tour pros and amateurs. Try a club that keeps you out of penalty areas on tight holes.',
       APP: 'Approach shots are where scores are made – about 40% of the scoring difference between golfers. Pick the club whose average carry covers the plays-like number and aim at the fat part of the green.',
       ARG: 'Around the green, get the ball on the putting surface first. From just off the fringe a putt or low chip is usually the percentage play.',
       PUTT: 'Putting cost you strokes. Focus on lag speed from long range (leave it inside 3 ft) and on reading the low side – most misses are under-read.',
-    }[worst[0]];
+    };
     const hcp = multi ? null : handicapIndex(loadHistory());
-    const board = multi ? `<h3>Leaderboard</h3><div class="sc-board big">${round.players.map((pl) => ({ pl, t: pl.stats.totals() })).sort((a, b) => a.t.strokes - b.t.strokes).map(({ pl, t: x }, i) => `<div><span>${i === 0 ? '🏆 ' : ''}${esc(pl.name)}</span><b>${toParStr(x.strokes - x.par)} <small>${x.strokes}</small></b></div>`).join('')}</div>` : '';
+    const lead = round.players.map((pl) => ({ pl, t: pl.stats.totals() })).sort((a, b) => a.t.strokes - b.t.strokes);
+    const outright = lead.length > 1 && lead[0].t.strokes < lead[1].t.strokes;
+    const board = multi ? `<h3>Leaderboard</h3><div class="sc-board big">${lead.map(({ pl, t: x }, i) => `<div><span>${i === 0 && outright ? '🏆 ' : ''}${esc(pl.name)}</span><b>${toParStr(x.strokes - x.par)} <small>${x.strokes}</small></b></div>`).join('')}</div>` : '';
     const n = round.players[0].scores.length;
-    s.innerHTML = `<h1>${round.daily ? 'Daily challenge complete' : 'Round complete'}</h1>
-      <div class="muted">${course.name} · ${MODES[round.mode]?.name || ''} · ${PROFILES[settings.profile]?.name || settings.profile} · ${settings.difficulty}</div>
-      ${board}
-      <div class="sum-score ${toPar < 0 ? 'under' : toPar > 0 ? 'over' : ''}">${toParStr(toPar)}<small>${multi ? `${esc(round.players[0].name)} · ` : ''}${t.strokes} strokes · par ${t.par}</small></div>
+    // one player's card: score, key stats and strokes gained (hot seat: a tab per player)
+    const card = (pl, t) => {
+      const toPar = t.strokes - t.par;
+      const max = Math.max(1, ...cats.map(([k]) => Math.abs(t.sg[k])));
+      const worst = cats.slice().sort((a, b) => t.sg[a[0]] - t.sg[b[0]])[0];
+      return `<div class="sum-score ${toPar < 0 ? 'under' : toPar > 0 ? 'over' : ''}">${toParStr(toPar)}<small>${multi ? `${esc(pl.name)} · ` : ''}${t.strokes} strokes · par ${t.par}</small></div>
       ${best ? `<div class="muted">Previous best: ${toParStr(best.toPar)} (${best.date})</div>` : ''}
       ${hcp != null ? `<div class="muted">Handicap index estimate: <b>${hcp.toFixed(1)}</b></div>` : ''}
       <div class="sum-grid">
@@ -527,8 +528,23 @@ export class UI {
         return `<div class="sg-row"><span>${nm}</span><div class="bar"><i class="${v >= 0 ? 'pos' : 'neg'}" style="width:${w}%;${v >= 0 ? 'left:50%' : `left:${50 - w}%`}"></i></div><b>${sgn(v)}</b></div>`;
       }).join('')}</div>
       <p class="sum-total">Total: <b>${sgn(t.sgTotal)}</b> strokes vs. a tour player over ${n} hole${n === 1 ? '' : 's'}.</p>
-      <div class="tip"><b>Where to improve: ${worst[1]}</b><p>${advice}</p></div>
+      <div class="tip"><b>Where to improve: ${worst[1]}</b><p>${advice[worst[0]]}</p></div>`;
+    };
+    const tabs = multi ? `<div class="segs sum-tabs">${round.players.map((pl, i) => `<button class="seg${i === 0 ? ' on' : ''}" data-p="${i}">${esc(pl.name)}</button>`).join('')}</div>` : '';
+    const info = [course.name, MODES[round.mode]?.name, PROFILES[settings.profile]?.name || settings.profile, settings.difficulty].filter(Boolean).join(' · ');
+    s.innerHTML = `<h1>${round.daily ? 'Daily challenge complete' : 'Round complete'}</h1>
+      <div class="muted">${info}</div>
+      ${board}
+      ${tabs}
+      <div id="sumCard">${card(round.players[0], t)}</div>
       <div class="row wrap"><button class="btn primary" id="sumAgain">Play again</button><button class="btn" id="sumShare">Copy challenge link</button><button class="btn" id="sumMenu">Main menu</button></div>`;
+    for (const b of s.querySelectorAll('.sum-tabs button')) {
+      b.onclick = () => {
+        const pl = round.players[+b.dataset.p];
+        $('sumCard').innerHTML = card(pl, pl.stats.totals());
+        for (const x of s.querySelectorAll('.sum-tabs button')) x.classList.toggle('on', x === b);
+      };
+    }
     s.classList.remove('hidden');
     this.summaryButtons(course, round);
   }
