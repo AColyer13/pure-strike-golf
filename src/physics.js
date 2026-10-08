@@ -237,16 +237,18 @@ export function simulateCarry(ld, env, opts = {}) {
     t += dt;
     if (p[1] > apex) apex = p[1];
     if (pts && Math.floor(t / dt) % 4 === 0) pts.push(p.slice());
-    if (p[1] < landY && v[1] < 0) break;
+    // a target above the apex is never reached: the ball comes back down to its own level
+    if (p[1] < (apex >= landY ? landY : 0) && v[1] < 0) break;
   }
   // interpolate landing
-  const f = (prev[1] - landY) / (prev[1] - p[1] || 1);
+  const reached = apex >= landY, Y = reached ? landY : 0;
+  const f = (prev[1] - Y) / (prev[1] - p[1] || 1);
   const land = add(prev, mul(sub(p, prev), f));
   const hv = Math.hypot(v[0], v[2]);
   return {
     carry: Math.hypot(land[0], land[2]),
     lateral: dot(land, norm(cross(fwd, [0, 1, 0]))),
-    land, apex, time: t,
+    land, apex, time: t, reached,
     landAngle: Math.atan2(-v[1], hv) / DEG,
     landSpeed: len(v),
     v, w, path: pts,

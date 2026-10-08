@@ -121,3 +121,22 @@ test('cup capture: firm centred putts drop, too-fast putts lip or skip', () => {
   assert.equal(putt(1.8, 0), 'holed');  // ~0.9 m/s at the cup
   assert.notEqual(putt(4.0, 0.045), 'holed');
 });
+
+test('a landing height above the apex is not reached: carry falls back to level ground, not a runaway extrapolation', () => {
+  const ld = full(club('7I'));
+  const level = simulateCarry(ld, env);
+  const up = simulateCarry(ld, env, { landY: level.apex + 5 });
+  assert.equal(up.reached, false);
+  assert.ok(Math.abs(up.carry - level.carry) < 1, `${up.carry} vs ${level.carry}`);
+  const hill = simulateCarry(ld, env, { landY: 10 });
+  assert.equal(hill.reached, true);
+  assert.ok(hill.carry < level.carry);
+});
+
+test('amateur profiles carry what their menu descriptions promise', () => {
+  for (const [key, dr, i7] of [['scratch', 250, 155], ['mid', 210, 135], ['senior', 175, 110]]) {
+    const b = buildBag(key), c = (k) => simulateCarry(computeLaunch(b.find((x) => x.key === k), { power: 1, face: 0, path: 0, strike: 1, traj: 0, lie: 'fairway' }), env).carry * YD;
+    assert.ok(Math.abs(c('DR') - dr) <= 8, `${key} DR ${c('DR').toFixed(0)} vs ${dr}`);
+    assert.ok(Math.abs(c('7I') - i7) <= 6, `${key} 7I ${c('7I').toFixed(0)} vs ${i7}`);
+  }
+});

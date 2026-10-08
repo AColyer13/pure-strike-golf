@@ -23,9 +23,10 @@ const TOUR = [
 
 export const PROFILES = {
   tour:    { name: 'Tour Pro',       desc: 'PGA Tour average: 113 mph driver swing, ~275 yd carry.', speed: 1.0, smash: 1.0, spin: 1.0, launch: 0 },
-  scratch: { name: 'Scratch Golfer', desc: 'Low handicap amateur: ~105 mph driver, ~250 yd carry.',    speed: 0.93, smash: 0.99, spin: 0.98, launch: 0.5 },
-  mid:     { name: '15 Handicap',    desc: 'Typical club golfer: ~93 mph driver, ~210 yd carry.',        speed: 0.83, smash: 0.96, spin: 1.08, launch: 1.0 },
-  senior:  { name: 'Smooth Swinger', desc: 'Slower speed, same fundamentals: ~80 mph driver, ~175 yd carry.', speed: 0.72, smash: 0.95, spin: 1.1, launch: 2.0 },
+  // Amateur speeds are tuned so the full-swing carries match the descriptions (tests/physics.test.mjs)
+  scratch: { name: 'Scratch Golfer', desc: 'Low handicap amateur: ~250 yd driver carry, 7 iron ~155.',    speed: 0.965, smash: 0.99, spin: 0.98, launch: 0.5 },
+  mid:     { name: '15 Handicap',    desc: 'Typical club golfer: ~210 yd driver carry, 7 iron ~135.',        speed: 0.9, smash: 0.96, spin: 1.08, launch: 1.0 },
+  senior:  { name: 'Smooth Swinger', desc: 'Slower speed, same fundamentals: ~175 yd driver carry, 7 iron ~110.', speed: 0.805, smash: 0.95, spin: 1.1, launch: 2.0 },
 };
 
 export function buildBag(profileKey) {

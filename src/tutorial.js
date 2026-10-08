@@ -43,7 +43,9 @@ export const STEPS = [
   { id: 'green', when: (g) => g.state === 'address' && !!g.club?.putter, anchor: 'distBox', title: 'On the green',
     text: (g, k) => `“Stroke it N ft” is the pace that finishes about 17 inches past the hole, the best chance of dropping. The line on the green shows the break; ${k('grid')} toggles the grid, whose dots flow downhill.` },
   { id: 'putt', when: (g) => g.state === 'address' && !!g.club?.putter, anchor: 'meter', title: 'Putting',
-    text: () => 'Same three clicks. The labels are the distance each power rolls: hit the marker, and aim a touch up the slope.',
+    text: (g) => (g.settings.difficulty === 'pro'
+      ? 'Same three clicks. The labels are the distance each power rolls: hit the marker, and aim up the slope by the break you read.'
+      : 'Same three clicks. The labels are the distance each power rolls. Your caddie has already aimed for the break, so just hit the marker and swing straight.'),
     done: (g) => g.state !== 'address' },
   { id: 'again', when: (g) => g.state === 'address' && !g.club?.putter && g.strokes > 0, anchor: 'clubBox', title: 'Not on yet',
     text: () => 'Same routine: the caddie re-reads the distance and lie every shot. The lie percentage is how much distance the grass costs you.' },

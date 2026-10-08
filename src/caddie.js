@@ -4,7 +4,7 @@
 import { BallSim, computeLaunch, simulateCarry, puttSpeedFor, BALL, G } from './physics.js';
 import { YD, FT, mulberry32 } from './hole.js';
 import { expectedStrokes } from './stats.js';
-import { dirOf, angOf, clamp } from './util.js';
+import { dirOf, angOf, clamp, DEG } from './util.js';
 import { SHAPES } from './config.js';
 import { findEntry } from './rules.js';
 
@@ -249,6 +249,13 @@ export class Caddie {
     const flat = simulateCarry(ld, { rho: g.env.rho, wind: [0, 0, 0] }, { fwd });
     const elev = simulateCarry(ld, { rho: g.env.rho, wind: [0, 0, 0] }, { fwd, landY: dh });
     const both = simulateCarry(ld, { rho: g.env.rho, wind: g.env.wind }, { fwd, landY: dh });
+    if (!elev.reached || !both.reached) {
+      // the target is above this club's apex (a weak swing up a long hill): elevation by the
+      // rule of thumb (1 m of distance per metre of rise), wind from a level landing
+      const wind = simulateCarry(ld, { rho: g.env.rho, wind: g.env.wind }, { fwd });
+      const fw = flat.carry / Math.max(1, wind.carry);
+      return { plays: targetDist * fw + dh, elevAdj: dh, windAdj: targetDist * (fw - 1) };
+    }
     const fe = flat.carry / Math.max(1, elev.carry), fb = flat.carry / Math.max(1, both.carry);
     return { plays: targetDist * fb, elevAdj: targetDist * (fe - 1), windAdj: targetDist * (fb - fe) };
   }
@@ -290,10 +297,22 @@ export class Caddie {
     }
     if (target && !(h.par >= 4 && b.isTee && pl.plays > target.carry + 30)) {
       g.setClub(g.bag.indexOf(target));
+      // a club that needs everything (into the wind, spinning back) leaves no room for a
+      // slightly short swing: take one more and swing within yourself
+      const up = usable[usable.indexOf(target) - 1];
+      let power = this.finishAtPin(pl.plays);
+      if (up && !this.msg && power > 0.97) {
+        target = up;
+        g.setClub(g.bag.indexOf(target));
+        g.pl = pl = this.playsLike(target, d, dh, dir);
+        power = this.finishAtPin(pl.plays);
+      }
       if (!this.msg && keep < 0.9) {
         const short = `Heavy lie: the ball comes out ~${Math.round((1 - keep) * 100)}% short`;
         this.msg = pick(pl.plays, 1) !== target ? `${short}, so take more club.` : `${short}: swing harder than the yardage says.`;
       }
+      const side = this.aimAwayFromTrouble(power);
+      if (side && !this.msg) this.msg = side;
       return;
     }
     // pin out of range (tee shots / lay-ups): evaluate options by expected strokes
@@ -301,6 +320,31 @@ export class Caddie {
     g.setClub(g.bag.indexOf(longest));
     this.aimForClub(longest);
     this.startAnalysis(usable);
+  }
+
+  // In range, but a typical miss to one side finds water or out of bounds (the road behind
+  // the Road Hole, a green on the cliff edge): aim off toward the safe side, up to 4°,
+  // until a miss either way stays dry. Returns the caddie's line for it, or ''.
+  aimAwayFromTrouble(power) {
+    const g = this.g, c = g.club;
+    if (c.putter) return '';
+    const miss = (c.loft < 20 ? 3.2 : c.loft < 30 ? 2.4 : 1.8) * 0.6;
+    const wet = (aim, face) => ['water', 'ob'].includes(this.simOutcome(c, aim, { face, power, withWind: true, dt: 1 / 90 }).result);
+    const aim0 = g.aim, L = wet(aim0, -miss), R = wet(aim0, miss);
+    if (L === R || wet(aim0, 0)) return '';
+    for (let k = 1; k <= 8; k++) {
+      for (const sgn of [1, -1]) {
+        const aim = aim0 + sgn * k * 0.5 * DEG;
+        if (wet(aim, -miss) || wet(aim, miss)) continue;
+        g.aim = aim;
+        g.placeGolfer();
+        const d0 = dirOf(aim0), d1 = dirOf(aim);
+        const right = d1.x * -d0.z + d1.z * d0.x > 0;
+        const what = this.simOutcome(c, aim0, { face: L ? -miss : miss, power, withWind: true, dt: 1 / 90 }).result === 'ob' ? 'out of bounds' : 'the water';
+        return `Favour the ${right ? 'right' : 'left'} of the pin: a miss ${right ? 'left' : 'right'} finds ${what}.`;
+      }
+    }
+    return '';
   }
 
   // fraction of a club's still-air carry left from the given lie
@@ -358,9 +402,9 @@ export class Caddie {
       for (const r of A.results) if (top.includes(r) || r.notes.length) for (const off of [-10, 10, -20, 20, -30, 30, -40, 40]) A.aimQ.push({ r, off, aim0: r.aim });
     }
     if (!A.aimQ.length) { this.finishAnalysis(); return; }
-    // two lines a frame: the target shifted sideways by `off` metres at the club's distance
-    // (in order of size, so a smaller shift wins a tie)
-    for (const q of A.aimQ.splice(0, 2)) {
+    // one line a frame (five sims, ~9 ms): the target shifted sideways by `off` metres at the
+    // club's distance (in order of size, so a smaller shift wins a tie)
+    for (const q of A.aimQ.splice(0, 1)) {
       const dir = dirOf(q.aim0), dist = q.r.club.total;
       const aim = angOf(dir.x * dist - dir.z * q.off, dir.z * dist + dir.x * q.off);
       const out = this.rateAim(q.r.club, aim);
@@ -368,14 +412,15 @@ export class Caddie {
     }
   }
 
-  // expected strokes (including this one) for a full swing on `aim`: straight and a
-  // typical miss either way, in the current wind
+  // expected strokes (including this one) for a full swing on `aim`: straight, a typical
+  // miss either way, and one a touch long and short (a lay-up that only just stops short
+  // of a pond at 100% is in it when the swing is hot), in the current wind
   rateAim(club, aim) {
     const g = this.g, b = g.ball;
     const spread = club.loft < 20 ? 3.2 : club.loft < 30 ? 2.4 : 1.8;
     let es = 0; const notes = [];
-    for (const face of [-spread, 0, spread]) {
-      const out = this.simOutcome(club, aim, { face, power: 1, dt: 1 / 90, withWind: true });
+    for (const [face, power, w] of [[-spread, 1, 0.25], [0, 1, 0.3], [spread, 1, 0.25], [0, 1.05, 0.1], [0, 0.95, 0.1]]) {
+      const out = this.simOutcome(club, aim, { face, power, dt: 1 / 90, withWind: true });
       let e;
       if (out.result === 'water') { e = 1 + expectedStrokes('rough', out.entryDist / YD); notes.push('water'); }
       else if (out.result === 'ob') { e = 1 + expectedStrokes(b.isTee ? 'fairway' : b.surface, g.distToPin() / YD, b.isTee); notes.push('out of bounds'); }
@@ -384,7 +429,7 @@ export class Caddie {
         if (out.surface === 'bunker') notes.push('bunkers');
         if (out.surface === 'deep' || out.surface === 'straw') notes.push('trees');
       }
-      es += e / 3;
+      es += e * w;
     }
     return { es: es + 1, notes: [...new Set(notes)] };
   }
@@ -543,11 +588,12 @@ export class Caddie {
     return this.g.club.putter ? p : this.clearOfTrouble(p);
   }
 
-  // A swing ~4% off the number is an ordinary miss. If that miss on one side finds water
+  // A swing ~4-6% off the number is an ordinary miss. If that miss on one side finds water
   // or out of bounds (a front pin just over a creek), move the number away from it, the
   // way a caddie says "take enough to carry the water" and accepts the longer putt.
   clearOfTrouble(p) {
-    const g = this.g, M = 0.04;
+    // newer players miss by more, so their caddie leaves more room
+    const g = this.g, M = { beginner: 0.06, standard: 0.05 }[g.settings?.difficulty] ?? 0.04;
     const wet = (pw) => pw <= 1.05 && ['water', 'ob'].includes(this.simOutcome(g.club, g.aim, { power: pw, withWind: true, dt: 1 / 90 }).result);
     const short = wet(p * (1 - M)), long = wet(p * (1 + M));
     if (short === long) return p;
