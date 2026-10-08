@@ -4,7 +4,7 @@
 import { COURSES, courseById } from './courses/index.js';
 import { mulberry32 } from './hole.js';
 import { RoundStats } from './stats.js';
-import { MPH } from './util.js';
+import { MPH, DEG } from './util.js';
 
 export const MODES = {
   '18': { name: '18 holes' },
@@ -81,7 +81,8 @@ export function createRound(opts) {
   const setup = {};
   for (const idx of opts.holes) {
     const [wmin, wmax] = course.wind;
-    setup[idx] = { pinIndex: Math.floor(rng() * 4), mph: wmin + (wmax - wmin) * Math.pow(rng(), 1.3), ang: windDir + (rng() - 0.5) * 1.4 };
+    // the wind blows from one quarter all round, so it swings round as the holes change direction
+    setup[idx] = { pinIndex: Math.floor(rng() * 4), mph: wmin + (wmax - wmin) * Math.pow(rng(), 1.3), ang: windDir - holeHeading(course, idx) + (rng() - 0.5) * 1.4 };
   }
   const names = opts.players?.length ? opts.players : [null];
   const balls = MODES[opts.mode]?.balls || 0;
@@ -93,6 +94,19 @@ export function createRound(opts) {
     get scores() { return this.player.scores; },
     get stats() { return this.player.stats; },
   };
+}
+
+// Compass heading (radians, clockwise) from tee to green. Every hole is built facing the
+// same way, so without this the round's wind came from the same side on all 18 holes. A
+// course can list its own headings (degrees); otherwise a routing is made up from the
+// course seed: each hole turns a right angle or more from the last, as real routings do.
+const TURNS = [Math.PI / 2, -Math.PI / 2, Math.PI, 0.75 * Math.PI, -0.75 * Math.PI];
+export function holeHeading(course, idx) {
+  if (course.headings) return course.headings[idx] * DEG;
+  const rng = mulberry32(((course.seed ?? 1) * 7919) >>> 0);
+  let h = rng() * Math.PI * 2;
+  for (let i = 0; i < idx; i++) h += TURNS[Math.floor(rng() * TURNS.length)] + (rng() - 0.5) * 0.6;
+  return h;
 }
 
 // Physics environment for a hole from its round setup (wind blows TOWARD setup.ang)

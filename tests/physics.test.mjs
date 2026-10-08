@@ -93,6 +93,13 @@ test('long irons release more than short irons on the green', () => {
   assert.ok(r4.roll > r9.roll + 2);
 });
 
+test('a 10 mph tailwind adds some release on the green, not a runaway', () => {
+  for (const k of ['7I', 'PW']) {
+    const calm = runToRest(k, 'green'), down = runToRest(k, 'green', { wind: [0, 0, -4.47] });
+    assert.ok(down.roll > calm.roll + 2 && down.roll < calm.roll + 9, `${k} roll ${calm.roll.toFixed(1)} -> ${down.roll.toFixed(1)}`);
+  }
+});
+
 test('driver rolls out on the fairway, much less in the rough', () => {
   const fw = runToRest('DR', 'fairway'), rough = runToRest('DR', 'rough');
   assert.ok(fw.roll > 12 && fw.roll < 40, `fairway roll ${fw.roll.toFixed(1)}`);

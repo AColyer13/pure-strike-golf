@@ -107,8 +107,9 @@ export class CameraDirector {
     // a portrait phone sees a narrow slice either side: stand further back, nearer the line,
     // and keep the ball above the middle (the meter, buttons and caddie fill the lower half)
     const wide = this.camera.aspect > 0 ? clamp((this.camera.aspect - 0.5) / 0.8, 0, 1) : 1;
-    const back = (putt ? clamp(1.5 + toCup * 0.9, 1.9, 3.3) : 3.9) * z * (1.15 - 0.15 * wide), up = (putt && toCup < 2.5 ? 0.9 : 1.35) * z + this.orbit.pitch * 4;
+    let back = (putt ? clamp(1.5 + toCup * 0.9, 1.9, 3.3) : 3.9) * z * (1.15 - 0.15 * wide), up = (putt && toCup < 2.5 ? 0.9 : 1.35) * z + this.orbit.pitch * 4;
     const side = (putt ? 0.55 : 0.3) * (0.5 + 0.5 * wide); // shift right of the line, away from the golfer
+    if (!putt) { const e = this.sightLift(f, back, up, side); up += e; back += e * 2.2; }
     const px = b.p[0] - f.x * back - f.z * side, pz = b.p[2] - f.z * back + f.x * side;
     const py = Math.max(h.height(px, pz) + 0.6, b.p[1] + up);
     // tilt the view so the ball sits below the screen centre (above the swing meter)
@@ -116,6 +117,34 @@ export class CameraDirector {
     const lx = px + f.x * 20 * Math.cos(dep), lz = pz + f.z * 20 * Math.cos(dep);
     const ly = py - 20 * Math.sin(dep);
     return { pos: new THREE.Vector3(px, py, pz), look: new THREE.Vector3(lx, ly, lz) };
+  }
+  // A rise between the ball and where the shot is going (a par 3 across a dip, a green
+  // beyond a crest) can hide the green, the creek in front of it and the base of the flag
+  // from 1.35 m. Returns how much higher (m, up to 2) the camera has to be to see that
+  // ground; address() also moves back about twice that so the ball keeps its place on
+  // screen. Cached, because address() runs every frame.
+  sightLift(f, back, up, side) {
+    const g = this.g, b = g.ball, h = g.hole;
+    const T = g.previewLand || [h.cup.x, 0, h.cup.z];
+    const key = `${b.p[0]},${b.p[2]},${f.x.toFixed(4)},${f.z.toFixed(4)},${Math.round(T[0])},${Math.round(T[2])},${back.toFixed(2)},${up.toFixed(2)}`;
+    if (key === this.liftKey) return this.lift;
+    const tx = T[0], tz = T[2], ty = h.height(tx, tz) + 0.3;
+    const sees = (e) => {
+      const bk = back + e * 2.2;
+      const ex = b.p[0] - f.x * bk - f.z * side, ez = b.p[2] - f.z * bk + f.x * side;
+      const ey = Math.max(h.height(ex, ez) + 0.6, b.p[1] + up + e);
+      const D = Math.hypot(tx - ex, tz - ez);
+      for (let s = 4; s < D - 3; s += 2) {
+        const t = s / D;
+        if (h.height(ex + (tx - ex) * t, ez + (tz - ez) * t) > ey + (ty - ey) * t) return false;
+      }
+      return true;
+    };
+    let lift = 0;
+    while (lift < 2 && !sees(lift)) lift += 0.25;
+    this.liftKey = key;
+    this.lift = lift;
+    return lift;
   }
   snapAddress() {
     const c = this.address();

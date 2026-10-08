@@ -404,7 +404,7 @@ export class BallSim {
 
     // Penner crater: soft turf deforms, effectively tilting the plane toward the incoming ball.
     const firm = this.env.firmness ?? 1;
-    const crater = S.crater * clamp(-vn / 18, 0, 1) * (1.25 - 0.5 * firm) * 20 * DEG;
+    const crater = S.crater * clamp(-vn / 18, 0, 1) * (1.25 - 0.5 * firm) * 17 * DEG;
     const vtl = len(vt);
     if (crater > 0 && vtl > 0.01) {
       const tdir = mul(vt, 1 / vtl);
@@ -427,6 +427,9 @@ export class BallSim {
     if (utl < 1e-6) dv = [0, 0, 0];
     else dv = mul(ut, -Math.min(stickDv, maxDv) / utl);
     let vtOut = add(vt, dv);
+    // the ball ploughs through the pitch mark it makes, losing a share of its forward speed. Without this
+    // a flatter downwind landing kept nearly all its extra speed and released 15-20 yd on the green.
+    vtOut = mul(vtOut, 1 - 0.45 * Math.min(1, crater / (24 * DEG)));
     // spin-back: the turf "check" reverses the ball, but grass deforms and bleeds most of that energy
     if (dot(vtOut, vt) < 0) vtOut = mul(vtOut, 0.45);
     // angular impulse from friction: dw = (r_c x dp)/I, r_c = -r n

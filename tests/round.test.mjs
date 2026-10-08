@@ -6,7 +6,8 @@ import { Hole, YD } from '../src/hole.js';
 import { buildBag } from '../src/clubs.js';
 import { COURSES } from '../src/courses/index.js';
 import { MAX_STROKES, MIN_SWING } from '../src/config.js';
-import { angOf, clamp } from '../src/util.js';
+import { angOf, dirOf, clamp } from '../src/util.js';
+import { computeLaunch, simulateCarry } from '../src/physics.js';
 import { createRound, holeEnv, SIGNATURE } from '../src/round.js';
 import { reliefOptions } from '../src/rules.js';
 import { wantsPutter, canPutt, puttSetup, powerForCarry } from '../src/caddie.js';
@@ -20,7 +21,8 @@ const aimAtCup = (hole, ball) => angOf(hole.cup.x - ball.p[0], hole.cup.z - ball
 
 // A sensible player: putter on the green (and from short grass just off it),
 // otherwise the shortest club that carries the distance (driver only from the
-// tee), eased off for pitches. Reads no break: it aims straight at the cup.
+// tee), eased off for pitches. Reads no break: it aims at the cup, allowing
+// for wind and elevation by rule of thumb (a 7-iron's carry and drift; 1 m per metre of rise).
 const SHORT_GRASS = new Set(['fairway', 'fringe', 'cut', 'tee']);
 function straightPolicy({ hole, ball, d, bag, env }) {
   const aim = aimAtCup(hole, ball);
@@ -30,11 +32,17 @@ function straightPolicy({ hole, ball, d, bag, env }) {
     return { club: bag.find((c) => c.putter), aim: ps.aim, puttRange: ps.range, elevIn: ps.elevIn, swing: { power: clamp(ps.eqFt / ps.range, 0.02, 1), face: 0, path: 0, strike: 1 } };
   }
   const usable = bag.filter((c) => !c.putter && (ball.isTee || c.key !== 'DR'));
-  const fits = usable.filter((c) => c.carry >= d * 0.985).sort((a, b) => a.carry - b.carry);
+  // the wind's effect on a mid-iron: plays-like distance and sideways drift
+  const dir = dirOf(aim), fwd = [dir.x, 0, dir.z];
+  const mid = computeLaunch(bag.find((c) => c.key === '7I'), { power: 1, face: 0, path: 0, strike: 1, traj: 0, lie: 'fairway' });
+  const calm = simulateCarry(mid, { ...env, wind: [0, 0, 0] }, { fwd }), windy = simulateCarry(mid, env, { fwd });
+  const rise = hole.height(hole.cup.x, hole.cup.z) - hole.height(ball.p[0], ball.p[2]);
+  const plays = d * calm.carry / windy.carry + rise, drift = Math.atan2(windy.lateral - calm.lateral, windy.carry);
+  const fits = usable.filter((c) => c.carry >= plays * 0.985).sort((a, b) => a.carry - b.carry);
   const club = fits[0] || usable.sort((a, b) => b.carry - a.carry)[0];
   const lie = lieKeyFor(ball, hole, club);
-  const power = d < club.carry * 0.9 ? powerForCarry(club, d, { traj: 0, lie, rho: env.rho }) : 1;
-  return { club, aim, swing: { power, face: 0, path: 0, strike: 1 } };
+  const power = plays < club.carry ? powerForCarry(club, plays, { traj: 0, lie, rho: env.rho }) : 1;
+  return { club, aim: aim - drift, swing: { power, face: 0, path: 0, strike: 1 } };
 }
 
 // Dribbles a lob wedge a few yards at a time: never gets there.

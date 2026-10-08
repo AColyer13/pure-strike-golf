@@ -311,8 +311,9 @@ export class Caddie {
         const short = `Heavy lie: the ball comes out ~${Math.round((1 - keep) * 100)}% short`;
         this.msg = pick(pl.plays, 1) !== target ? `${short}, so take more club.` : `${short}: swing harder than the yardage says.`;
       }
+      const pinAim = g.aim, wind = this.aimForWind(power);
       const side = this.aimAwayFromTrouble(power);
-      if (side && !this.msg) this.msg = side;
+      if (!this.msg) this.msg = this.aimNote(pinAim, wind, side);
       return;
     }
     // pin out of range (tee shots / lay-ups): evaluate options by expected strokes
@@ -323,28 +324,66 @@ export class Caddie {
   }
 
   // In range, but a typical miss to one side finds water or out of bounds (the road behind
-  // the Road Hole, a green on the cliff edge): aim off toward the safe side, up to 4°,
-  // until a miss either way stays dry. Returns the caddie's line for it, or ''.
+  // the Road Hole, a green on the cliff edge): aim off toward the safe side, 1° at a time
+  // up to 4°, while that lowers the expected score (aiming so far away that a good swing
+  // finds a bunker is no better). Returns the caddie's line for it, or ''.
   aimAwayFromTrouble(power) {
     const g = this.g, c = g.club;
     if (c.putter) return '';
     const miss = (c.loft < 20 ? 3.2 : c.loft < 30 ? 2.4 : 1.8) * 0.6;
-    const wet = (aim, face) => ['water', 'ob'].includes(this.simOutcome(c, aim, { face, power, withWind: true, dt: 1 / 90 }).result);
-    const aim0 = g.aim, L = wet(aim0, -miss), R = wet(aim0, miss);
-    if (L === R || wet(aim0, 0)) return '';
-    for (let k = 1; k <= 8; k++) {
-      for (const sgn of [1, -1]) {
-        const aim = aim0 + sgn * k * 0.5 * DEG;
-        if (wet(aim, -miss) || wet(aim, miss)) continue;
-        g.aim = aim;
-        g.placeGolfer();
-        const d0 = dirOf(aim0), d1 = dirOf(aim);
-        const right = d1.x * -d0.z + d1.z * d0.x > 0;
-        const what = this.simOutcome(c, aim0, { face: L ? -miss : miss, power, withWind: true, dt: 1 / 90 }).result === 'ob' ? 'out of bounds' : 'the water';
-        return `Favour the ${right ? 'right' : 'left'} of the pin: a miss ${right ? 'left' : 'right'} finds ${what}.`;
-      }
+    const out = (aim, face) => this.simOutcome(c, aim, { face, power, withWind: true, dt: 1 / 90 });
+    const wet = (o) => o.result === 'water' || o.result === 'ob';
+    const aim0 = g.aim, oL = out(aim0, -miss), oR = out(aim0, miss), o0 = out(aim0, 0);
+    if (wet(oL) === wet(oR) || wet(o0)) return '';
+    const W = [0.3, 0.4, 0.3];
+    const score = (aim) => this.strokesFor(aim, power, [[-miss, 1, W[0]], [0, 1, W[1]], [miss, 1, W[2]]]);
+    const s0 = W[0] * this.strokesAfter(oL) + W[1] * this.strokesAfter(o0) + W[2] * this.strokesAfter(oR);
+    // which way is away from the trouble: try a degree each side first
+    let best = { aim: aim0, s: s0 };
+    for (const sgn of [1, -1]) {
+      const aim = aim0 + sgn * DEG, s = score(aim);
+      if (s < best.s) best = { aim, s, sgn };
     }
-    return '';
+    for (let k = 2; best.sgn && k <= 4; k++) {
+      const aim = aim0 + best.sgn * k * DEG, s = score(aim);
+      if (s >= best.s) break;
+      best = { aim, s, sgn: best.sgn };
+    }
+    if (best.s > s0 - 0.03) return null;
+    g.aim = best.aim;
+    g.placeGolfer();
+    return { right: best.aim > aim0, what: (wet(oL) ? oL : oR).result === 'ob' ? 'out of bounds' : 'the water' };
+  }
+
+  // A crosswind moves the ball off the line: aim off by the drift so the ball finishes at the
+  // pin, as a caddie would ("five right, the wind brings it back"). A Pro judges it for
+  // themselves (the landing marker still shows the drift). Returns true if the aim moved.
+  aimForWind(power) {
+    const g = this.g, c = g.club, b = g.ball, h = g.hole;
+    if (c.putter || g.settings?.difficulty === 'pro') return false;
+    const aim0 = g.aim, toPin = angOf(h.cup.x - b.p[0], h.cup.z - b.p[2]);
+    for (let k = 0; k < 2; k++) {
+      const o = this.simOutcome(c, g.aim, { power, withWind: true, dt: 1 / 90 });
+      let err = toPin - angOf(o.rest[0] - b.p[0], o.rest[2] - b.p[2]);
+      err = Math.atan2(Math.sin(err), Math.cos(err));
+      if (Math.abs(err) * g.distToPin() < 1.5) break;
+      g.aim += clamp(err, -12 * DEG, 12 * DEG);
+    }
+    if (g.aim === aim0) return false;
+    g.placeGolfer();
+    return true;
+  }
+
+  // the caddie's line for the aim it chose: off the pin for the wind, away from trouble
+  aimNote(pinAim, wind, side) {
+    const g = this.g, yd = Math.round(Math.sin(g.aim - pinAim) * g.distToPin() * YD);
+    const lr = (right) => (right ? 'right' : 'left');
+    const miss = side ? `a miss ${lr(!side.right)} finds ${side.what}` : '';
+    if (wind && Math.abs(yd) >= 3) {
+      const msg = `Aim ${Math.abs(yd)} yd ${lr(yd > 0)} of the pin: the wind moves it ${lr(yd < 0)}.`;
+      return side ? `${msg} A${miss.slice(1)}.` : msg;
+    }
+    return side ? `Favour the ${lr(side.right)} of the pin: ${miss}.` : '';
   }
 
   // fraction of a club's still-air carry left from the given lie
@@ -416,22 +455,35 @@ export class Caddie {
   // miss either way, and one a touch long and short (a lay-up that only just stops short
   // of a pond at 100% is in it when the swing is hot), in the current wind
   rateAim(club, aim) {
-    const g = this.g, b = g.ball;
     const spread = club.loft < 20 ? 3.2 : club.loft < 30 ? 2.4 : 1.8;
     let es = 0; const notes = [];
     for (const [face, power, w] of [[-spread, 1, 0.25], [0, 1, 0.3], [spread, 1, 0.25], [0, 1.05, 0.1], [0, 0.95, 0.1]]) {
       const out = this.simOutcome(club, aim, { face, power, dt: 1 / 90, withWind: true });
-      let e;
-      if (out.result === 'water') { e = 1 + expectedStrokes('rough', out.entryDist / YD); notes.push('water'); }
-      else if (out.result === 'ob') { e = 1 + expectedStrokes(b.isTee ? 'fairway' : b.surface, g.distToPin() / YD, b.isTee); notes.push('out of bounds'); }
-      else {
-        e = expectedStrokes(out.surface, out.dist / YD);
-        if (out.surface === 'bunker') notes.push('bunkers');
-        if (out.surface === 'deep' || out.surface === 'straw') notes.push('trees');
-      }
-      es += e * w;
+      if (out.result === 'water') notes.push('water');
+      else if (out.result === 'ob') notes.push('out of bounds');
+      else if (out.surface === 'bunker') notes.push('bunkers');
+      else if (out.surface === 'deep' || out.surface === 'straw') notes.push('trees');
+      es += this.strokesAfter(out) * w;
     }
     return { es: es + 1, notes: [...new Set(notes)] };
+  }
+
+  // tour-average strokes still to play after a shot that finishes as `out` (a simOutcome),
+  // penalty included
+  strokesAfter(out) {
+    const g = this.g, b = g.ball;
+    if (out.result === 'holed') return 0;
+    if (out.result === 'water') return 1 + expectedStrokes('rough', out.entryDist / YD);
+    if (out.result === 'ob') return 1 + expectedStrokes(b.isTee ? 'fairway' : b.surface, g.distToPin() / YD, b.isTee);
+    return expectedStrokes(out.surface, out.dist / YD);
+  }
+
+  // expected strokes after the shot on (aim, power) and its ordinary misses either way;
+  // `misses` lists [face°, power factor, weight]
+  strokesFor(aim, power, misses) {
+    let es = 0;
+    for (const [face, k, w] of misses) es += w * this.strokesAfter(this.simOutcome(this.g.club, aim, { face, power: power * k, withWind: true, dt: 1 / 90 }));
+    return es;
   }
 
   finishAnalysis() {
@@ -599,7 +651,12 @@ export class Caddie {
     if (short === long) return p;
     const step = short ? 0.01 : -0.01, side = short ? 1 - M : 1 + M;
     for (let q = p + step, i = 0; i < 8 && q > 0.1 && q <= 1; q += step, i++) {
-      if (!wet(q * side)) return wet(q * (2 - side)) ? p : q;
+      if (wet(q * side)) continue;
+      if (wet(q * (2 - side))) return p;
+      // only if it is the better bet: carrying the creek is no help if the swing that
+      // does it runs off the back of a shallow green into a bunker
+      const misses = [[0, 1 - M, 0.25], [0, 1, 0.5], [0, 1 + M, 0.25]];
+      return this.strokesFor(g.aim, q, misses) < this.strokesFor(g.aim, p, misses) ? q : p;
     }
     return p;
   }

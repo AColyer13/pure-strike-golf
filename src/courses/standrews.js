@@ -13,6 +13,8 @@ export default {
   firmness: 1.45,
   rho: 1.24,
   wind: [9, 24],
+  // out along the shore, round the Loop (7-11), and back in: the wind turns on every stretch
+  headings: [300, 305, 310, 300, 315, 310, 30, 20, 300, 120, 210, 125, 130, 135, 125, 130, 120, 115],
   sky: { top: '#6f95c4', horizon: '#dfe6ea', sun: [0.55, 0.45, -0.3], fog: '#d5dde0' },
   style: {
     fairwayWidth: 70, margin: 70, hills: 1.6, bumps: 0.35, humps: 0.9, seaLevel: -6,
