@@ -21,6 +21,7 @@
 <canvas id="c"></canvas>
 <canvas id="swingOverlay"></canvas>
 
+<div id="gfxLost" class="hidden" role="alert"><div class="boot-msg"><b>Graphics paused</b><p id="gfxLostMsg">The graphics card was reset. Restoring…</p><button class="btn primary hidden" id="gfxReload">Reload</button></div></div>
 <div id="boot"><div class="logo">PURE <span>STRIKE</span> GOLF</div><div class="muted">Loading…</div></div>
 
 <!-- ============ main menu ============ -->
@@ -37,6 +38,7 @@
       <button id="btnQuick" class="btn primary big"></button>
       <button id="btnPlay" class="btn big"></button>
     </div>
+    <button id="resumeCard" class="daily-card resume-card hidden"></button>
     <button id="dailyCard" class="daily-card"></button>
     <details id="menuDrawer" class="drawer">
       <summary>Round setup &amp; options</summary>

@@ -8,7 +8,7 @@ import { COURSES } from '../src/courses/index.js';
 import { MAX_STROKES, MIN_SWING } from '../src/config.js';
 import { angOf, dirOf, clamp } from '../src/util.js';
 import { computeLaunch, simulateCarry } from '../src/physics.js';
-import { createRound, holeEnv, SIGNATURE } from '../src/round.js';
+import { createRound, holeEnv, SIGNATURE, roundSnapshot, restoreRound, resumable } from '../src/round.js';
 import { reliefOptions } from '../src/rules.js';
 import { wantsPutter, canPutt, puttSetup, powerForCarry } from '../src/caddie.js';
 import {
@@ -277,4 +277,36 @@ test('hot seat: every player plays the hole before the round moves on', () => {
   nextTurn(round);
   assert.equal(nextTurn(round), 'end');
   assert.equal(round.p, 0);
+});
+
+test('a saved round comes back with the same pins, wind, scores and place on the hole', () => {
+  const round = createRound({ courseId: 'gen', holes: [0, 1, 2], mode: 'random', seed: 77, players: ['Ann', 'Bo'] });
+  round.player.stats.startHole(1, 4, 400);
+  finishHoleScore(round, { number: 1, par: 4 }, 5);
+  nextTurn(round);
+  round.player.stats.startHole(1, 4, 400);
+  round.player.stats.recordShot({ surface: 'tee', yards: 400, isTee: true }, { surface: 'fairway', yards: 150 }, false);
+  const mid = { ball: { p: [1, 2, -150], isTee: false }, strokes: 1, penalties: 0, ballNo: 0 };
+  // through JSON, as it is stored
+  const snap = JSON.parse(JSON.stringify(roundSnapshot(round, { mid })));
+  const back = restoreRound(snap);
+  assert.equal(back.course.name, round.course.name, 'generated course rebuilt from its seed');
+  assert.deepEqual(back.setup, round.setup, 'same pins and wind');
+  assert.equal(back.p, 1);
+  assert.equal(back.player.name, 'Bo');
+  assert.deepEqual(back.players[0].scores, [{ number: 1, par: 4, strokes: 5, pickedUp: false }]);
+  assert.equal(back.players[0].stats.totals().strokes, 5);
+  assert.equal(back.player.stats.cur.shots.length, 1, 'the hole in progress keeps its shots');
+  assert.deepEqual(snap.mid, mid);
+});
+
+test('only multi-hole rounds are saved, and a bad save is ignored', () => {
+  assert.equal(resumable({ holes: [0, 1, 2], mode: 'daily' }), true);
+  assert.equal(resumable({ holes: [11], mode: 'single' }), false);
+  assert.equal(resumable({ holes: [11, 11], mode: 'ctp' }), false);
+  assert.equal(restoreRound(null), null);
+  assert.equal(restoreRound({ v: 1, opts: { courseId: 'nowhere', holes: [0, 1], mode: '18', seed: 1 }, i: 0, p: 0, players: [{}] }), null);
+  const snap = roundSnapshot(createRound({ courseId: 'augusta', holes: [0, 1], mode: 'front', seed: 2 }));
+  assert.equal(restoreRound({ ...snap, i: 5 }), null, 'hole index out of range');
+  assert.equal(restoreRound({ ...snap, players: [] }), null, 'player count changed');
 });

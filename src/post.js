@@ -4,7 +4,7 @@
 // transform move into the OutputPass, so the look is identical between tiers
 // apart from the effects themselves. "auto" guesses a tier from the device and
 // then watches the first real frames: if the median frame takes too long, it
-// steps down a tier and tries again.
+// steps down a tier and tries again, and below low it asks for a lower resolution.
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -38,6 +38,7 @@ export class PostPipeline {
     this.composer = null;
     this.probe = null;
     this.onTier = null; // callback(tier) when auto changes its mind
+    this.onLowest = null; // callback when even low is slow: true if it lowered the resolution
   }
 
   // quality: 'auto' | 'low' | 'medium' | 'high'
@@ -112,7 +113,8 @@ export class PostPipeline {
       this.setTier(TIERS[i - 1]);
       this.probe = { t: 0, samples: [] };
       this.onTier?.(this.tier);
-    } else this.probe = null;
+    } else if (median > SLOW_FRAME_MS && this.onLowest?.()) this.probe = { t: 0, samples: [] };
+    else this.probe = null;
   }
 
   dispose() {

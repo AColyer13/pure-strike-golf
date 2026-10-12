@@ -4,7 +4,7 @@ import { PROFILES } from './clubs.js';
 import { YD } from './hole.js';
 import { SURFACES } from './physics.js';
 import { DEFAULT_KEYS, ACTION_LABELS, DIFFICULTY } from './config.js';
-import { MODES, SIGNATURE, dailySpec, holesFor, challengeHash } from './round.js';
+import { MODES, SIGNATURE, dailySpec, holesFor, challengeHash, RESUME_KEY, resumable, restoreRound } from './round.js';
 import { loadHistory, bestFor, handicapIndex, sgTrend, clearHistory, localDay, RATINGS } from './history.js';
 import { firstRun } from './tutorial.js';
 import { QUALITY } from './post.js';
@@ -82,6 +82,19 @@ export class UI {
     }
     $('btnPlay').innerHTML = `Tee off ▶<small>${MODES[this.sel.mode].name}${this.sel.players > 1 ? ` · ${this.sel.players} players` : ''}</small>`;
     $('btnPlay').onclick = () => this.play();
+
+    // an unfinished round (closed tab, phone dropped the page, quit mid-round)
+    const saved = this.savedRound(), rc = $('resumeCard');
+    rc.classList.toggle('hidden', !saved);
+    if (saved) {
+      const { snap, round: r } = saved, pl = r.players[0];
+      const thru = pl.scores.length, toPar = pl.scores.reduce((t, x) => t + x.strokes - x.par, 0);
+      const where = snap.done ? `All ${r.holes.length} holes played – see the summary` : `Hole ${r.holes[r.i] + 1}${thru ? ` · ${toParStr(toPar)} thru ${thru}` : ''}`;
+      rc.innerHTML = `<div class="lbl">Resume round</div>
+        <div><b>${r.course.name}</b> · ${MODES[r.mode]?.name || ''}${r.players.length > 1 ? ` · ${r.players.length} players` : ''}</div>
+        <div class="muted small">${where}</div>`;
+      rc.onclick = () => this.resume(snap);
+    }
 
     // daily challenge
     const d = dailySpec();
@@ -169,10 +182,25 @@ export class UI {
     this.start({ courseId: this.sel.courseId, holes, mode: m });
   }
   start(opts) {
+    const saved = resumable(opts) && this.savedRound();
+    if (saved && !confirm(`Start a new round? Your unfinished round at ${saved.round.course.name} will be replaced.`)) return;
     $('menu').classList.add('hidden');
     document.body.classList.add('in-round');
     const players = opts.mode !== 'daily' && !opts.solo && this.sel.players > 1 ? this.sel.names.slice(0, this.sel.players).map((n, i) => (n || '').trim() || `Player ${i + 1}`) : null;
     this.game.startRound({ ...opts, players });
+  }
+
+  resume(snap) {
+    $('menu').classList.add('hidden');
+    document.body.classList.add('in-round');
+    this.game.startRound(null, snap);
+  }
+  savedRound() {
+    try {
+      const snap = JSON.parse(localStorage.getItem(RESUME_KEY) || 'null');
+      const round = restoreRound(snap);
+      return round ? { snap, round } : null;
+    } catch (e) { return null; }
   }
 
   hideAll() {

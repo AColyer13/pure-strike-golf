@@ -26,7 +26,7 @@ import { Input } from './input.js';
 import { reliefOptions } from './rules.js';
 import { fmtWind } from './units.js';
 import { loadHistory, saveRound, roundEntry, bestFor } from './history.js';
-import { SIGNATURE, createRound, holeEnv, introExtra } from './round.js';
+import { SIGNATURE, createRound, holeEnv, introExtra, RESUME_KEY, resumable, roundSnapshot, restoreRound } from './round.js';
 import {
   STEP, distToPin, teeBall, groundBall, ballLiftFor, lieKeyFor, slopeAt, lieZoneFor, shotSeedFor, windRelOf,
   computeBagDistances, normalizeSwing, shotStartOf, launchShot, forecastShot, shotInfoFor,
@@ -68,6 +68,15 @@ export class Game {
     this.settings = this.loadSettings();
     this.post = new PostPipeline(this.renderer, this.scene, this.camera);
     this.post.onTier = (t) => this.ui.toast(`Graphics set to ${t} for smoother frames`);
+    // below the low tier (no effects) the only thing left to give is resolution
+    this.post.onLowest = () => {
+      const pr = this.renderer.getPixelRatio();
+      if (pr <= 1) return false;
+      this.renderer.setPixelRatio(pr > 1.5 ? 1.5 : 1);
+      this.resize();
+      this.ui.toast('Resolution lowered for smoother frames');
+      return true;
+    };
     this.post.setQuality(this.settings.quality);
     this.audio = new SoundEngine();
     this.meter = new SwingMeter($('meter'));
@@ -89,8 +98,32 @@ export class Game {
     this.last = performance.now();
     this.hudTimer = 0;
     this.applyAccessibility();
+    // the browser can take the graphics away (a phone backgrounding the tab, a GPU reset);
+    // three.js rebuilds everything when they come back, so pause until then
+    canvas.addEventListener('webglcontextlost', () => this.graphicsLost());
+    canvas.addEventListener('webglcontextrestored', () => this.graphicsRestored());
     requestAnimationFrame((t) => this.loop(t));
     addEventListener('resize', () => this.resize());
+  }
+
+  graphicsLost() {
+    this.gfxLost = true;
+    $('gfxLostMsg').textContent = 'The graphics card was reset. Restoring…';
+    $('gfxReload').classList.add('hidden');
+    $('gfxReload').onclick = () => location.reload();
+    $('gfxLost').classList.remove('hidden');
+    clearTimeout(this.gfxT);
+    this.gfxT = setTimeout(() => {
+      if (!this.gfxLost) return;
+      $('gfxLostMsg').textContent = `The graphics haven’t come back. Reload to carry on${this.round && resumable(this.round.opts) ? ' – your round is saved and picks up from your last shot' : ''}.`;
+      $('gfxReload').classList.remove('hidden');
+    }, 5000);
+  }
+  graphicsRestored() {
+    this.gfxLost = false;
+    clearTimeout(this.gfxT);
+    $('gfxLost').classList.add('hidden');
+    this.last = performance.now();
   }
 
   // ------------------------------------------------------------------ settings
@@ -155,11 +188,13 @@ export class Game {
 
   // ------------------------------------------------------------------ round
   // opts: { courseId, holes, mode, seed?, players?: [names], daily?: dateKey }
-  startRound(opts) {
+  // snap: a saved round (roundSnapshot) to carry on instead of starting afresh
+  startRound(opts, snap = null) {
     this.ui.hideAll();
     this.audio.init();
     this.audio.setVolume(this.settings.volume);
-    this.round = createRound(opts);
+    this.round = snap ? restoreRound(snap) : createRound(opts);
+    if (!this.round) { this.quitToMenu(); return; }
     const course = this.round.course;
     this.course = course;
     this.bag = buildBag(this.settings.profile);
@@ -169,12 +204,12 @@ export class Game {
     this.ui.showHUD(true);
     this.meter.resize();
     this.clearGhosts();
-    this.loadHole();
+    this.loadHole(snap);
   }
 
   get challenge() { return this.round && this.round.balls > 0; }
 
-  loadHole() {
+  loadHole(snap = null) {
     const r = this.round;
     const idx = r.holes[r.i];
     const course = this.course;
@@ -189,8 +224,21 @@ export class Game {
       this.golfer.root.visible = true;
       this.ballMesh.visible = true;
       this.ui.loading(false);
+      const cur = r.stats.cur;
       this.resetPlayerOnHole();
+      if (snap?.done) { this.endRound(); return; }
       this.ui.holeIntro(this.hole, course, this.fmtDist(this.hole.length), this.windText(), introExtra(this.round));
+      if (snap?.mid) {
+        // back where the player left off: same ball, strokes and hole stats, no flyover
+        const m = snap.mid;
+        this.strokes = m.strokes; this.penalties = m.penalties; this.ballNo = m.ballNo;
+        if (cur && !this.challenge) { r.stats.cur = cur; this.holeStats = cur; }
+        this.ball = { ...this.ball, p: m.ball.p.slice(), isTee: m.ball.isTee };
+        this.startFlyover();
+        this.endFlyover();
+        this.ui.toast('Round resumed');
+        return;
+      }
       this.startFlyover();
     }, 30);
   }
@@ -263,6 +311,7 @@ export class Game {
   enterAddress() {
     this.state = 'address';
     this.addressAt = performance.now();
+    this.saveProgress({ mid: { ball: { p: this.ball.p.slice(), isTee: !!this.ball.isTee }, strokes: this.strokes, penalties: this.penalties, ballNo: this.ballNo } });
     this.cam.resetOrbit();
     this.cam.targetView = false;
     document.body.classList.remove('target-view');
@@ -856,6 +905,7 @@ export class Game {
     this.state = 'scorecard';
     this.cam.orbitGreen();
     const last = turn === 'end';
+    this.saveProgress(last ? { done: true } : { i: r.i + 1 });
     this.ui.scorecard(this.course, r, true, () => {
       if (last) this.endRound();
       else { nextHole(r); this.loadHole(); }
@@ -874,6 +924,7 @@ export class Game {
 
   endRound() {
     const r = this.round;
+    if (!this.tutorial && resumable(r.opts)) this.clearProgress();
     this.state = 'summary';
     this.cam.orbitGreen();
     this.meter.hide();
@@ -898,6 +949,13 @@ export class Game {
     }
     this.ui.summary(this.course, r, r.players[0].stats.totals(), prevBest, this.settings);
   }
+
+  // the round so far, for "Resume round" on the menu (not the guided first hole)
+  saveProgress(at) {
+    if (!this.round || this.tutorial || !resumable(this.round.opts)) return;
+    try { localStorage.setItem(RESUME_KEY, JSON.stringify(roundSnapshot(this.round, at))); } catch (e) { /* ignore */ }
+  }
+  clearProgress() { try { localStorage.removeItem(RESUME_KEY); } catch (e) { /* ignore */ } }
 
   quitToMenu() {
     this.ui.showHUD(false);
@@ -954,6 +1012,7 @@ export class Game {
   // ------------------------------------------------------------------ main loop
   loop(t) {
     requestAnimationFrame((tt) => this.loop(tt));
+    if (this.gfxLost) { this.last = t; return; }
     this.post.sample(t - this.last);
     const dt = Math.min(0.05, (t - this.last) / 1000);
     this.last = t;

@@ -10,19 +10,25 @@
     "driver": {
       "want": 3,
       "files": [
-        "sfx/driver.mp3"
+        "sfx/driver.mp3",
+        "sfx/driver2.mp3"
       ],
       "note": "driver/wood strike, flushed"
     },
     "wood": {
       "want": 2,
-      "files": [],
+      "files": [
+        "sfx/wood.mp3"
+      ],
       "note": "fairway wood; falls back to driver"
     },
     "iron": {
       "want": 3,
       "files": [
-        "sfx/iron.mp3"
+        "sfx/iron.mp3",
+        "sfx/iron2.mp3",
+        "sfx/iron3.mp3",
+        "sfx/iron4.mp3"
       ],
       "note": "iron strike with turf"
     },
@@ -30,7 +36,9 @@
       "want": 2,
       "files": [
         "sfx/wedge1.mp3",
-        "sfx/wedge2.mp3"
+        "sfx/wedge2.mp3",
+        "sfx/wedge3.mp3",
+        "sfx/wedge4.mp3"
       ],
       "note": "wedge strike; falls back to iron"
     },
@@ -43,8 +51,11 @@
     },
     "sand": {
       "want": 2,
-      "files": [],
-      "note": "bunker splash shot; synthesized when empty"
+      "files": [
+        "sfx/sand1.mp3",
+        "sfx/sand2.mp3"
+      ],
+      "note": "bunker splash shot"
     },
     "whoosh": {
       "want": 2,
@@ -67,18 +78,23 @@
     },
     "land-sand": {
       "want": 1,
-      "files": [],
-      "note": "landing in sand; synthesized when empty"
+      "files": [
+        "sfx/land-sand.mp3"
+      ],
+      "note": "landing in sand"
     },
     "land-path": {
       "want": 1,
-      "files": [],
-      "note": "ball on a cart path; synthesized when empty"
+      "files": [
+        "sfx/land-path.mp3"
+      ],
+      "note": "ball on a cart path"
     },
     "cup": {
       "want": 2,
       "files": [
-        "sfx/cup.mp3"
+        "sfx/cup.mp3",
+        "sfx/cup2.mp3"
       ],
       "note": "ball dropping in the hole"
     },

@@ -88,12 +88,51 @@ export function createRound(opts) {
   const balls = MODES[opts.mode]?.balls || 0;
   return {
     course, holes: opts.holes, i: 0, seed, mode: opts.mode, daily: opts.daily || null, setup, balls,
+    opts: { courseId: opts.courseId, holes: opts.holes, mode: opts.mode, seed, players: opts.players || null, daily: opts.daily || null },
     players: names.map((name) => ({ name, scores: [], stats: new RoundStats(), attempts: [] })),
     p: 0,
     get player() { return this.players[this.p]; },
     get scores() { return this.player.scores; },
     get stats() { return this.player.stats; },
   };
+}
+
+// A round in progress as plain JSON, so a closed tab, a phone that drops the page in
+// the background or lost graphics don't cost the round. `mid` is the current player's
+// place on the current hole ({ ball: { p, isTee }, strokes, penalties, ballNo }), null
+// before they have teed off; `done` marks a round whose last hole is finished.
+export const RESUME_KEY = 'psg-resume';
+// only rounds of several holes are saved: a quick single hole or a closest-to-the-pin
+// session never replaces an unfinished 18
+export const resumable = (opts) => opts.holes.length > 1 && !MODES[opts.mode]?.balls;
+
+export function roundSnapshot(round, { mid = null, done = false, i = round.i } = {}) {
+  const r = round;
+  return {
+    v: 1, t: Date.now(), opts: r.opts, i, p: r.p, mid, done,
+    players: r.players.map((pl) => ({ scores: pl.scores, attempts: pl.attempts, stats: { holes: pl.stats.holes, cur: mid ? pl.stats.cur || null : null } })),
+  };
+}
+
+// The round a snapshot describes (same course, pins and wind from its seed), or null
+// if it is unreadable or its course no longer exists.
+export function restoreRound(snap) {
+  const s = snap;
+  if (!s || s.v !== 1 || !s.opts || !Array.isArray(s.players)) return null;
+  let r;
+  try { r = createRound(s.opts); } catch (e) { return null; }
+  if (!r.course || s.players.length !== r.players.length) return null;
+  if (!(s.i >= 0 && s.i < r.holes.length) || !(s.p >= 0 && s.p < r.players.length)) return null;
+  r.players.forEach((pl, k) => {
+    const d = s.players[k];
+    pl.scores = Array.isArray(d.scores) ? d.scores : [];
+    pl.attempts = Array.isArray(d.attempts) ? d.attempts : [];
+    pl.stats.holes = Array.isArray(d.stats?.holes) ? d.stats.holes : [];
+    pl.stats.cur = d.stats?.cur || null;
+  });
+  r.i = s.i;
+  r.p = s.p;
+  return r;
 }
 
 // Compass heading (radians, clockwise) from tee to green. Every hole is built facing the
