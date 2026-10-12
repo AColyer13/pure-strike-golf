@@ -36,6 +36,7 @@ export function generateCourse(seed, templates) {
     return n;
   };
 
+  let holeIx = 0;
   const holes = pars.map((par) => {
     const h = { name: holeName(), par };
     const tips = [];
@@ -66,6 +67,7 @@ export function generateCourse(seed, templates) {
       pins: [[0, Math.round(gd * 0.15)], [-Math.round(gw * 0.18), -Math.round(gd * 0.12)], [Math.round(gw * 0.18), Math.round(gd * 0.05)], [0, -Math.round(gd * 0.2)]],
     };
     if (rnd() < 0.25) h.green.raise = ri(2, 5);
+    contourGreen(h.green, mulberry32((seed * 31 + holeIx++ * 977 + 0x51ed) >>> 0));
     const slots = shuffle([[-gw / 2 - 3, -gd / 4], [gw / 2 + 3, -gd / 4], [-gw / 2 - 4, gd / 5], [gw / 2 + 4, gd / 5], [0, gd / 2 + 5]], rnd);
     h.gb = slots.slice(0, ri(1, 3)).map(([x, y]) => [Math.round(x), Math.round(y), ri(5, 7), ri(4, 5), ri(-25, 25)]);
     // water: a pond fronting a par 3, or alongside the landing zone on a long hole
@@ -107,6 +109,31 @@ export function generateCourse(seed, templates) {
   };
   cache.set(key, course);
   return course;
+}
+
+// A plain tilted plane with central pins putted far easier than the tribute courses'
+// greens. Add the same kinds of contour they use (a tier, a hump, a false front) and
+// spread the pins towards them. Draws from its own generator so the layout a seed has
+// always made (holes, hazards, the shared-challenge course) stays the same.
+function contourGreen(gr, rnd) {
+  const r = (a, b) => a + (b - a) * rnd();
+  const { w, d } = gr;
+  const kind = rnd();
+  if (kind < 0.35) {
+    // a tier across the green, usually rising to the back
+    const dir = rnd() < 0.75 ? r(-25, 25) : r(-25, 25) + (rnd() < 0.5 ? 90 : -90);
+    gr.tiers = [[Math.round(dir), +r(-0.15 * d, 0.1 * d).toFixed(1), +r(1.2, 2.4).toFixed(1), 3]];
+  } else if (kind < 0.7) {
+    // a hump (or a bowl) off-centre
+    gr.bumps = [[+r(-0.3 * w, 0.3 * w).toFixed(1), +r(-0.25 * d, 0.25 * d).toFixed(1), +r(5, 8).toFixed(1), +(rnd() < 0.75 ? r(1, 2.4) : -r(0.8, 1.5)).toFixed(1)]];
+  }
+  if (rnd() < 0.25) gr.ff = +r(2.5, 4).toFixed(1);
+  gr.pins = [
+    [Math.round(r(-0.1, 0.1) * w), Math.round(d * 0.27)],
+    [-Math.round(w * 0.27), -Math.round(d * r(0.05, 0.18))],
+    [Math.round(w * 0.27), Math.round(d * r(-0.05, 0.12))],
+    [Math.round(r(-0.12, 0.12) * w), -Math.round(d * 0.24)],
+  ];
 }
 
 function shuffle(a, rnd) {

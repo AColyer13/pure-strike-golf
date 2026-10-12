@@ -3,7 +3,7 @@ import { COURSES, courseById } from './courses/index.js';
 import { PROFILES } from './clubs.js';
 import { YD } from './hole.js';
 import { SURFACES } from './physics.js';
-import { DEFAULT_KEYS, ACTION_LABELS } from './config.js';
+import { DEFAULT_KEYS, ACTION_LABELS, DIFFICULTY } from './config.js';
 import { MODES, SIGNATURE, dailySpec, holesFor, challengeHash } from './round.js';
 import { loadHistory, bestFor, handicapIndex, sgTrend, clearHistory, localDay, RATINGS } from './history.js';
 import { firstRun } from './tutorial.js';
@@ -251,6 +251,7 @@ export class UI {
     }
     $('dSub').innerHTML = sub;
     $('hud').dataset.state = d.state;
+    $('hud').dataset.putt = d.putter ? '1' : '';
     const w = d.wind;
     $('windArrow').style.transform = `rotate(${w.ang}rad)`;
     $('windMph').textContent = `${windValue(d.windMph, units)}`;
@@ -284,8 +285,14 @@ export class UI {
     g.clearRect(0, 0, cw, ch);
     const B = h.bounds;
     const bw = B.maxX - B.minX, bd = B.maxZ - B.minZ;
-    const s = Math.min((cw - 8) / bw, (ch - 8) / bd);
-    const ox = (cw - bw * s) / 2, oy = (ch - bd * s) / 2;
+    // A phone-sized map of the whole hole shows a par-3 green as a few pixels, and on a
+    // portrait screen the 3-D view can't show it either: when the shot can reach the
+    // green, frame just the landing area and the green.
+    const V = cw < 120 ? this.minimapFocus(game) : null;
+    const vx = V ? V.minX : B.minX, vz = V ? V.minZ : B.minZ;
+    const vw = V ? V.maxX - V.minX : bw, vd = V ? V.maxZ - V.minZ : bd;
+    const s = Math.min((cw - 8) / vw, (ch - 8) / vd);
+    const ox = (cw - vw * s) / 2 + (B.minX - vx) * s, oy = (ch - vd * s) / 2 + (B.minZ - vz) * s;
     this.mm = { s, ox, oy, B };
     g.save();
     g.beginPath(); if (g.roundRect) g.roundRect(0, 0, cw, ch, 10); else g.rect(0, 0, cw, ch); g.clip();
@@ -322,6 +329,23 @@ export class UI {
     g.fillStyle = '#fff'; g.strokeStyle = '#000';
     g.beginPath(); g.arc(qx, qy, 3.5, 0, Math.PI * 2); g.fill(); g.stroke();
     g.restore();
+  }
+  // world rect around the landing spot and the green, or null for the whole hole
+  minimapFocus(game) {
+    const h = game.hole, land = game.previewLand;
+    if (game.state !== 'address' || game.club?.putter || !land) return null;
+    const c = h.cup, near = Math.hypot(land[0] - c.x, land[2] - c.z) < 45;
+    if (!near && !(game.suggestedPower < 1)) return null; // not a shot at the green
+    const xs = [c.x, h.gf.x], zs = [c.z, h.gf.z];
+    if (near) { xs.push(land[0]); zs.push(land[2]); } // (a full swing that flies the green is off the map)
+    const m = 24;
+    const box = { minX: Math.min(...xs) - m, maxX: Math.max(...xs) + m, minZ: Math.min(...zs) - m, maxZ: Math.max(...zs) + m };
+    // never tighter than 70 m across: the green should read as a green, not fill the map
+    for (const [lo, hi] of [['minX', 'maxX'], ['minZ', 'maxZ']]) {
+      const span = box[hi] - box[lo];
+      if (span < 70) { box[lo] -= (70 - span) / 2; box[hi] += (70 - span) / 2; }
+    }
+    return box;
   }
   minimapClick(e) {
     const g = this.game;
@@ -528,10 +552,11 @@ export class UI {
         return `<div class="sg-row"><span>${nm}</span><div class="bar"><i class="${v >= 0 ? 'pos' : 'neg'}" style="width:${w}%;${v >= 0 ? 'left:50%' : `left:${50 - w}%`}"></i></div><b>${sgn(v)}</b></div>`;
       }).join('')}</div>
       <p class="sum-total">Total: <b>${sgn(t.sgTotal)}</b> strokes vs. a tour player over ${n} hole${n === 1 ? '' : 's'}.</p>
-      <div class="tip"><b>Where to improve: ${worst[1]}</b><p>${advice[worst[0]]}</p></div>`;
+      ${t.sg[worst[0]] < 0 ? `<div class="tip"><b>Where to improve: ${worst[1]}</b><p>${advice[worst[0]]}</p></div>`
+    : `<div class="tip"><b>Strokes gained everywhere</b><p>You beat the tour average in every part of the game. The smallest gain was ${worst[1].toLowerCase()} (${sgn(t.sg[worst[0]])}).${settings.difficulty !== 'pro' ? ' Try a harder difficulty in Settings for a tougher test.' : ''}</p></div>`}`;
     };
     const tabs = multi ? `<div class="segs sum-tabs">${round.players.map((pl, i) => `<button class="seg${i === 0 ? ' on' : ''}" data-p="${i}">${esc(pl.name)}</button>`).join('')}</div>` : '';
-    const info = [course.name, MODES[round.mode]?.name, PROFILES[settings.profile]?.name || settings.profile, settings.difficulty].filter(Boolean).join(' · ');
+    const info = [course.name, MODES[round.mode]?.name, PROFILES[settings.profile]?.name || settings.profile, DIFFICULTY[settings.difficulty]?.name].filter(Boolean).join(' · ');
     s.innerHTML = `<h1>${round.daily ? 'Daily challenge complete' : 'Round complete'}</h1>
       <div class="muted">${info}</div>
       ${board}

@@ -3,12 +3,15 @@
     "Sample slots for src/audio.js. Every slot is optional: an empty list keeps the synthesized sound.",
     "Paths are relative to this file. Any format the browser can decode works (ogg, mp3, wav, m4a).",
     "List 2-3 variants per slot where 'want' says so; playback picks one at random with a +-4% pitch jitter.",
-    "Only add files you have the rights to ship (your own recordings or CC0 packs)."
+    "Only add files you have the rights to ship (your own recordings or CC0 packs).",
+    "The files in sfx/ are CC0 recordings from freesound.org, trimmed and level-matched; see CREDITS.md."
   ],
   "slots": {
     "driver": {
       "want": 3,
-      "files": [],
+      "files": [
+        "sfx/driver.mp3"
+      ],
       "note": "driver/wood strike, flushed"
     },
     "wood": {
@@ -18,32 +21,43 @@
     },
     "iron": {
       "want": 3,
-      "files": [],
+      "files": [
+        "sfx/iron.mp3"
+      ],
       "note": "iron strike with turf"
     },
     "wedge": {
       "want": 2,
-      "files": [],
+      "files": [
+        "sfx/wedge1.mp3",
+        "sfx/wedge2.mp3"
+      ],
       "note": "wedge strike; falls back to iron"
     },
     "putter": {
       "want": 2,
-      "files": [],
+      "files": [
+        "sfx/putter.mp3"
+      ],
       "note": "putter click"
     },
     "sand": {
       "want": 2,
       "files": [],
-      "note": "bunker splash shot; falls back to wedge"
+      "note": "bunker splash shot; synthesized when empty"
     },
     "whoosh": {
       "want": 2,
-      "files": [],
+      "files": [
+        "sfx/whoosh.mp3"
+      ],
       "note": "club swish before impact"
     },
     "land": {
       "want": 2,
-      "files": [],
+      "files": [
+        "sfx/land.mp3"
+      ],
       "note": "ball landing on turf"
     },
     "land-green": {
@@ -54,46 +68,60 @@
     "land-sand": {
       "want": 1,
       "files": [],
-      "note": "landing in sand; falls back to land"
+      "note": "landing in sand; synthesized when empty"
     },
     "land-path": {
       "want": 1,
       "files": [],
-      "note": "ball on a cart path; falls back to land"
+      "note": "ball on a cart path; synthesized when empty"
     },
     "cup": {
       "want": 2,
-      "files": [],
+      "files": [
+        "sfx/cup.mp3"
+      ],
       "note": "ball dropping in the hole"
     },
     "pin": {
       "want": 1,
-      "files": [],
+      "files": [
+        "sfx/pin.mp3"
+      ],
       "note": "ball hits the flagstick"
     },
     "tree": {
       "want": 2,
-      "files": [],
+      "files": [
+        "sfx/tree.mp3"
+      ],
       "note": "ball through branches"
     },
     "splash": {
       "want": 1,
-      "files": [],
+      "files": [
+        "sfx/splash.mp3"
+      ],
       "note": "water"
     },
     "cheer": {
       "want": 1,
-      "files": [],
+      "files": [
+        "sfx/cheer.mp3"
+      ],
       "note": "crowd roar (great shot)"
     },
     "applause": {
       "want": 1,
-      "files": [],
+      "files": [
+        "sfx/applause.mp3"
+      ],
       "note": "polite golf clap"
     },
     "groan": {
       "want": 1,
-      "files": [],
+      "files": [
+        "sfx/groan.mp3"
+      ],
       "note": "crowd groan (water, lip-out)"
     }
   }

@@ -15,13 +15,19 @@ export function wantsPutter(hole, ball) {
   const d = Math.hypot(hole.cup.x - ball.p[0], hole.cup.z - ball.p[2]);
   const s = ball.surface;
   if (s === 'green' || (s === 'fringe' && d < 18)) return true;
+  const lineIs = (ok) => {
+    for (let t = 0.1; t < 1; t += 0.1) {
+      if (!ok.includes(hole.surface(ball.p[0] + (hole.cup.x - ball.p[0]) * t, ball.p[2] + (hole.cup.z - ball.p[2]) * t))) return false;
+    }
+    return true;
+  };
+  // a long one from the fringe with only putting surface ahead: still a putt. A chip
+  // across a big green has to land on a spot and check (on a tiered green a few
+  // percent short rolls back down the tier), while a putt only has to be paced.
+  if (s === 'fringe') return d < 30 && lineIs(['green', 'fringe']);
   // just off the green on short grass: putt it if the whole line to the hole is mown
   if ((s !== 'cut' && s !== 'fairway') || d > 15 || hole.greenSdf(ball.p[0], ball.p[2]) > 4) return false;
-  for (let t = 0.1; t < 1; t += 0.1) {
-    const q = hole.surface(ball.p[0] + (hole.cup.x - ball.p[0]) * t, ball.p[2] + (hole.cup.z - ball.p[2]) * t);
-    if (q !== 'green' && q !== 'fringe' && q !== 'cut' && q !== 'fairway') return false;
-  }
-  return true;
+  return lineIs(['green', 'fringe', 'cut', 'fairway']);
 }
 // Where a putt is at least a sensible option: on or around the green (a
 // "Texas wedge" from the apron is fine; a 465 ft putt from the tee is not).
@@ -185,11 +191,44 @@ export function* puttReadSteps(hole, ball, env) {
       if (best === c) { da /= 2; fv /= 2; }
     }
   }
+  // Over a ridge the best line is often a knife edge: the ball just stops on a shelf
+  // (or just drops), and 1% firmer or half a degree off runs 20-30 ft down the tier.
+  // Nobody strokes it that exactly, so judge the line by its average leave over a
+  // normal stroke's errors (±3% pace, ±0.5° line); when that is poor, search for the
+  // line and pace that forgive them. (An ordinary putt averages well under a metre.)
+  const ERR = [[0, 0], [0, 0.03], [0, -0.03], [0.0087, 0], [-0.0087, 0]];
+  // (the first sample is the exact stroke, so robust() also hands back its leave; a
+  // candidate stops rolling once its total can no longer beat `bound`)
+  const robust = function* (ca, cv, bound = Infinity) {
+    let s = 0, exact = 0;
+    for (const [ea, ev] of ERR) {
+      const l = puttLeave(h, env, b.p, ca + ea, cv * (1 + ev));
+      if (!ea && !ev) exact = l;
+      s += Math.min(l, 30);
+      yield;
+      if (s >= bound * ERR.length) return null;
+    }
+    return { a: ca, v: cv, leave: exact, score: s / ERR.length };
+  };
+  let rb = yield* robust(best.a, best.v);
+  if (rb.score > 1.5 || best.leave > 0.6) {
+    let ra = 0.03, rv = 0.08;
+    for (let r = 0; r < 5 && rb.score > 0.6; r++) {
+      const c = rb;
+      for (const [sa, sv] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const t = yield* robust(c.a + sa * ra, c.v * (1 + sv * rv), rb.score);
+        if (t) rb = t;
+      }
+      if (rb === c) { ra /= 2; rv /= 2; }
+    }
+    best = rb;
+  }
+  const score = rb.score;
   ({ a, v } = best);
   const eqFt = (v * v) / (2 * h.greenRoll * G) / FT;
   const range = puttRangeFor(eqFt);
   const brk = Math.sin(a - a0) * d;
-  return { ...base, eqFt, range, aim: a, speed: v, cupAim: a0, brk, leave: best.leave };
+  return { ...base, eqFt, range, aim: a, speed: v, cupAim: a0, brk, leave: best.leave, spread: score };
 }
 export function puttRead(hole, ball, env) {
   const it = puttReadSteps(hole, ball, env);
@@ -214,7 +253,7 @@ export function puttNote(rd) {
   const e = Math.round(rd.elevIn);
   const slope = Math.abs(e) < 2 ? 'Level' : `${e > 0 ? 'Uphill' : 'Downhill'} ${Math.abs(e)} in`;
   let msg = `Read: ${line}${breaks}. ${slope}, stroke it ${Math.round(rd.eqFt)} ft.`;
-  if (rd.leave > 0.9) msg += ' No easy line here – lag it close.';
+  if (rd.leave > 0.9 || rd.spread > 1.5) msg += ' No easy line here – lag it close.';
   return msg;
 }
 
@@ -613,7 +652,7 @@ export class Caddie {
         g.previewDirty = true;
         return;
       }
-      if (performance.now() - t0 > 6) return;
+      if (performance.now() - t0 > 12) return;
     }
   }
 

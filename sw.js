@@ -1,7 +1,7 @@
 // Service worker: makes the game installable and playable offline.
 // Network-first, so a reload always picks up new code when online; the cache is
 // the fallback when there's no connection. Bump VERSION to drop old caches.
-const VERSION = 'psg-v15';
+const VERSION = 'psg-v16';
 const SHELL = [
   './', 'index.html', 'styles.css', 'manifest.json', 'icon.svg', 'audio/manifest.json',
   'vendor/three/build/three.module.js', 'vendor/three/addons/objects/Sky.js',
@@ -16,6 +16,8 @@ const SHELL = [
   'src/config.js', 'src/util.js', 'src/world.js', 'src/golfer.js', 'src/stats.js', 'src/meter.js',
   'src/audio.js', 'src/coach.js', 'src/caddie.js', 'src/camera.js', 'src/input.js', 'src/rules.js', 'src/shot.js', 'src/scoring.js', 'src/tutorial.js', 'src/units.js', 'src/post.js', 'src/fx.js', 'src/foliage.js',
   'src/clubs.js', 'src/hole.js', 'src/physics.js', 'src/editor.js',
+  'audio/sfx/driver.mp3', 'audio/sfx/iron.mp3', 'audio/sfx/wedge1.mp3', 'audio/sfx/wedge2.mp3', 'audio/sfx/putter.mp3', 'audio/sfx/whoosh.mp3', 'audio/sfx/land.mp3',
+  'audio/sfx/cup.mp3', 'audio/sfx/pin.mp3', 'audio/sfx/tree.mp3', 'audio/sfx/splash.mp3', 'audio/sfx/cheer.mp3', 'audio/sfx/applause.mp3', 'audio/sfx/groan.mp3',
   'src/courses/index.js', 'src/courses/augusta.js', 'src/courses/standrews.js', 'src/courses/pebble.js', 'src/courses/sawgrass.js', 'src/courses/procedural.js',
 ];
 

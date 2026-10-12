@@ -129,10 +129,11 @@ export class SoundEngine {
     const c = this.ctx, t = c.currentTime;
     const out = c.createGain(); out.connect(this.master);
     out.gain.value = kind === 'putt' ? 0.35 : 0.9 * (0.5 + 0.5 * power);
-    const slot = { putt: ['putter'], sand: ['sand', 'wedge'], wood: ['wood', 'driver'], wedge: ['wedge', 'iron'] }[kind] || [kind];
+    // with no sand sample a bunker shot keeps the synthesized splash, not the crisp wedge click
+    const slot = { putt: ['putter'], sand: ['sand'], wood: ['wood', 'driver'], wedge: ['wedge', 'iron'] }[kind] || [kind];
     if (this.bank?.play(slot, { gain: 0.5 + 0.5 * quality, rate: 1 - 0.06 * (1 - quality), dest: out })) {
       if (quality < 0.7 && kind !== 'putt') this.thud(t, quality, out);
-      this.whoosh(t - 0.12, power);
+      if (kind !== 'putt') this.whoosh(t - 0.12, power);
       return;
     }
     // noisy transient
@@ -159,8 +160,8 @@ export class SoundEngine {
       o.start(t); o.stop(t + 0.4);
     }
     if (quality < 0.7 && kind !== 'putt') this.thud(t, quality, out);
-    // whoosh (swing)
-    this.whoosh(t - 0.12, power);
+    // whoosh (swing; a putting stroke is silent)
+    if (kind !== 'putt') this.whoosh(t - 0.12, power);
   }
 
   // low thud layered under a mishit (fat or thin strike)
@@ -197,7 +198,8 @@ export class SoundEngine {
     const c = this.ctx, t = c.currentTime;
     const v = Math.min(1, speed / 25);
     if (surface === 'water') return this.splash(v);
-    const slot = surface === 'bunker' ? ['land-sand', 'land'] : surface === 'path' ? ['land-path', 'land'] : surface === 'green' ? ['land-green', 'land'] : ['land'];
+    // with no sample of their own, sand and the cart path keep their synthesized sound, not the turf thud
+    const slot = surface === 'bunker' ? ['land-sand'] : surface === 'path' ? ['land-path'] : surface === 'green' ? ['land-green', 'land'] : ['land'];
     if (this.bank?.play(slot, { gain: 0.3 + 0.7 * v, rate: 1.1 - 0.2 * v, jitter: 0.06 })) return;
     const n = this.noiseSrc();
     const f = c.createBiquadFilter();

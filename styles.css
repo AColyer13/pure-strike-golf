@@ -449,6 +449,9 @@ body.reduced-motion *, body.reduced-motion *::before, body.reduced-motion *::aft
   body.in-round #distBox .sub { align-items: flex-end; }
   body.in-round #distBox .lie-line { justify-content: flex-end; }
   body.in-round #minimap { top: 206px; right: 8px; }
+  /* the 3-D view can't show a far green at this width, so the map (zoomed on the green when the
+     shot can reach it) stays up at address; not for putts, where the green fills the view anyway */
+  body.hud-essential.in-round:not(.target-view) #hud[data-state="address"]:not([data-putt="1"]) #minimap { display: block; }
 }
 
 /* ---------- course editor ---------- */
