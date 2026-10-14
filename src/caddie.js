@@ -193,19 +193,24 @@ export function* puttReadSteps(hole, ball, env, straight = false) {
   let v = base.speed, a = a0;
   let best = { a, v, leave: yield* puttLeave(a, v) };
   let m = yield* puttMiss(a, v);
+  best.m = Math.abs(m);
   yield;
   let aPrev = null, mPrev = null;
-  for (let it = 0; it < 6 && best.leave > 0 && Math.abs(m) > 0.012; it++) {
+  // (a line that drops on the high or low edge is no read either: the smallest pull or
+  // push the wrong way misses, so carry on until it rolls over the middle of the hole.
+  // That moves the aim a couple of centimetres, too little to re-solve the pace for.)
+  const edge = best.leave === 0;
+  for (let it = 0; it < 6 && Math.abs(m) > 0.012; it++) {
     let next;
     if (aPrev === null || Math.abs(m - mPrev) < 1e-5) next = a - m / Math.max(d, 0.5);
     else next = a - m * (a - aPrev) / (m - mPrev);
     // a putt never needs to start more than ~60° outside the hole
     next = a0 + clamp(next - a0, -1, 1);
     aPrev = a; mPrev = m; a = next;
-    if (it < 3) v = yield* speedSteps(h, env, b.p, cupDir, d + 0.43, dirOf(a), v);
+    if (it < 3 && !edge) v = yield* speedSteps(h, env, b.p, cupDir, d + 0.43, dirOf(a), v);
     const leave = yield* puttLeave(a, v);
-    if (leave < best.leave) best = { a, v, leave };
     m = yield* puttMiss(a, v);
+    if (leave < best.leave || (leave === 0 && best.leave === 0 && Math.abs(m) < best.m)) best = { a, v, leave, m: Math.abs(m) };
     yield;
   }
   // Over a ridge or down a tier the miss isn't smooth in aim and pace (a touch softer

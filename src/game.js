@@ -318,7 +318,7 @@ export class Game {
     this.cam.targetView = false;
     document.body.classList.remove('target-view');
     const d = this.diff;
-    this.meter.configure({ fullTime: d.meterTime * (this.club.putter ? 1.25 : 1), marker: null, autoPower: null });
+    this.meter.configure({ fullTime: d.meterTime * (this.club.putter ? 1.25 : 1), zone: this.club.putter ? d.puttZone : d.zone, marker: null, autoPower: null });
     this.meter.show();
     this.meter.state = 'ready';
     this.meter.power = null;
@@ -353,7 +353,7 @@ export class Game {
     this.placeGolfer();
     this.hole.pinIn = !this.club.putter;
     if (this.club.putter) this.caddie.setupPutt();
-    this.meter.configure({ putt: !!this.club.putter, fullTime: this.diff.meterTime * (this.club.putter ? 1.25 : 1) });
+    this.meter.configure({ putt: !!this.club.putter, fullTime: this.diff.meterTime * (this.club.putter ? 1.25 : 1), zone: this.club.putter ? this.diff.puttZone : this.diff.zone });
     this.mouseSwing.putt = !!this.club.putter;
     this.world.reticle.visible = !this.club.putter && this.state !== 'flyover';
     this.world.puttLine.visible = false;

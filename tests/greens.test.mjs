@@ -74,6 +74,32 @@ test('a straight-in putt reads straight; a sidehill putt aims above the hole', (
   }
 });
 
+test('a short breaking putt is read through the middle of the cup, not off an edge', () => {
+  // 3 ft across a 1.2% slope rising to +x: aimed straight at the cup it still drops, but
+  // on the low edge, so the smallest push misses. The read has to play the break.
+  const course = COURSES[0];
+  const h = new Hole(course.holes[0], course, 0, { pinIndex: 0 });
+  const env = envOf(course, h);
+  const cup = { x: h.cup.x, z: h.cup.z }, slope = 0.012;
+  h.height = (x) => (x - cup.x) * slope;
+  h.normal = () => { const l = Math.hypot(slope, 1); return [-slope / l, 1 / l, 0]; };
+  h.surface = () => 'green';
+  h.pinIn = false;
+  const ball = { p: [cup.x, 0.0214, cup.z + 0.91], surface: 'green' };
+  const rd = puttRead(h, ball, env);
+  assert.equal(rd.leave, 0, 'holed');
+  assert.ok(rd.brk > 0.01, `plays the break (aims right of centre): brk ${rd.brk}`);
+  // a stroke 1.5° off the read either way still drops
+  for (const off of [-1.5, 1.5]) {
+    const sim = new BallSim(h, env, mulberry32(3));
+    const d = dirOf(rd.aim + off * Math.PI / 180);
+    sim.putt(ball.p.slice(), [d.x, 0, d.z], rd.speed);
+    let s = 0;
+    while (sim.state === 'roll' && s++ < 3000) sim.step(1 / 120);
+    assert.equal(sim.state, 'holed', `${off}° off the read holes`);
+  }
+});
+
 test('putter range covers a monster up a bank', () => {
   assert.equal(puttRangeFor(8), 10);
   assert.equal(puttRangeFor(100), 120);
