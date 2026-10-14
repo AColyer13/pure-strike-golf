@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import { World } from './world.js';
 import { PostPipeline } from './post.js';
+import { PerfHud, perfWanted } from './perf.js';
 import { Golfer } from './golfer.js';
 import { BallSim, LIES, SURFACES, puttSpeedFor, BALL } from './physics.js';
 import { buildBag } from './clubs.js';
@@ -102,6 +103,7 @@ export class Game {
     // three.js rebuilds everything when they come back, so pause until then
     canvas.addEventListener('webglcontextlost', () => this.graphicsLost());
     canvas.addEventListener('webglcontextrestored', () => this.graphicsRestored());
+    if (perfWanted(location.search)) this.perf = new PerfHud(this);
     requestAnimationFrame((t) => this.loop(t));
     addEventListener('resize', () => this.resize());
   }
@@ -1014,6 +1016,7 @@ export class Game {
     requestAnimationFrame((tt) => this.loop(tt));
     if (this.gfxLost) { this.last = t; return; }
     this.post.sample(t - this.last);
+    this.perf?.frame(t - this.last);
     const dt = Math.min(0.05, (t - this.last) / 1000);
     this.last = t;
     this.frame(dt);

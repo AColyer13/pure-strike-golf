@@ -274,6 +274,7 @@ export class Caddie {
     this.g = game;
     this.analysis = null;
     this.reading = null; // putt read in progress (see setupPutt)
+    this.lastRead = null; // { ms, cpu } of the last finished read
     this.puttLead = ''; // advice shown ahead of the putt read (e.g. why putt from the fringe)
     this.results = null; // last lay-up analysis, kept so the note can follow a club change
     this.msg = '';
@@ -626,13 +627,13 @@ export class Caddie {
     const base = it.next().value;
     for (;;) {
       const r = it.next();
-      if (r.done) { this.applyPutt(r.value, true); return; }
+      if (r.done) { const ms = performance.now() - t0; this.lastRead = { ms, cpu: ms }; this.applyPutt(r.value, true); return; }
       if (performance.now() - t0 > 30) break;
     }
     this.applyPutt(base, false);
     this.msg = this.withLead('Caddie is reading the putt…');
     if (g.ui) g.caddieNote();
-    this.reading = { it, aim: g.aim, ball: g.ball.p.slice() };
+    this.reading = { it, aim: g.aim, ball: g.ball.p.slice(), t0, cpu: performance.now() - t0 };
   }
 
   // a few ms of the putt read per frame; dropped if the swing starts or anything changes
@@ -646,13 +647,15 @@ export class Caddie {
       const r = R.it.next();
       if (r.done) {
         this.reading = null;
+        // wall time from address to a finished read, and the CPU time it took (shown by ?perf)
+        this.lastRead = { ms: performance.now() - R.t0, cpu: R.cpu + performance.now() - t0 };
         const userAimed = Math.abs(g.aim - R.aim) > 1e-6;
         this.applyPutt(r.value, true, userAimed);
         if (!userAimed) g.placeGolfer();
         g.previewDirty = true;
         return;
       }
-      if (performance.now() - t0 > 12) return;
+      if (performance.now() - t0 > 12) { R.cpu += performance.now() - t0; return; }
     }
   }
 

@@ -28,6 +28,8 @@ Then open http://localhost:8321.
 
 The game is an installable PWA. After the first load it works offline. The service worker is network-first, so a reload always picks up new code when you're online. Add `?nosw` to the URL to skip the service worker while developing.
 
+To test a phone or tablet, open the game with `?perf` (for example https://acolyer13.github.io/pure-strike-golf/?perf). A small readout shows the frame rate, graphics tier, resolution and how long the caddie's last putt read took. Tap it to copy a summary of the session (average and slow frames, hitches, putt reads, device and audio state) to paste into a bug report.
+
 ## Ways to play
 
 - **Start here: guided first hole.** On a fresh install the big button runs a five-minute lesson on Augusta's 12th (beginner assists, calm wind): coach marks explain the distance and wind panels, the club, aiming, the three-click meter, the shot panel and putting as each comes up. Later it lives under How to play.
@@ -133,6 +135,7 @@ src/caddie.js, rules.js   club advice and expected strokes; penalty relief
 src/round.js              modes, seeds, daily challenge, challenge links, round setup
 src/tutorial.js           guided first hole: coach-mark steps polled from the game loop
 src/post.js               post-processing tiers (bloom, GTAO) and the auto quality probe
+src/perf.js               the ?perf readout for device testing
 src/fx.js                 impact effects: pooled particles (turf, sand, spray, dust) and decals (divots, pitch marks)
 src/foliage.js            tree crowns as alpha-tested leaf cards: painted leaf textures, leaf-shaped shadows, wind sway
 src/shot.js, scoring.js   pure shot pipeline (launch, forecast, result) and scoring

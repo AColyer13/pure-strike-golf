@@ -1,7 +1,7 @@
 // Service worker: makes the game installable and playable offline.
 // Network-first, so a reload always picks up new code when online; the cache is
 // the fallback when there's no connection. Bump VERSION to drop old caches.
-const VERSION = 'psg-v18';
+const VERSION = 'psg-v19';
 const SHELL = [
   './', 'index.html', 'styles.css', 'manifest.json', 'icon.svg', 'audio/manifest.json',
   'vendor/three/build/three.module.js', 'vendor/three/addons/objects/Sky.js',
@@ -14,7 +14,7 @@ const SHELL = [
   'fonts/barlow-condensed-latin-600-normal.woff2', 'fonts/barlow-condensed-latin-700-normal.woff2', 'fonts/barlow-condensed-latin-800-normal.woff2',
   'src/main.js', 'src/ui.js', 'src/game.js', 'src/academy.js', 'src/round.js', 'src/history.js',
   'src/config.js', 'src/util.js', 'src/world.js', 'src/golfer.js', 'src/stats.js', 'src/meter.js',
-  'src/audio.js', 'src/coach.js', 'src/caddie.js', 'src/camera.js', 'src/input.js', 'src/rules.js', 'src/shot.js', 'src/scoring.js', 'src/tutorial.js', 'src/units.js', 'src/post.js', 'src/fx.js', 'src/foliage.js',
+  'src/audio.js', 'src/coach.js', 'src/caddie.js', 'src/camera.js', 'src/input.js', 'src/rules.js', 'src/shot.js', 'src/scoring.js', 'src/tutorial.js', 'src/units.js', 'src/post.js', 'src/perf.js', 'src/fx.js', 'src/foliage.js',
   'src/clubs.js', 'src/hole.js', 'src/physics.js', 'src/editor.js',
   'audio/sfx/driver.mp3', 'audio/sfx/iron.mp3', 'audio/sfx/wedge1.mp3', 'audio/sfx/wedge2.mp3', 'audio/sfx/putter.mp3', 'audio/sfx/whoosh.mp3', 'audio/sfx/land.mp3',
   'audio/sfx/cup.mp3', 'audio/sfx/pin.mp3', 'audio/sfx/tree.mp3', 'audio/sfx/splash.mp3', 'audio/sfx/cheer.mp3', 'audio/sfx/applause.mp3', 'audio/sfx/groan.mp3',

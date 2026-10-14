@@ -91,10 +91,17 @@ export class SoundEngine {
   }
 
   init() {
-    if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
+    if (this.ctx) { this.resume(); return; }
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
+    // 'ambient' mixes with the player's own music and follows the silent switch, as iOS games should
+    try { if (navigator.audioSession) navigator.audioSession.type = 'ambient'; } catch (e) { /* older Safari */ }
     this.ctx = new AC();
+    // Safari leaves the context 'interrupted' after a call or the lock screen, and only a
+    // touchend, click or keydown counts as a gesture that may resume it (a touch pointerdown
+    // does not), so listen for those as well as the game's own init() calls.
+    for (const ev of ['touchend', 'click', 'keydown']) addEventListener(ev, () => this.resume(), { capture: true, passive: true });
+    addEventListener('visibilitychange', () => { if (!document.hidden) this.resume(); });
     this.master = this.ctx.createGain();
     this.master.gain.value = this.volume;
     this.master.connect(this.ctx.destination);
@@ -106,6 +113,12 @@ export class SoundEngine {
     this.startAmbience();
     this.bank = new SampleBank(this.ctx, this.master);
     this.bank.load(this.sampleManifest).catch(() => null);
+  }
+
+  // 'suspended' (autoplay rules) or 'interrupted' (iOS after a call or lock) both need a resume
+  resume() {
+    const c = this.ctx;
+    if (c && c.state !== 'running' && c.state !== 'closed') c.resume().catch(() => { /* no gesture yet */ });
   }
 
   setVolume(v) { this.volume = v; if (this.master) this.master.gain.value = v; }
