@@ -8,6 +8,16 @@ import { dirOf, angOf, clamp, DEG } from './util.js';
 import { SHAPES } from './config.js';
 import { findEntry } from './rules.js';
 
+// run a step generator to the end and return its value (the synchronous form of a search
+// that address frames otherwise spread a few milliseconds at a time)
+const drain = (it) => { for (;;) { const r = it.next(); if (r.done) return r.value; } };
+// CPU per frame for the background searches at address (lay-up analysis, meter marker).
+// One full sim is ~2 ms on a desktop and several on a phone; at least one runs a frame.
+export const SLICE_MS = 5;
+// the putt read gets a little more: the player is standing over the ball waiting for it,
+// and a putt over a ridge can take a few hundred rolls
+const READ_MS = 8;
+
 // Pure helpers (no game instance) so the rules can be tested and reused.
 // The caddie reaches for the putter on the green, or from the fringe / first
 // cut when a chip has more ways to go wrong than a putt.
@@ -39,19 +49,27 @@ export function canPutt(hole, ball) {
   return hole.greenSdf(ball.p[0], ball.p[2]) < 25;
 }
 
-// Rolls a putt from p along `dir` at speed v with the hole covered, calling each(pos)
-// every step. Shared by the pace and break solvers below.
-function rollCovered(hole, env, p, dir, v, each) {
-  const h = hole;
-  const sim = new BallSim(h, env, mulberry32(3));
-  const oldPin = h.pinIn, cup = h.cup; h.pinIn = false;
-  h.cup = { ...cup, x: 1e6, z: 1e6 }; // measure the roll with the hole covered
-  try {
-    sim.putt(p.slice(), [dir.x, 0, dir.z], v);
-    let n = 0;
-    while (sim.state === 'roll' && n++ < 3000) { sim.step(1 / 120); if (each(sim.p) === false) break; }
-  } finally { h.pinIn = oldPin; h.cup = cup; }
-  return sim.p;
+// The read's rolls take the pin out and, for the pace and break solvers, cover the hole.
+// Sim options rather than edits to the hole itself: a read pauses mid-roll (see
+// ROLL_SLICE) and the game carries on with the real hole in between.
+const PIN_OUT = { pinOut: true };
+const covered = (h) => ({ pinOut: true, cup: { ...h.cup, x: 1e6, z: 1e6 } });
+// steps between yields inside one roll: a long putt down a bank rolls for 20 s of game
+// time (2400 steps), which on a phone is longer than a frame
+const ROLL_SLICE = 200;
+
+// Rolls a putt from p along `dir` at speed v (sim options `opts`), calling each(pos) every step
+// (false stops it). Yields every ROLL_SLICE steps; returns the sim.
+function* rollSteps(hole, opts, env, p, dir, v, each) {
+  const sim = new BallSim(hole, env, mulberry32(3), opts);
+  sim.putt(p.slice(), [dir.x, 0, dir.z], v);
+  let n = 0;
+  while (sim.state === 'roll' && n++ < 3000) {
+    sim.step(1 / 120);
+    if (each && each(sim.p) === false) break;
+    if (n % ROLL_SLICE === 0) yield;
+  }
+  return sim;
 }
 
 // bisect on full green sims (slopes included) for the start speed that rolls `d` metres
@@ -61,26 +79,34 @@ function rollCovered(hole, env, p, dir, v, each) {
 // `launch` (default dir) starts the ball on a different line, for a putt aimed outside
 // the hole; `guess` narrows the bracket when a nearby answer is already known.
 export function puttSpeedToReach(hole, env, p, dir, d, launch = dir, guess = 0) {
-  const it = speedSteps(hole, env, p, dir, d, launch, guess);
-  for (;;) { const r = it.next(); if (r.done) return r.value; }
+  return drain(speedSteps(hole, env, p, dir, d, launch, guess));
 }
 // the same bisection, yielding after each roll (for the time-sliced read)
-function* speedSteps(hole, env, p, dir, d, launch, guess) {
-  const reach = (v) => {
-    let far = 0;
-    rollCovered(hole, env, p, launch, v, (q) => { far = Math.max(far, (q[0] - p[0]) * dir.x + (q[2] - p[2]) * dir.z); });
-    return far;
+function* speedSteps(hole, env, p, dir, d, launch = dir, guess = 0) {
+  const opts = covered(hole);
+  // (the roll stops as soon as it gets there: only whether it does matters)
+  const reach = function* (v) {
+    let got = false;
+    yield* rollSteps(hole, opts, env, p, launch, v, (q) => { if ((q[0] - p[0]) * dir.x + (q[2] - p[2]) * dir.z >= d) { got = true; return false; } });
+    return got;
   };
   let lo = 0.2, hi = 14, its = 12;
   if (guess > 0) {
-    const short = reach(guess * 0.85) < d;
+    // walk out from the guess until the answer is bracketed (a re-solve after a small
+    // change of line is rarely 4% out), then bisect to ~0.25% of it
+    if (yield* reach(guess * 0.97)) {
+      hi = guess * 0.97;
+      for (const k of [0.9, 0.7]) { yield; if (yield* reach(guess * k)) hi = guess * k; else { lo = guess * k; break; } }
+    } else {
+      lo = guess * 0.97;
+      for (const k of [1.04, 1.15, 1.4]) { yield; if (yield* reach(guess * k)) { hi = guess * k; break; } lo = guess * k; }
+    }
     yield;
-    if (short && reach(guess * 1.2) >= d) { lo = guess * 0.85; hi = guess * 1.2; its = 7; }
-    yield;
+    its = Math.max(1, Math.ceil(Math.log2((hi - lo) / (guess * 0.0025))));
   }
   for (let it = 0; it < its; it++) {
     const v = it === 0 && !guess ? puttSpeedFor(d, hole.greenRoll) : (lo + hi) / 2;
-    if (reach(v) >= d) hi = v; else lo = v;
+    if (yield* reach(v)) hi = v; else lo = v;
     yield;
   }
   return (lo + hi) / 2;
@@ -97,41 +123,48 @@ export function puttRangeFor(eqFt) {
 // speed that would finish ~17 in (43 cm) past the hole if it missed – Pelz's optimum,
 // and what the meter marker teaches. range is the meter's full-power distance in feet.
 // This is the straight-at-the-cup read; puttRead() below adds the break.
-export function puttSetup(hole, ball, env) {
+export function puttSetup(hole, ball, env) { return drain(setupSteps(hole, ball, env)); }
+function* setupSteps(hole, ball, env) {
   const h = hole, b = ball;
   const d = Math.hypot(h.cup.x - b.p[0], h.cup.z - b.p[2]) || 1e-6;
   const dir = { x: (h.cup.x - b.p[0]) / d, z: (h.cup.z - b.p[2]) / d };
-  const v = puttSpeedToReach(h, env, b.p, dir, d + 0.43);
+  const v = yield* speedSteps(h, env, b.p, dir, d + 0.43, dir, quickSetup(h, b).speed);
+  return setupFor(h, b, dir, v);
+}
+function setupFor(h, b, dir, v) {
   const eqFt = (v * v) / (2 * h.greenRoll * G) / FT;
   const range = puttRangeFor(eqFt);
   const elevIn = (h.height(h.cup.x, h.cup.z) - h.height(b.p[0], b.p[2])) / 0.0254;
   return { eqFt, range, elevIn, aim: angOf(dir.x, dir.z), speed: v };
 }
+// A first guess with no rolls (flat green plus the climb to the hole), for the frames
+// before the real read is ready.
+function quickSetup(h, b) {
+  const d = Math.hypot(h.cup.x - b.p[0], h.cup.z - b.p[2]) || 1e-6;
+  const dir = { x: (h.cup.x - b.p[0]) / d, z: (h.cup.z - b.p[2]) / d };
+  const rise = h.height(h.cup.x, h.cup.z) - h.height(b.p[0], b.p[2]);
+  const v2 = 2 * (h.greenRoll * G * (d + 0.43) + G * rise);
+  return setupFor(h, b, dir, Math.sqrt(Math.max(v2, puttSpeedFor(0.5, h.greenRoll) ** 2)));
+}
 
 // Sideways miss (metres, + = right of the cup as the player looks at it) of a putt
 // started along aim `a` at speed v: where the roll crosses the line through the cup
 // square to the putt, or where it stops if it never gets there.
-function puttMiss(hole, env, p, cupDir, d, a, v) {
+function* missSteps(hole, env, p, cupDir, d, a, v) {
   const launch = dirOf(a);
   const rx = -cupDir.z, rz = cupDir.x; // player's right when facing the cup
   let hit = null;
-  const end = rollCovered(hole, env, p, launch, v, (q) => {
+  const end = (yield* rollSteps(hole, covered(hole), env, p, launch, v, (q) => {
     if ((q[0] - p[0]) * cupDir.x + (q[2] - p[2]) * cupDir.z >= d) { hit = q.slice(); return false; }
-  });
+  })).p;
   const q = hit || end;
   return (q[0] - hole.cup.x) * rx + (q[2] - hole.cup.z) * rz;
 }
 
 // Where a putt along aim `a` at speed v really finishes, hole in play: 0 when it drops.
-function puttLeave(hole, env, p, a, v) {
+function* leaveSteps(hole, env, p, a, v) {
   const h = hole, d = dirOf(a);
-  const sim = new BallSim(h, env, mulberry32(3));
-  const oldPin = h.pinIn; h.pinIn = false;
-  try {
-    sim.putt(p.slice(), [d.x, 0, d.z], v);
-    let n = 0;
-    while (sim.state === 'roll' && n++ < 3000) sim.step(1 / 120);
-  } finally { h.pinIn = oldPin; }
+  const sim = yield* rollSteps(h, PIN_OUT, env, p, d, v);
   if (sim.state === 'holed') return 0;
   if (sim.state !== 'rest') return 1e3; // water, out of bounds
   return Math.hypot(sim.p[0] - h.cup.x, sim.p[2] - h.cup.z);
@@ -146,16 +179,20 @@ function puttLeave(hole, env, p, a, v) {
 // A generator: it yields between rolls so the game can spread a hard read over a few
 // frames (see Caddie.setupPutt); puttRead() runs it straight through. The first yield
 // hands back the straight-at-the-cup setup to use while the read is still going.
-export function* puttReadSteps(hole, ball, env) {
+// (`straight` stops at the straight-at-the-cup read: a Pro reads their own break)
+export function* puttReadSteps(hole, ball, env, straight = false) {
   const h = hole, b = ball;
-  const base = puttSetup(h, b, env);
-  yield base;
+  yield quickSetup(h, b);
+  const base = yield* setupSteps(h, b, env);
+  if (straight) return base;
   const d = Math.hypot(h.cup.x - b.p[0], h.cup.z - b.p[2]) || 1e-6;
   const cupDir = { x: (h.cup.x - b.p[0]) / d, z: (h.cup.z - b.p[2]) / d };
+  const puttLeave = (ca, cv) => leaveSteps(h, env, b.p, ca, cv);
+  const puttMiss = (ca, cv) => missSteps(h, env, b.p, cupDir, d, ca, cv);
   const a0 = base.aim;
   let v = base.speed, a = a0;
-  let best = { a, v, leave: puttLeave(h, env, b.p, a, v) };
-  let m = puttMiss(h, env, b.p, cupDir, d, a, v);
+  let best = { a, v, leave: yield* puttLeave(a, v) };
+  let m = yield* puttMiss(a, v);
   yield;
   let aPrev = null, mPrev = null;
   for (let it = 0; it < 6 && best.leave > 0 && Math.abs(m) > 0.012; it++) {
@@ -166,28 +203,28 @@ export function* puttReadSteps(hole, ball, env) {
     next = a0 + clamp(next - a0, -1, 1);
     aPrev = a; mPrev = m; a = next;
     if (it < 3) v = yield* speedSteps(h, env, b.p, cupDir, d + 0.43, dirOf(a), v);
-    const leave = puttLeave(h, env, b.p, a, v);
+    const leave = yield* puttLeave(a, v);
     if (leave < best.leave) best = { a, v, leave };
-    m = puttMiss(h, env, b.p, cupDir, d, a, v);
+    m = yield* puttMiss(a, v);
     yield;
   }
   // Over a ridge or down a tier the miss isn't smooth in aim and pace (a touch softer
   // stops on the shelf, a touch firmer runs off the green), so fall back to a coarse
   // search for the line that finishes closest, then a pattern search around it.
   if (best.leave > 0.6) {
-    const try1 = (ca, cv) => { const leave = puttLeave(h, env, b.p, ca, cv); if (leave < best.leave) best = { a: ca, v: cv, leave }; };
+    const try1 = function* (ca, cv) { const leave = yield* puttLeave(ca, cv); if (leave < best.leave) best = { a: ca, v: cv, leave }; };
     // (the pace solve can overshoot on a bank – reaching the far point may mean running
     // up and back – so the grid also tries much softer strokes, and lines well outside
     // the hole for a putt along a tier face)
     const offs = [0, -0.09, 0.09, -0.18, 0.18, -0.27, 0.27, -0.36, 0.36, -0.45, 0.45, -0.6, 0.6, -0.75, 0.75, -0.9, 0.9];
     for (const o of offs) {
-      for (const f of [0.35, 0.5, 0.65, 0.8, 0.9, 1, 1.15, 1.3, 1.5, 1.75, 2.1]) { try1(a0 + o, base.speed * f); yield; }
+      for (const f of [0.35, 0.5, 0.65, 0.8, 0.9, 1, 1.15, 1.3, 1.5, 1.75, 2.1]) { yield* try1(a0 + o, base.speed * f); yield; }
       if (best.leave === 0) break;
     }
     let da = 0.06, fv = 0.15;
     for (let r = 0; r < 8 && best.leave > 0; r++) {
       const c = best;
-      for (const [sa, sv] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { try1(c.a + sa * da, c.v * (1 + sv * fv)); yield; }
+      for (const [sa, sv] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { yield* try1(c.a + sa * da, c.v * (1 + sv * fv)); yield; }
       if (best === c) { da /= 2; fv /= 2; }
     }
   }
@@ -202,7 +239,7 @@ export function* puttReadSteps(hole, ball, env) {
   const robust = function* (ca, cv, bound = Infinity) {
     let s = 0, exact = 0;
     for (const [ea, ev] of ERR) {
-      const l = puttLeave(h, env, b.p, ca + ea, cv * (1 + ev));
+      const l = yield* puttLeave(ca + ea, cv * (1 + ev));
       if (!ea && !ev) exact = l;
       s += Math.min(l, 30);
       yield;
@@ -232,7 +269,8 @@ export function* puttReadSteps(hole, ball, env) {
 }
 export function puttRead(hole, ball, env) {
   const it = puttReadSteps(hole, ball, env);
-  for (;;) { const r = it.next(); if (r.done) return r.value; }
+  it.next(); // (the first guess)
+  return drain(it);
 }
 
 // The caddie's read in words: where to start it (cup = 4.25 in), which way it
@@ -459,34 +497,36 @@ export class Caddie {
     this.msg = 'Caddie is checking the landing areas…';
   }
 
-  // one candidate club per frame so the game stays responsive, then lines up to 40 m either
-  // side of the centre for the two best clubs and any club that finds trouble (out of
-  // bounds or water hugging one side of a fairway moves the best line away from it)
+  // a few milliseconds a frame so the game stays responsive (the full search is ~200 sims)
   stepAnalysis() {
-    const A = this.analysis, g = this.g;
-    if (!A || g.state !== 'address') return;
-    const b = g.ball;
-    if (A.i < A.cands.length) {
-      const club = A.cands[A.i++];
+    const A = this.analysis;
+    if (!A || this.g.state !== 'address') return;
+    A.it ??= this.analysisSteps(A);
+    const t0 = performance.now();
+    do { if (A.it.next().done) { this.finishAnalysis(); return; } } while (performance.now() - t0 < SLICE_MS);
+  }
+
+  // every candidate club on the centre line, then lines up to 40 m either side of the centre
+  // for the two best clubs and any club that finds trouble (out of bounds or water hugging
+  // one side of a fairway moves the best line away from it). Yields after each sim.
+  *analysisSteps(A) {
+    const b = this.g.ball;
+    for (const club of A.cands) {
       const tgt = this.centreLineTarget(club.total);
-      if (!tgt) return;
+      if (!tgt) continue;
       const aim = angOf(tgt.x - b.p[0], tgt.z - b.p[2]);
-      A.results.push({ club, aim, ...this.rateAim(club, aim) });
-      return;
+      A.results.push({ club, aim, ...(yield* this.rateAimSteps(club, aim)) });
     }
-    if (!A.aimQ) {
-      // every club that brings trouble into play, plus the two best, looks for a better line
-      const top = A.results.slice().sort((p, q) => p.es - q.es).slice(0, 2);
-      A.aimQ = [];
-      for (const r of A.results) if (top.includes(r) || r.notes.length) for (const off of [-10, 10, -20, 20, -30, 30, -40, 40]) A.aimQ.push({ r, off, aim0: r.aim });
-    }
-    if (!A.aimQ.length) { this.finishAnalysis(); return; }
-    // one line a frame (five sims, ~9 ms): the target shifted sideways by `off` metres at the
-    // club's distance (in order of size, so a smaller shift wins a tie)
-    for (const q of A.aimQ.splice(0, 1)) {
+    // every club that brings trouble into play, plus the two best, looks for a better line
+    const top = A.results.slice().sort((p, q) => p.es - q.es).slice(0, 2);
+    const aimQ = [];
+    for (const r of A.results) if (top.includes(r) || r.notes.length) for (const off of [-10, 10, -20, 20, -30, 30, -40, 40]) aimQ.push({ r, off, aim0: r.aim });
+    // the target shifted sideways by `off` metres at the club's distance (in order of size,
+    // so a smaller shift wins a tie)
+    for (const q of aimQ) {
       const dir = dirOf(q.aim0), dist = q.r.club.total;
       const aim = angOf(dir.x * dist - dir.z * q.off, dir.z * dist + dir.x * q.off);
-      const out = this.rateAim(q.r.club, aim);
+      const out = yield* this.rateAimSteps(q.r.club, aim);
       if (out.es < q.r.es - 0.02) Object.assign(q.r, { aim, ...out });
     }
   }
@@ -494,11 +534,13 @@ export class Caddie {
   // expected strokes (including this one) for a full swing on `aim`: straight, a typical
   // miss either way, and one a touch long and short (a lay-up that only just stops short
   // of a pond at 100% is in it when the swing is hot), in the current wind
-  rateAim(club, aim) {
+  rateAim(club, aim) { return drain(this.rateAimSteps(club, aim)); }
+  *rateAimSteps(club, aim) {
     const spread = club.loft < 20 ? 3.2 : club.loft < 30 ? 2.4 : 1.8;
     let es = 0; const notes = [];
     for (const [face, power, w] of [[-spread, 1, 0.25], [0, 1, 0.3], [spread, 1, 0.25], [0, 1.05, 0.1], [0, 0.95, 0.1]]) {
       const out = this.simOutcome(club, aim, { face, power, dt: 1 / 90, withWind: true });
+      yield;
       if (out.result === 'water') notes.push('water');
       else if (out.result === 'ob') notes.push('out of bounds');
       else if (out.surface === 'bunker') notes.push('bunkers');
@@ -618,22 +660,25 @@ export class Caddie {
   setupPutt() {
     const g = this.g;
     this.reading = null;
-    if (g.settings?.difficulty === 'pro') { this.applyPutt(puttSetup(g.hole, g.ball, g.env), false); return; }
-    // Most reads take a few ms. A putt over a ridge or along a tier face can take ~1 s,
-    // so after a short budget the rest is spread over the next frames (stepReading)
-    // with the putter lined up at the cup in the meantime.
-    const it = puttReadSteps(g.hole, g.ball, g.env);
+    // A Pro gets the straight-at-the-cup pace only.
+    const read = g.settings?.difficulty !== 'pro';
+    // Most reads take a few ms. A putt over a ridge or along a tier face can take a
+    // second or two, so after a short budget the rest is spread over the next frames
+    // (stepReading) with the putter lined up at the cup in the meantime.
+    const it = puttReadSteps(g.hole, g.ball, g.env, !read);
     const t0 = performance.now();
-    const base = it.next().value;
+    const guess = it.next().value;
     for (;;) {
       const r = it.next();
-      if (r.done) { const ms = performance.now() - t0; this.lastRead = { ms, cpu: ms }; this.applyPutt(r.value, true); return; }
-      if (performance.now() - t0 > 30) break;
+      if (r.done) { const ms = performance.now() - t0; this.lastRead = { ms, cpu: ms }; this.applyPutt(r.value, read); return; }
+      if (performance.now() - t0 > SLICE_MS) break;
     }
-    this.applyPutt(base, false);
-    this.msg = this.withLead('Caddie is reading the putt…');
-    if (g.ui) g.caddieNote();
-    this.reading = { it, aim: g.aim, ball: g.ball.p.slice(), t0, cpu: performance.now() - t0 };
+    this.applyPutt(guess, false);
+    if (read) {
+      this.msg = this.withLead('Caddie is reading the putt…');
+      if (g.ui) g.caddieNote();
+    }
+    this.reading = { it, read, aim: g.aim, ball: g.ball.p.slice(), t0, cpu: performance.now() - t0 };
   }
 
   // a few ms of the putt read per frame; dropped if the swing starts or anything changes
@@ -650,12 +695,12 @@ export class Caddie {
         // wall time from address to a finished read, and the CPU time it took (shown by ?perf)
         this.lastRead = { ms: performance.now() - R.t0, cpu: R.cpu + performance.now() - t0 };
         const userAimed = Math.abs(g.aim - R.aim) > 1e-6;
-        this.applyPutt(r.value, true, userAimed);
+        this.applyPutt(r.value, R.read, userAimed);
         if (!userAimed) g.placeGolfer();
         g.previewDirty = true;
         return;
       }
-      if (performance.now() - t0 > 12) { R.cpu += performance.now() - t0; return; }
+      if (performance.now() - t0 > READ_MS) { R.cpu += performance.now() - t0; return; }
     }
   }
 
@@ -677,33 +722,41 @@ export class Caddie {
   // ------------------------------------------------------------------ meter marker
   // Like a real caddie: the number that matters is where the ball FINISHES. Start from the
   // plays-like carry, then bisect on full terrain sims so the release (bounce + roll) is included.
-  powerForFinish(need) {
-    const p = this.finishAtPin(need);
-    return this.g.club.putter ? p : this.clearOfTrouble(p);
+  powerForFinish(need) { return drain(this.powerSteps(need)); }
+  // the same search a sim at a time, so aiming can spread it over frames (game.stepPower)
+  *powerSteps(need) {
+    const p = yield* this.finishSteps(need);
+    return this.g.club.putter ? p : yield* this.clearSteps(p);
   }
 
   // A swing ~4-6% off the number is an ordinary miss. If that miss on one side finds water
   // or out of bounds (a front pin just over a creek), move the number away from it, the
   // way a caddie says "take enough to carry the water" and accepts the longer putt.
-  clearOfTrouble(p) {
+  clearOfTrouble(p) { return drain(this.clearSteps(p)); }
+  *clearSteps(p) {
     // newer players miss by more, so their caddie leaves more room
     const g = this.g, M = { beginner: 0.06, standard: 0.05 }[g.settings?.difficulty] ?? 0.04;
     const wet = (pw) => pw <= 1.05 && ['water', 'ob'].includes(this.simOutcome(g.club, g.aim, { power: pw, withWind: true, dt: 1 / 90 }).result);
-    const short = wet(p * (1 - M)), long = wet(p * (1 + M));
+    const short = wet(p * (1 - M)); yield;
+    const long = wet(p * (1 + M)); yield;
     if (short === long) return p;
     const step = short ? 0.01 : -0.01, side = short ? 1 - M : 1 + M;
     for (let q = p + step, i = 0; i < 8 && q > 0.1 && q <= 1; q += step, i++) {
-      if (wet(q * side)) continue;
-      if (wet(q * (2 - side))) return p;
+      const near = wet(q * side); yield;
+      if (near) continue;
+      const far = wet(q * (2 - side)); yield;
+      if (far) return p;
       // only if it is the better bet: carrying the creek is no help if the swing that
       // does it runs off the back of a shallow green into a bunker
       const misses = [[0, 1 - M, 0.25], [0, 1, 0.5], [0, 1 + M, 0.25]];
-      return this.strokesFor(g.aim, q, misses) < this.strokesFor(g.aim, p, misses) ? q : p;
+      const sq = this.strokesFor(g.aim, q, misses); yield;
+      return sq < this.strokesFor(g.aim, p, misses) ? q : p;
     }
     return p;
   }
 
-  finishAtPin(need) {
+  finishAtPin(need) { return drain(this.finishSteps(need)); }
+  *finishSteps(need) {
     const g = this.g, h = g.hole, b = g.ball;
     const p0 = this.powerForCarry(need);
     if (g.club.putter) return p0;
@@ -713,15 +766,15 @@ export class Caddie {
       const o = this.simOutcome(g.club, g.aim, { power: pw, withWind: true, dt: 1 / 90 });
       return (o.rest[0] - b.p[0]) * dir.x + (o.rest[2] - b.p[2]) * dir.z - toCup;
     };
-    const a0 = along(p0);
+    const a0 = along(p0); yield;
     if (Math.abs(a0) <= 1.5) return p0;
     // released past the pin → less power; spun back short → more power (capped at a full swing)
     let lo = a0 > 0 ? Math.max(0.1, p0 - 0.35) : p0, hi = a0 > 0 ? p0 : Math.min(1, p0 + 0.2);
-    if (a0 > 0 && along(lo) > 0) return lo;
-    if (a0 < 0 && along(hi) < 0) return hi;
+    const end = a0 > 0 ? lo : hi, a1 = along(end); yield;
+    if (a0 > 0 ? a1 > 0 : a1 < 0) return end;
     for (let i = 0; i < 8; i++) {
-      const m = (lo + hi) / 2;
-      if (along(m) > 0.3) hi = m; else lo = m;
+      const m = (lo + hi) / 2, a = along(m); yield;
+      if (a > 0.3) hi = m; else lo = m;
     }
     return (lo + hi) / 2;
   }

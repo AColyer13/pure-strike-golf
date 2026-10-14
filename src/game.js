@@ -21,7 +21,7 @@ import { coachShot, resetCoach } from './coach.js';
 import { COURSES, courseById } from './courses/index.js';
 import { DIFFICULTY, SHAPES, TRAJ, MAX_STROKES, MIN_SWING } from './config.js';
 import { clamp, dirOf, angOf } from './util.js';
-import { Caddie, canPutt } from './caddie.js';
+import { Caddie, canPutt, SLICE_MS } from './caddie.js';
 import { CameraDirector } from './camera.js';
 import { Input } from './input.js';
 import { reliefOptions } from './rules.js';
@@ -439,6 +439,7 @@ export class Game {
   // ------------------------------------------------------------------ previews
   updatePreview() {
     this.previewDirty = false;
+    this.powerJob = null;
     const h = this.hole, b = this.ball, w = this.world;
     const dir = dirOf(this.aim);
     const assist = this.diff;
@@ -492,11 +493,24 @@ export class Game {
     // suggested power: what carries the plays-like distance to the pin (full swing if out of range)
     const need = this.pl ? this.pl.plays : this.distToPin();
     const flatCarry = this.club.carry || this.previewCarry || need;
-    this.suggestedPower = need < flatCarry * 1.12 && !(this.challenge && this.round.mode === 'drive') ? this.caddie.powerForFinish(need) : 1;
-    // never below the shortest real swing: under it every swing is a chunk (normalizeSwing)
-    this.suggestedPower = Math.max(this.suggestedPower, MIN_SWING + 0.01);
-    this.meter.configure({ marker: assist.marker && this.suggestedPower < 1 ? this.suggestedPower : null });
     this.meter.configure({ labels: null, rangeLabel: `${this.club.name} · carry ${this.fmtDist(this.club.carry)}` });
+    // the caddie's number takes a dozen full sims (~10 ms, more on a phone), so it is worked
+    // out a few milliseconds a frame from the next one (stepPower) rather than in this one
+    if (need < flatCarry * 1.12 && !(this.challenge && this.round.mode === 'drive')) this.powerJob = this.caddie.powerSteps(need);
+    else this.setSuggestedPower(1);
+  }
+  stepPower(budget = SLICE_MS) {
+    const t0 = performance.now();
+    for (;;) {
+      const r = this.powerJob.next();
+      if (r.done) { this.powerJob = null; this.setSuggestedPower(r.value); return; }
+      if (performance.now() - t0 >= budget) return;
+    }
+  }
+  setSuggestedPower(p) {
+    // never below the shortest real swing: under it every swing is a chunk (normalizeSwing)
+    this.suggestedPower = Math.max(p, MIN_SWING + 0.01);
+    this.meter.configure({ marker: this.diff.marker && this.suggestedPower < 1 ? this.suggestedPower : null });
     this.configureAuto();
   }
   // one-button swing: the meter sets power itself at the caddie's number
@@ -521,6 +535,7 @@ export class Game {
     if (this.state === 'address' && this.addressSettling) return;
     if (this.state === 'address') {
       if (this.previewDirty) this.updatePreview();
+      if (this.powerJob) this.stepPower(Infinity); // the marker (and a one-button swing's power) must be final
       this.state = 'swing';
       this.audio.ui('tick');
       this.caddie.analysis = null;
@@ -1033,6 +1048,7 @@ export class Game {
       else if (st === 'address') {
         if (this.caddie.analysis) this.caddie.stepAnalysis();
         if (this.caddie.reading) this.caddie.stepReading();
+        if (this.powerJob && !this.previewDirty) this.stepPower(); // (a new preview replaces it)
         if (this.previewDirty) { this.previewT = (this.previewT || 0) + dt; if (this.previewT > 0.06) { this.previewT = 0; this.updatePreview(); this.updateHUD(true); } }
         this.caddieTick = (this.caddieTick || 0) + dt;
         if (this.caddieTick > 0.5) { this.caddieTick = 0; this.caddieNote(); }

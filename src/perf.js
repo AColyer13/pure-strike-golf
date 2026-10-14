@@ -58,8 +58,8 @@ export class PerfHud {
   draw() {
     const s = this.stats();
     const read = s.read ? `${(s.read.ms / 1000).toFixed(1)} s (${Math.round(s.read.cpu)} ms CPU)` : '–';
-    // one short line on a phone so it stays clear of the HUD; the copied summary has the rest
-    this.el.textContent = innerWidth < 600
+    // one short line on a phone (either way up) so it stays clear of the HUD; the copied summary has the rest
+    this.el.textContent = innerWidth < 600 || innerHeight < 500
       ? `${s.fps.toFixed(0)} fps · ${s.tier.split(' ')[0]} ${this.g.renderer.getPixelRatio()}x · read ${s.read ? `${(s.read.ms / 1000).toFixed(1)} s` : '–'}${s.audio === 'running' ? '' : ` · audio ${s.audio}`}`
       : `${s.fps.toFixed(0)} fps · ${s.tier} · ${s.res} · ${s.calls} calls · audio ${s.audio} · putt read ${read}`;
     this.el.classList.toggle('slow', s.fps > 0 && s.fps < 40);
@@ -72,7 +72,7 @@ export class PerfHud {
     return [
       `Pure Strike Golf perf, ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`,
       navigator.userAgent,
-      `screen ${screen.width}×${screen.height}, devicePixelRatio ${devicePixelRatio}, canvas ${s.res}`,
+      `screen ${screen.width}×${screen.height}, devicePixelRatio ${+devicePixelRatio.toFixed(2)}, canvas ${s.res}`,
       `graphics ${s.tier}, ${s.calls} draw calls, ${s.tris} triangles`,
       `${mins.toFixed(1)} min, ${a.n} frames, average ${a.n ? (1000 / (a.sum / a.n)).toFixed(0) : 0} fps, now ${s.fps.toFixed(0)} fps`,
       `slow frames (under 30 fps) ${a.n ? ((100 * a.slow) / a.n).toFixed(1) : 0}%, hitches over 100 ms ${a.hitch}, worst ${a.worst.toFixed(0)} ms`,

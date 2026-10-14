@@ -259,11 +259,15 @@ export function simulateCarry(ld, env, opts = {}) {
 // world must provide: height(x,z), normal(x,z) -> [x,y,z], surface(x,z) -> key,
 // treeHit(p, v, dt, rng) -> null | {v}, cup {x,z}, pinIn (bool), inBounds(x,z)
 export class BallSim {
-  constructor(world, env, rng = Math.random) {
+  // opts (the caddie's practice rolls): pinOut ignores the flagstick, cup moves the hole
+  // (somewhere far away covers it) without touching the hole itself
+  constructor(world, env, rng = Math.random, opts = {}) {
     this.world = world;
     this.env = env;
     this.rng = rng;
     this.state = 'rest';
+    this.pinOut = !!opts.pinOut;
+    this.cup = opts.cup || world.cup;
   }
 
   launch(pos, ld, fwd) {
@@ -338,7 +342,7 @@ export class BallSim {
       }
     }
     // flagstick
-    if (W.pinIn && this.checkPin()) return;
+    if (W.pinIn && !this.pinOut && this.checkPin()) return;
 
     if (!W.inBounds(this.p[0], this.p[2])) {
       if (this.p[1] < W.height(this.p[0], this.p[2]) + 3) { this.state = 'rest'; this.emit('ob', { p: this.p.slice() }); return; }
@@ -357,7 +361,7 @@ export class BallSim {
   }
 
   checkPin() {
-    const c = this.world.cup;
+    const c = this.cup;
     const dx = this.p[0] - c.x, dz = this.p[2] - c.z;
     const d = Math.hypot(dx, dz);
     const gh = this.world.height(c.x, c.z);
@@ -392,7 +396,7 @@ export class BallSim {
     if (surf === 'water') { this.state = 'rest'; this.emit('water', { p: this.p.slice() }); return; }
 
     // dunk into the cup
-    const c = W.cup;
+    const c = this.cup;
     if (Math.hypot(this.p[0] - c.x, this.p[2] - c.z) < CUP_RADIUS - r * 0.3 && this.v[1] < 0 && speedIn < 25) {
       this.holeOut(); return;
     }
@@ -506,7 +510,7 @@ export class BallSim {
   // sinusoidally vibrating table"… simplified): a centred ball drops in below
   // ~1.6 m/s; the allowable speed shrinks as the ball catches more of the edge.
   checkCup() {
-    const c = this.world.cup;
+    const c = this.cup;
     const dx = this.p[0] - c.x, dz = this.p[2] - c.z;
     const d = Math.hypot(dx, dz);
     if (d > CUP_RADIUS) { this.cupSeen = false; return false; }
@@ -532,7 +536,7 @@ export class BallSim {
   }
 
   holeOut() {
-    const c = this.world.cup;
+    const c = this.cup;
     this.p = [c.x, this.world.height(c.x, c.z) - 0.06, c.z];
     this.v = [0, 0, 0];
     this.state = 'holed';

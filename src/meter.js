@@ -39,10 +39,26 @@ export class SwingMeter {
   get busy() { return this.state === 'power' || this.state === 'accuracy'; }
 
   click() {
-    if (this.state === 'ready') { this.state = 'power'; this.v = 0; this.dir = 1; this.power = null; return 'start'; }
-    if (this.state === 'power') { this.power = Math.max(0.02, this.v); this.state = 'accuracy'; return 'power'; }
-    if (this.state === 'accuracy') { this.finish(this.v); return 'impact'; }
+    if (this.state === 'ready') { this.state = 'power'; this.v = 0; this.dir = 1; this.power = null; this.at = performance.now(); return 'start'; }
+    // Taps land between frames. Judge them where the needle was at the tap, not where
+    // it was drawn last: at 30 fps the needle moves 0.04 a frame, wider than the
+    // perfect window, so a frame-quantised read would make a pure strike luck.
+    const v = this.vAt(performance.now());
+    if (this.state === 'power') { this.v = v; this.power = Math.max(0.02, v); this.state = 'accuracy'; this.at = performance.now(); return 'power'; }
+    if (this.state === 'accuracy') { this.finish(v); return 'impact'; }
     return null;
+  }
+  // the needle position at time t (ms), carried on from the last update by at most 0.1 s
+  vAt(t) {
+    const dt = this.at == null ? 0 : clamp((t - this.at) / 1000, 0, 0.1);
+    if (this.state === 'power') {
+      const max = this.putt ? 1.0 : 1.1;
+      let v = this.v + (this.dir * dt) / this.fullTime;
+      if (v > max) v = 2 * max - v;
+      return clamp(v, 0, max);
+    }
+    if (this.state === 'accuracy') return Math.max(-0.12, this.v - (dt * 1.3) / this.fullTime);
+    return this.v;
   }
   finish(v) {
     this.state = 'done';
@@ -67,6 +83,7 @@ export class SwingMeter {
       this.v -= (dt * 1.3) / this.fullTime;
       if (this.v < -0.12) this.finish(-0.12);
     }
+    this.at = performance.now();
     this.draw();
   }
 
@@ -154,7 +171,9 @@ export class SwingMeter {
       msg = Math.abs(e) <= z * 0.35 ? 'PERFECT STRIKE' : Math.abs(e) <= z ? 'Good contact' : e > 0 ? 'Early – face closed (pull/hook)' : 'Late – face open (push/slice)';
     }
     g.fillText(msg, x0, 11);
-    if (this.rangeLabel) { g.textAlign = 'right'; g.fillText(this.rangeLabel, x1, 11); }
+    // a narrow meter (phone landscape) drops the club's range rather than print over the cue;
+    // the club box shows it anyway
+    if (this.rangeLabel && g.measureText(msg).width + g.measureText(this.rangeLabel).width + 12 <= x1 - x0) { g.textAlign = 'right'; g.fillText(this.rangeLabel, x1, 11); }
   }
 }
 

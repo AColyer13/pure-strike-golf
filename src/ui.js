@@ -37,6 +37,8 @@ export class UI {
     return MODALS.some((id) => !$(id).classList.contains('hidden'));
   }
   key(action) { const ks = this.game.input.bindings[action] || []; return ks.length ? keyName(ks[0]) : '—'; }
+  // on-screen buttons rather than a keyboard: prompts name those instead
+  get touch() { return document.body.classList.contains('touch'); }
 
   // ------------------------------------------------------------ main menu
   mainMenu() {
@@ -248,7 +250,7 @@ export class UI {
         <div class="intro-meta">Par ${hole.par} · ${dist} · Wind ${wind} · Stimp ${hole.stimp.toFixed(1)}</div>
         ${extra ? `<div class="intro-extra">${esc(extra)}</div>` : ''}
         ${def.tip ? `<p class="intro-tip">${localizeText(def.tip, this.game.settings.units)}</p>` : ''}
-        <div class="intro-skip">${this.key('swing')} / click to skip the flyover</div>
+        <div class="intro-skip">${this.touch ? 'Tap' : `${this.key('swing')} / click`} to skip the flyover</div>
       </div>`;
     i.classList.remove('hidden');
   }
@@ -419,7 +421,8 @@ export class UI {
   ffHint(on) {
     const h = $('ffHint');
     if (!h) return;
-    if (on) h.innerHTML = `Hold <b>${this.key('fastForward')}</b> to fast-forward · <b>${this.key('skip')}</b> to skip`;
+    if (on) h.innerHTML = this.touch ? 'Hold <b>SWING</b> to fast-forward · <b>⏭</b> to skip'
+      : `Hold <b>${this.key('fastForward')}</b> to fast-forward · <b>${this.key('skip')}</b> to skip`;
     h.classList.toggle('hidden', !on);
   }
 
@@ -460,7 +463,7 @@ export class UI {
       <div class="sp-grid">${rows.map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('')}</div>
       ${sgHtml}
       ${tipsHtml ? `<div class="sp-tips"><div class="sp-sub">Coach</div>${tipsHtml}</div>` : ''}
-      <div class="sp-cont">${this.key('swing')} / click to continue${canReplay ? ` · <b>${this.key('replay')}</b> replay` : ''}</div>`;
+      <div class="sp-cont">${this.touch ? 'Tap to continue' : `${this.key('swing')} / click to continue`}${canReplay ? ` · <b>${this.touch ? '👁' : this.key('replay')}</b> replay` : ''}</div>`;
     p.classList.remove('hidden');
     p.onclick = () => this.game.continueAfterResult();
   }
@@ -590,7 +593,7 @@ export class UI {
       ${board}
       ${tabs}
       <div id="sumCard">${card(round.players[0], t)}</div>
-      <div class="row wrap"><button class="btn primary" id="sumAgain">Play again</button><button class="btn" id="sumShare">Copy challenge link</button><button class="btn" id="sumMenu">Main menu</button></div>`;
+      <div class="row wrap sum-actions"><button class="btn primary" id="sumAgain">Play again</button><button class="btn" id="sumShare">Copy challenge link</button><button class="btn" id="sumMenu">Main menu</button></div>`;
     for (const b of s.querySelectorAll('.sum-tabs button')) {
       b.onclick = () => {
         const pl = round.players[+b.dataset.p];
@@ -617,7 +620,7 @@ export class UI {
       <div class="muted">${course.name} · hole ${round.holes[0] + 1}</div>
       <div class="sc-board big">${rows.map(({ pl, best }, i) => `<div><span>${i === 0 && solo ? '🏆 ' : ''}${esc(pl.name || 'Best')}</span><b>${show(best)}</b></div>`).join('')}</div>
       ${round.players.map((pl) => `<div class="attempts"><span>${esc(pl.name || 'Your balls')}</span>${pl.attempts.map((v) => `<i class="${v == null ? 'miss' : ''}">${v == null ? '✕' : ctp ? `${v.toFixed(0)} ft` : fmt(v * YD)}</i>`).join('')}</div>`).join('')}
-      <div class="row wrap"><button class="btn primary" id="sumAgain">Play again</button><button class="btn" id="sumShare">Copy challenge link</button><button class="btn" id="sumMenu">Main menu</button></div>`;
+      <div class="row wrap sum-actions"><button class="btn primary" id="sumAgain">Play again</button><button class="btn" id="sumShare">Copy challenge link</button><button class="btn" id="sumMenu">Main menu</button></div>`;
     s.classList.remove('hidden');
     this.summaryButtons(course, round);
   }

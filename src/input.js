@@ -65,8 +65,9 @@ export class Input {
     if (repeat) return a !== 'swing' && a !== 'skip' && a !== 'replay' ? this.dispatchAddress(a) : true;
     if (st === 'flyover' && (a === 'swing' || a === 'skip')) { g.endFlyover(); return true; }
     if (st === 'result' && (a === 'swing' || a === 'skip')) { g.continueAfterResult(); return true; }
-    if (st === 'result' && a === 'replay') { g.startReplay(); return true; }
-    if (st === 'replay' && (a === 'swing' || a === 'skip' || a === 'replay')) { g.endReplay(); return true; }
+    // target view doubles as replay after a shot, as Y does on a gamepad (the 👁 touch button)
+    if (st === 'result' && (a === 'replay' || a === 'targetView')) { g.startReplay(); return true; }
+    if (st === 'replay' && (a === 'swing' || a === 'skip' || a === 'replay' || a === 'targetView')) { g.endReplay(); return true; }
     if (st === 'flight' && a === 'skip') { g.skipFlight(); return true; }
     if (st === 'swing' && a === 'swing') { g.meterClick(); return true; }
     if (st !== 'address') return false;

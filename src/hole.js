@@ -55,12 +55,19 @@ function makeBlob(cx, cz, rx, ry, rotRad, seed, wob = 1) {
     rmax: Math.max(rx, ry) * 1.2,
   };
 }
-function blobSdf(b, x, z) {
+// `cap`: the caller only needs the distance below this. Further out the wobble can't
+// bring the outline close enough, so a lower bound (still >= cap) is returned without
+// the trig. The terrain asks this for every bunker four times a ball step.
+function blobSdf(b, x, z, cap = Infinity) {
   const dx = x - b.cx, dz = z - b.cz;
   if (Math.abs(dx) > b.rmax + 30 || Math.abs(dz) > b.rmax + 30) return 99;
   const u = dx * b.c + dz * b.s, v = -dx * b.s + dz * b.c;
   const qx = u / b.rx, qy = v / b.ry;
   const q = Math.hypot(qx, qy);
+  if (cap < Infinity) {
+    const near = (q - 1 - Math.abs(b.a1) - Math.abs(b.a2) - Math.abs(b.a3)) * Math.min(b.rx, b.ry);
+    if (near >= cap) return near;
+  }
   const th = Math.atan2(qy, qx);
   const w = 1 + b.a1 * Math.sin(2 * th + b.p1) + b.a2 * Math.sin(3 * th + b.p2) + b.a3 * Math.sin(5 * th + b.p3);
   return (q - w) * Math.min(b.rx, b.ry);
@@ -375,14 +382,15 @@ export class Hole {
     }
     return e[e.length - 1][1] * YD;
   }
-  greenSdf(x, z) {
+  // (cap: see blobSdf; at or beyond it the value is only a bound, and so is the bunker)
+  greenSdf(x, z, cap) {
     let m = 99;
-    for (const g of this.greens) m = Math.min(m, blobSdf(g, x, z));
+    for (const g of this.greens) m = Math.min(m, blobSdf(g, x, z, cap));
     return m;
   }
-  bunkerSdf(x, z) {
+  bunkerSdf(x, z, cap) {
     let m = 99, b = null;
-    for (const k of this.bunkers) { const d = blobSdf(k, x, z); if (d < m) { m = d; b = k; } }
+    for (const k of this.bunkers) { const d = blobSdf(k, x, z, cap); if (d < m) { m = d; b = k; } }
     return { d: m, b };
   }
   waterSdf(x, z) {
@@ -474,8 +482,8 @@ export class Hole {
     // The fringe stays at green level and the bank to the surrounding ground starts
     // beyond it, widened with the height difference so a raised or sunken green's bank
     // stays under ~25% (a steep collar is unputtable and barely chippable).
-    const gsd = this.greenSdf(x, z);
     const apron = this.green.apron ?? 9;
+    const gsd = this.greenSdf(x, z, FRINGE + apron + 12); // (every use below is flat beyond that)
     if (gsd < FRINGE + apron + 12) {
       const gs = this.greenSurface(x, z);
       const bank = clamp(Math.abs(gs - h) * 6, apron, apron + 12);
@@ -488,7 +496,7 @@ export class Hole {
     }
 
     // bunkers
-    const { d: bd, b } = this.bunkerSdf(x, z);
+    const { d: bd, b } = this.bunkerSdf(x, z, 3);
     if (b && bd < 3) {
       const depth = b.depth;
       // the lip is lower on the green side, so the collar rolls into the bunker face
@@ -600,7 +608,7 @@ export class Hole {
     if (!this.inBounds(x, z)) return 'ob';
     const { d: wd } = this.waterSdf(x, z);
     if (wd < 0) return 'water';
-    const { d: bd, b } = this.bunkerSdf(x, z);
+    const { d: bd, b } = this.bunkerSdf(x, z, 3);
     if (bd < 0) return b.kind === 'waste' ? 'waste' : 'bunker';
     const gsd = this.greenSdf(x, z);
     if (gsd < 0) return 'green';

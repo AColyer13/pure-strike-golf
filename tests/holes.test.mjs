@@ -55,3 +55,24 @@ test('shot simulation is deterministic, including tree hits', () => {
   assert.ok(a.events.includes('tree'), 'the test shot should hit the trees');
   assert.deepEqual(a, b);
 });
+
+// The terrain asks for green and bunker distances with a cap (only nearer than that
+// matters) so far points skip the trig. Below the cap the answer must be exact, and
+// at or beyond it never less than the cap.
+test('capped green and bunker distances are exact below the cap', () => {
+  const rnd = mulberry32(5);
+  for (const course of COURSES) {
+    for (let i = 0; i < 18; i += 4) {
+      const h = new Hole(course.holes[i], course, i);
+      for (let k = 0; k < 400; k++) {
+        const x = h.cup.x + (rnd() - 0.5) * 120, z = h.cup.z + (rnd() - 0.5) * 120;
+        for (const cap of [0, 3, 25]) {
+          const g = h.greenSdf(x, z), gc = h.greenSdf(x, z, cap);
+          const b = h.bunkerSdf(x, z).d, bc = h.bunkerSdf(x, z, cap).d;
+          if (g < cap) assert.equal(gc, g); else assert.ok(gc >= cap);
+          if (b < cap) assert.equal(bc, b); else assert.ok(bc >= cap);
+        }
+      }
+    }
+  }
+});
