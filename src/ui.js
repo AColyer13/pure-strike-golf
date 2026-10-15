@@ -6,7 +6,7 @@ import { SURFACES } from './physics.js';
 import { DEFAULT_KEYS, ACTION_LABELS, DIFFICULTY } from './config.js';
 import { MODES, SIGNATURE, dailySpec, holesFor, challengeHash, RESUME_KEY, resumable, restoreRound } from './round.js';
 import { loadHistory, bestFor, handicapIndex, sgTrend, clearHistory, localDay, RATINGS } from './history.js';
-import { firstRun } from './tutorial.js';
+import { firstRun, TUTORIAL_ROUND } from './tutorial.js';
 import { QUALITY } from './post.js';
 import { fmtYd, fmtElev, windUnit, windValue, localizeText } from './units.js';
 
@@ -72,7 +72,12 @@ export class UI {
       ${bests.length ? `<div class="cc-best">${bests.map(([m, b]) => `Best ${MODES[m].name}: ${toParStr(b.toPar)} (${b.strokes})`).join(' · ')}</div>` : ''}`;
 
     // quick play: the signature hole, no setup
-    const sig = SIGNATURE[course.id] ?? 0;
+    let sig = SIGNATURE[course.id] ?? 0;
+    // right after the lesson, don't offer the hole they just played: take the next par 3 on the card
+    if (!firstRun() && !history.length && course.id === TUTORIAL_ROUND.courseId && sig === TUTORIAL_ROUND.holes[0]) {
+      const alt = course.holes.findIndex((h, i) => h.par === 3 && i !== sig);
+      if (alt >= 0) sig = alt;
+    }
     const sh = course.holes[sig];
     if (this.tutorial && firstRun()) {
       // never played: the primary button is the guided hole
@@ -592,7 +597,8 @@ export class UI {
         return `<div class="sg-row"><span>${nm}</span><div class="bar"><i class="${v >= 0 ? 'pos' : 'neg'}" style="width:${w}%;${v >= 0 ? 'left:50%' : `left:${50 - w}%`}"></i></div><b>${sgn(v)}</b></div>`;
       }).join('')}</div>
       <p class="sum-total">Total: <b>${sgn(t.sgTotal)}</b> strokes vs. a tour player over ${n} hole${n === 1 ? '' : 's'}.</p>
-      ${t.sg[worst[0]] < 0 ? `<div class="tip"><b>Where to improve: ${worst[1]}</b><p>${advice[worst[0]]}</p></div>`
+      ${cats.every(([k]) => Math.abs(t.sg[k]) < 0.005) ? `<div class="tip"><b>Not enough to compare</b><p>No strokes-gained data was recorded this time, so there is nothing to measure against the tour average. Play a full hole to see where you gain and lose strokes.</p></div>`
+    : t.sg[worst[0]] < 0 ? `<div class="tip"><b>Where to improve: ${worst[1]}</b><p>${advice[worst[0]]}</p></div>`
     : `<div class="tip"><b>Strokes gained everywhere</b><p>You beat the tour average in every part of the game. The smallest gain was ${worst[1].toLowerCase()} (${sgn(t.sg[worst[0]])}).${settings.difficulty !== 'pro' ? ' Try a harder difficulty in Settings for a tougher test.' : ''}</p></div>`}`;
     };
     const tabs = multi ? `<div class="segs sum-tabs">${round.players.map((pl, i) => `<button class="seg${i === 0 ? ' on' : ''}" data-p="${i}">${esc(pl.name)}</button>`).join('')}</div>` : '';
