@@ -463,9 +463,12 @@ export class UI {
       <div class="sp-grid">${rows.map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('')}</div>
       ${sgHtml}
       ${tipsHtml ? `<div class="sp-tips"><div class="sp-sub">Coach</div>${tipsHtml}</div>` : ''}
-      <div class="sp-cont">${this.touch ? 'Tap to continue' : `${this.key('swing')} / click to continue`}${canReplay ? ` · <b>${this.touch ? '👁' : this.key('replay')}</b> replay` : ''}</div>`;
-    p.classList.remove('hidden');
+      <div class="sp-btns"><button class="btn primary sp-go">Continue</button><button class="btn sp-more">Details</button></div>
+      <div class="sp-cont">${this.touch ? 'Tap anywhere to continue' : `${this.key('swing')} / click to continue`}${canReplay ? ` · <b>${this.touch ? '👁' : this.key('replay')}</b> replay` : ''}</div>`;
+    p.classList.remove('hidden', 'open');
     p.onclick = () => this.game.continueAfterResult();
+    const more = p.querySelector('.sp-more');
+    more.onclick = (e) => { e.stopPropagation(); const open = p.classList.toggle('open'); more.textContent = open ? 'Less' : 'Details'; };
   }
 
   // ------------------------------------------------------------ relief

@@ -200,6 +200,12 @@ select { font: 500 13px Barlow, sans-serif; background: #173022; color: var(--te
 .tip b { font-size: 14px; }
 .tip p { margin: 3px 0 0; font-size: 13px; line-height: 1.4; color: #d7e6dc; }
 .sp-cont { text-align: center; margin-top: 10px; font-size: 12px; color: var(--muted); }
+.sp-btns { display: flex; gap: 8px; margin-top: 12px; }
+.sp-btns .btn { flex: 1; }
+.sp-more { display: none; }
+/* a dialog is open: dim the scene and take the shot readout out from behind it */
+body:has(.modal:not(.hidden))::after { content: ''; position: fixed; inset: 0; z-index: 29; background: rgba(4, 10, 6, .5); pointer-events: none; }
+body:has(.modal:not(.hidden)) #shotPanel { visibility: hidden; }
 
 /* ---------- modals ---------- */
 .modal { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 30; background: rgba(12, 26, 18, .95); border: 1px solid var(--line); border-radius: 16px; padding: 20px 24px; width: min(760px, 94vw); max-height: 92vh; overflow-y: auto; box-shadow: 0 30px 80px rgba(0,0,0,.5); animation: tin .25s ease-out; }
@@ -463,6 +469,9 @@ body.reduced-motion *, body.reduced-motion *::before, body.reduced-motion *::aft
   #lieBox, #windBox { display: none; }
   #minimap { width: 90px; height: 150px; }
   #shotPanel { max-height: 60vh; overflow-y: auto; }
+  /* phones: a short result with the numbers one tap away, so the ball and flag stay visible */
+  .sp-more { display: block; }
+  #shotPanel:not(.open) .sp-grid > div:nth-child(n+4), #shotPanel:not(.open) .sp-tips, #shotPanel:not(.open) .sp-extra { display: none; }
 }
 /* portrait phone: the golfer stands left of the ball, so the distance panel moves to the right-hand column
    under a compact wind dial (wind matters on every shot, so it stays on screen) */
