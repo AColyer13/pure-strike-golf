@@ -16,7 +16,7 @@ const sgn = (x, d = 2) => (x >= 0 ? '+' : '') + x.toFixed(d);
 const toParStr = (d) => (d === 0 ? 'E' : d > 0 ? `+${d}` : `${d}`);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const keyName = (k) => ({ ' ': 'Space', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Escape: 'Esc' }[k] || (k.length === 1 ? k.toUpperCase() : k));
-const MODALS = ['relief', 'pause', 'help', 'summary', 'settings', 'stats', 'editor'];
+const MODALS = ['confirmBox', 'relief', 'pause', 'help', 'summary', 'settings', 'stats', 'editor'];
 
 export class UI {
   constructor() {
@@ -185,7 +185,13 @@ export class UI {
   }
   start(opts) {
     const saved = resumable(opts) && this.savedRound();
-    if (saved && !confirm(`Start a new round? Your unfinished round at ${saved.round.course.name} will be replaced.`)) return;
+    if (saved) {
+      this.confirm({ title: 'Start a new round?', text: `Your unfinished round at ${saved.round.course.name} will be replaced.`, ok: 'Start new round', danger: true }, () => this.begin(opts));
+      return;
+    }
+    this.begin(opts);
+  }
+  begin(opts) {
     $('menu').classList.add('hidden');
     document.body.classList.add('in-round');
     const players = opts.mode !== 'daily' && !opts.solo && this.sel.players > 1 ? this.sel.names.slice(0, this.sel.players).map((n, i) => (n || '').trim() || `Player ${i + 1}`) : null;
@@ -206,7 +212,7 @@ export class UI {
   }
 
   hideAll() {
-    for (const id of ['menu', 'intro', 'scorecard', 'relief', 'pause', 'summary', 'shotPanel', 'help', 'settings', 'stats', 'editor']) $(id).classList.add('hidden');
+    for (const id of ['menu', 'intro', 'scorecard', 'relief', 'pause', 'confirmBox', 'summary', 'shotPanel', 'help', 'settings', 'stats', 'editor']) $(id).classList.add('hidden');
     document.body.classList.remove('sc-open');
     this.scModal = false;
     this.paused = false;
@@ -670,7 +676,27 @@ export class UI {
     $('pCard').onclick = () => { this.togglePause(); this.scorecard(this.game.course, this.game.round, true, () => {}, 'Close'); };
     $('pSettings').onclick = () => { this.togglePause(); this.showSettings(true); };
     $('pHelp').onclick = () => { this.togglePause(); this.showHelp(true); };
-    $('pQuit').onclick = () => { this.togglePause(); this.game.quitToMenu(); };
+    $('pQuit').onclick = () => {
+      this.togglePause();
+      const g = this.game, r = g.round;
+      // multi-hole rounds are saved as they go, so leaving costs nothing; a single hole or the lesson is lost
+      if (r && resumable(r.opts) && !g.tutorial) { g.quitToMenu(); return; }
+      this.confirm({ title: 'Quit this hole?', text: g.tutorial ? 'You can restart the guided hole from the menu.' : 'Single holes are not saved, so your progress on this hole will be lost.', ok: 'Quit to menu', cancel: 'Keep playing', danger: true },
+        () => g.quitToMenu(), () => this.togglePause());
+    };
+  }
+
+  // in-app replacement for window.confirm: Esc or the cancel button backs out
+  confirm({ title, text, ok = 'OK', cancel = 'Cancel', danger = false }, onOk, onCancel) {
+    const c = $('confirmBox');
+    c.innerHTML = `<h2>${esc(title)}</h2><p>${esc(text)}</p><div class="row"><button class="btn ${danger ? 'danger' : 'primary'}" id="cfOk">${esc(ok)}</button><button class="btn" id="cfNo">${esc(cancel)}</button></div>`;
+    const close = () => { c.classList.add('hidden'); removeEventListener('keydown', onKey, true); };
+    const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); onCancel?.(); } };
+    addEventListener('keydown', onKey, true);
+    $('cfOk').onclick = () => { close(); onOk(); };
+    $('cfNo').onclick = () => { close(); onCancel?.(); };
+    c.classList.remove('hidden');
+    $('cfNo').focus();
   }
 
   // ------------------------------------------------------------ settings (incl. accessibility + key remap)
@@ -777,7 +803,7 @@ export class UI {
       <div class="row wrap"><button class="btn primary" id="stClose">Close</button>${mine.length ? '<button class="btn danger" id="stClear">Clear history</button>' : ''}</div>`;
     $('stClose').onclick = () => this.showStats(false);
     const clr = $('stClear');
-    if (clr) clr.onclick = () => { if (confirm('Delete all saved rounds? This cannot be undone.')) { clearHistory(); this.showStats(true); } };
+    if (clr) clr.onclick = () => this.confirm({ title: 'Delete all saved rounds?', text: 'This cannot be undone.', ok: 'Delete', danger: true }, () => { clearHistory(); this.showStats(true); });
   }
 
   // ------------------------------------------------------------ help
