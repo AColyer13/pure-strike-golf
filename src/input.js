@@ -18,6 +18,9 @@ export class Input {
     this.bindKeyboard();
     this.bindPointer();
     this.bindTouch();
+    // a phone or tablet shows the on-screen controls from the first frame, not after the first touch
+    // (a mouse pointer still switches them off; see bindPointer)
+    if (matchMedia('(pointer: coarse)').matches) this.showTouch(true);
   }
 
   // ------------------------------------------------------------------ bindings
