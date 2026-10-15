@@ -1,9 +1,9 @@
 // Service worker: makes the game installable and playable offline.
 // Network-first, so a reload always picks up new code when online; the cache is
 // the fallback when there's no connection. Bump VERSION to drop old caches.
-const VERSION = 'psg-v20';
+const VERSION = 'psg-v21';
 const SHELL = [
-  './', 'index.html', 'styles.css', 'manifest.json', 'icon.svg', 'audio/manifest.json',
+  './', 'index.html', 'styles.css', 'manifest.json', 'icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png', 'audio/manifest.json',
   'vendor/three/build/three.module.js', 'vendor/three/addons/objects/Sky.js',
   'vendor/three/addons/postprocessing/EffectComposer.js', 'vendor/three/addons/postprocessing/RenderPass.js', 'vendor/three/addons/postprocessing/ShaderPass.js',
   'vendor/three/addons/postprocessing/UnrealBloomPass.js', 'vendor/three/addons/postprocessing/GTAOPass.js', 'vendor/three/addons/postprocessing/OutputPass.js',

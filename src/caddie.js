@@ -609,6 +609,24 @@ export class Caddie {
     return `${mine.club.name}: expected score ${mine.es.toFixed(2)}${mine.notes.length ? ` (brings ${mine.notes.join(' & ')} into play)` : ''}. Caddie's pick: ${fmt(best)}.`;
   }
 
+  // Does the shot the caddie suggests (this club, aim and power) run into a tree before it
+  // lands? Sets game.previewBlocked for the warning, and tints the landing ring red.
+  checkBlocked(power) {
+    const g = this.g;
+    g.previewBlocked = null;
+    if (g.club && !g.club.putter) {
+      const out = this.simOutcome(g.club, g.aim, { power, withWind: true, dt: 1 / 90, stopAtLand: true });
+      g.previewBlocked = out.treeAir || null;
+    }
+    g.world.reticle.material.color.setHex(g.previewBlocked ? 0xff6a55 : 0xffffff);
+  }
+
+  blockedNote() {
+    const g = this.g, t = g.previewBlocked;
+    if (!t || g.state !== 'address' || g.club.putter) return '';
+    return `Trees in the way: likely ${t.kind === 'trunk' ? 'a trunk' : 'branches'} about ${g.fmtDist(t.dist)} out. Aim around them or change the flight.`;
+  }
+
   // A sloping lie turns a lofted face (physics.js lieFace): warn before the shot, not after
   lieNote() {
     const g = this.g;
@@ -637,10 +655,12 @@ export class Caddie {
     sim.launch(start, ld, [dir.x, 0, dir.z]);
     const dt = o.dt || 1 / 120;
     const pts = o.path ? [start.slice()] : null;
-    let n = 0, land = null;
+    let n = 0, land = null, treeAir = null;
     while (sim.state !== 'rest' && sim.state !== 'holed' && n++ < 9000) {
       sim.step(dt);
       if (pts && n % 3 === 0 && !land) pts.push(sim.p.slice());
+      // the first tree the ball meets on the way up or down, before it ever lands
+      if (!land && !treeAir && sim.events.length) treeAir = sim.events.find((e) => e.type === 'tree') || null;
       if (!land && sim.landed) { land = sim.landed.slice(); if (o.stopAtLand) break; }
     }
     const ev = sim.events.map((e) => e.type);
@@ -650,6 +670,7 @@ export class Caddie {
     if (sim.state === 'holed') result = 'holed';
     const p = sim.p;
     const out = { result, land, rest: p.slice(), path: pts, ld, surface: h.surface(p[0], p[2]), dist: Math.hypot(h.cup.x - p[0], h.cup.z - p[2]) };
+    if (treeAir) out.treeAir = { kind: treeAir.kind, dist: Math.hypot(treeAir.p[0] - b.p[0], treeAir.p[2] - b.p[2]) };
     if (result === 'water') {
       const e = findEntry(h, sim, g.ball.p);
       out.entryDist = Math.hypot(h.cup.x - e.x, h.cup.z - e.z);

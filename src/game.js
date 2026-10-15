@@ -434,7 +434,11 @@ export class Game {
   closeScorecardPeek() {
     if (this.round && this.state !== 'scorecard' && !this.ui.scModal) this.ui.scorecard(null);
   }
-  caddieNote() { this.ui.caddie([this.caddie.msg, this.caddie.lieNote()].filter(Boolean).join(' ')); }
+  caddieNote() {
+    // a tree in the line is the one thing to say: it replaces the usual club and line advice
+    const blocked = this.caddie.blockedNote();
+    this.ui.caddie([blocked || this.caddie.msg, this.caddie.lieNote(), this.ui.tipNow].filter(Boolean).join(' '));
+  }
 
   // ------------------------------------------------------------------ previews
   updatePreview() {
@@ -443,6 +447,7 @@ export class Game {
     const h = this.hole, b = this.ball, w = this.world;
     const dir = dirOf(this.aim);
     const assist = this.diff;
+    this.previewBlocked = null;
     if (this.club.putter) {
       w.reticle.visible = false;
       w.arc.visible = false;
@@ -510,6 +515,8 @@ export class Game {
   setSuggestedPower(p) {
     // never below the shortest real swing: under it every swing is a chunk (normalizeSwing)
     this.suggestedPower = Math.max(p, MIN_SWING + 0.01);
+    this.caddie.checkBlocked(this.suggestedPower);
+    this.caddieNote();
     this.meter.configure({ marker: this.diff.marker && this.suggestedPower < 1 ? this.suggestedPower : null });
     this.configureAuto();
   }
@@ -829,7 +836,7 @@ export class Game {
     this.replayT = 0;
     this.replayHold = 0;
     this.ui.showShotPanel(null);
-    this.ui.toast('Replay – Space to return');
+    this.ui.toast(this.ui.touch ? 'Replay – tap to return' : `Replay – ${this.ui.key('swing')} to return`);
     this.cam.startReplay(this.shotStart, this.rec);
     this.ballShadow.visible = !this.shotStart.club.putter;
   }
@@ -1011,9 +1018,9 @@ export class Game {
     this.ui.hud({
       hole: h.number, name: h.name, par: h.par, yards: this.course.holes[h.index].yds,
       shot: this.challenge ? `Ball ${this.ballNo + 1}/${r.balls}` : holed ? `Holed in ${this.strokes}` : `Shot ${this.strokes + (this.state === 'flight' ? 0 : 1)}`, toPar,
-      player: r.players.length > 1 ? r.player.name : null, challenge: this.challenge,
+      player: r.players.length > 1 ? r.player.name : null, challenge: this.challenge, mode: r.mode,
       dist: holed ? 'Holed' : feet ? `${(d / FT).toFixed(d / FT < 10 ? 1 : 0)} ft` : this.fmtDist(d),
-      plays: this.pl && !this.club.putter && !resting ? this.fmtDist(this.pl.plays) : null,
+      plays: this.pl && !this.club.putter && !resting && !(this.challenge && r.mode === 'drive') ? this.fmtDist(this.pl.plays) : null,
       elev: holed ? 0 : (h.height(h.cup.x, h.cup.z) - (b.p[1] - BALL.radius)) / FT,
       puttEq: this.club.putter && !resting ? this.puttEqFt : null,
       wind: this.windRel(), windMph: this.windMph,

@@ -16,32 +16,38 @@ export function firstRun() { return !tutorialDone() && loadHistory().length === 
 
 // Each step shows once, the first time its `when` holds. `done` auto-advances;
 // otherwise the player presses Next. `skip` leaves a step out for this player.
-// text(g, k) gets the game and a key-name lookup so bindings are always current.
+// text(g, k, touch) gets the game, a control-name lookup (bound key, or the on-screen button on
+// touch) and whether the player is on touch, so no prompt names a key they cannot press.
 export const STEPS = [
   { id: 'flyover', when: (g) => g.state === 'flyover', skip: (g) => g.settings.reducedMotion, anchor: 'intro', title: 'The flyover',
-    text: (g, k) => `Every hole opens with a flight from tee to green. The card gives par, length, wind and green speed (Stimp). Press ${k('swing')} or click to skip it.`,
+    text: (g, k, touch) => `Every hole opens with a flight from tee to green. The card gives par, length, wind and green speed (Stimp). ${touch ? 'Tap anywhere' : `Press ${k('swing')} or click`} to skip it.`,
     done: (g) => g.state !== 'flyover' },
   { id: 'distance', when: (g) => g.state === 'address', anchor: 'distBox', title: 'How far?',
     text: () => 'Distance to the pin. “Plays like” adds elevation and wind: that is the number to pick a club for.' },
   { id: 'wind', when: (g) => g.state === 'address', anchor: 'windBox', title: 'Wind',
     text: () => 'The arrow is the wind relative to your aim: into, helping or across. The plays-like distance already allows for it.' },
   { id: 'club', when: (g) => g.state === 'address', anchor: 'clubBox', title: 'Your club',
-    text: (g, k) => `Your caddie picked a club whose full-swing carry covers the plays-like distance. ${k('clubUp')} / ${k('clubDown')} change it; the caddie bubble explains the choice.` },
+    text: (g, k, touch) => `Your caddie picked a club whose full-swing carry covers the plays-like distance. ${touch ? `The ${k('clubUp')} and ${k('clubDown')} buttons` : `${k('clubUp')} / ${k('clubDown')}`} change it; the caddie bubble explains the choice.` },
   { id: 'aim', when: (g) => g.state === 'address', anchor: 'clubBox', title: 'Aim',
-    text: (g, k) => `${k('aimLeft')} / ${k('aimRight')} move your aim (hold ${k('aimFine')} for fine steps); ${k('aimPin')} aims back at the pin. The ring on the ground is where this club lands with a full swing.` },
+    text: (g, k, touch) => (touch
+      ? `Hold ${k('aimLeft')} or ${k('aimRight')} to turn your aim; ${k('aimPin')} aims back at the pin. You can also drag the view to look around. The ring on the ground is where this club lands with a full swing.`
+      : `${k('aimLeft')} / ${k('aimRight')} move your aim (hold ${k('aimFine')} for fine steps); ${k('aimPin')} aims back at the pin. The ring on the ground is where this club lands with a full swing.`) },
   { id: 'meter', when: (g) => g.state === 'address', anchor: 'meter', title: 'The three-click swing',
-    text: (g, k) => (g.settings.oneButton
-      ? `One-button swing: press ${k('swing')} to start. Power is set for you at the caddie’s marker; press ${k('swing')} again as the cursor comes back into the green impact zone. Go on, hit it.`
-      : `Press ${k('swing')} to start the meter. Press again to set power: the blue marker is the caddie’s suggestion. Then press a third time as the cursor comes back into the green impact zone. Early closes the face (pull), late opens it (push). Go on, hit it.`),
+    text: (g, k, touch) => {
+      const tap = touch ? 'Tap' : 'Press', again = touch ? 'tap' : 'press';
+      return g.settings.oneButton
+        ? `One-button swing: ${tap.toLowerCase()} ${k('swing')} to start. Power is set for you at the caddie’s marker; ${again} ${k('swing')} again as the cursor comes back into the green impact zone. Go on, hit it.`
+        : `${tap} ${k('swing')} to start the meter. ${tap} again to set power: the blue marker is the caddie’s suggestion. Then ${again} a third time as the cursor comes back into the green impact zone. Early closes the face (pull), late opens it (push). Go on, hit it.`;
+    },
     done: (g) => g.state !== 'address' },
   { id: 'relief', when: (g) => g.state === 'relief', anchor: 'relief', title: 'Penalty area',
     text: () => 'In the water: one penalty stroke. Each option shows the tour-average strokes to hole out from that drop, so the lowest number is the smart choice.',
     done: (g) => g.state !== 'relief' },
   { id: 'result', when: (g) => g.state === 'result', anchor: 'shotPanel', title: 'What happened',
-    text: (g, k) => `Launch-monitor numbers for the shot. Strokes Gained compares it with a tour pro from the same spot: negative means it cost you. The coach’s tip explains why the ball did what it did. ${k('swing')} continues.`,
+    text: (g, k, touch) => `Launch-monitor numbers for the shot. Strokes Gained compares it with a tour pro from the same spot: negative means it cost you. The coach’s tip explains why the ball did what it did. ${touch ? 'Tap Continue' : `${k('swing')} continues`}.`,
     done: (g) => g.state !== 'result' },
   { id: 'green', when: (g) => g.state === 'address' && !!g.club?.putter, anchor: 'distBox', title: 'On the green',
-    text: (g, k) => `“Stroke it N ft” is the pace that finishes about 17 inches past the hole, the best chance of dropping. The line on the green shows the break; ${k('grid')} toggles the grid, whose dots flow downhill.` },
+    text: (g, k, touch) => `“Stroke it N ft” is the pace that finishes about 17 inches past the hole, the best chance of dropping. The line on the green shows the break${touch ? '.' : `; ${k('grid')} toggles the grid, whose dots flow downhill.`}` },
   { id: 'putt', when: (g) => g.state === 'address' && !!g.club?.putter, anchor: 'meter', title: 'Putting',
     text: (g) => (g.settings.difficulty === 'pro'
       ? 'Same three clicks. The labels are the distance each power rolls: hit the marker, and aim up the slope by the break you read.'
@@ -129,7 +135,7 @@ export class Tutorial {
     this.cur = step;
     const k = (a) => this.ui.key(a);
     this.el.querySelector('h4').textContent = step.title;
-    this.el.querySelector('p').textContent = step.text(this.g, k);
+    this.el.querySelector('p').textContent = step.text(this.g, k, this.ui.touch);
     this.el.querySelector('.cm-skip').classList.toggle('hidden', !!step.finish);
     this.el.querySelector('.cm-next').textContent = step.finish ? 'Finish' : step.done ? 'Got it' : 'Next';
     this.el.classList.remove('hidden');

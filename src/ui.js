@@ -6,7 +6,7 @@ import { SURFACES } from './physics.js';
 import { DEFAULT_KEYS, ACTION_LABELS, DIFFICULTY } from './config.js';
 import { MODES, SIGNATURE, dailySpec, holesFor, challengeHash, RESUME_KEY, resumable, restoreRound } from './round.js';
 import { loadHistory, bestFor, handicapIndex, sgTrend, clearHistory, localDay, RATINGS } from './history.js';
-import { firstRun, TUTORIAL_ROUND } from './tutorial.js';
+import { firstRun } from './tutorial.js';
 import { QUALITY } from './post.js';
 import { fmtYd, fmtElev, windUnit, windValue, localizeText } from './units.js';
 
@@ -16,6 +16,30 @@ const sgn = (x, d = 2) => (x >= 0 ? '+' : '') + x.toFixed(d);
 const toParStr = (d) => (d === 0 ? 'E' : d > 0 ? `+${d}` : `${d}`);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const keyName = (k) => ({ ' ': 'Space', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Escape: 'Esc' }[k] || (k.length === 1 ? k.toUpperCase() : k));
+// the touch buttons that stand in for each keyboard action (input.js dispatches the same names)
+const TOUCH_LABELS = {
+  swing: 'SWING', aimLeft: '◀', aimRight: '▶', clubUp: '▲', clubDown: '▼', aimPin: '⚑', targetView: '👁',
+  shapeLeft: 'shape', shapeRight: 'shape', trajUp: 'flight', trajDown: 'flight', skip: '⏭', replay: '👁',
+  fastForward: 'SWING', pause: '☰',
+};
+// actions that share a key without clashing: they only act in different states (a held Space is
+// swing on the tee and fast-forward in flight), so only keys that collide inside a group are a conflict
+const KEY_GROUPS = {
+  address: ['swing', 'clubUp', 'clubDown', 'aimLeft', 'aimRight', 'aimFine', 'shapeLeft', 'shapeRight', 'trajUp', 'trajDown', 'targetView', 'grid', 'caddie', 'aimPin'],
+  flight: ['fastForward', 'skip', 'replay'],
+  always: ['mute', 'scorecard', 'hudDetail', 'pause'],
+};
+const groupsOf = (a) => Object.entries(KEY_GROUPS).filter(([, l]) => l.includes(a)).map(([g]) => g);
+// the action that already uses key `k` in a state where `a` is also live, if any
+export function keyConflict(bindings, a, k) {
+  const mine = groupsOf(a);
+  for (const [other, ks] of Object.entries(bindings)) {
+    if (other === a || !ks.includes(k)) continue;
+    const theirs = groupsOf(other);
+    if (mine.includes('always') || theirs.includes('always') || mine.some((g) => theirs.includes(g))) return other;
+  }
+  return null;
+}
 const MODALS = ['confirmBox', 'relief', 'pause', 'help', 'summary', 'settings', 'stats', 'editor'];
 
 export class UI {
@@ -36,7 +60,14 @@ export class UI {
     if (!$('academy').classList.contains('hidden')) return true;
     return MODALS.some((id) => !$(id).classList.contains('hidden'));
   }
-  key(action) { const ks = this.game.input.bindings[action] || []; return ks.length ? keyName(ks[0]) : '—'; }
+  // what to call a control in a prompt: the on-screen button on touch, the bound key otherwise
+  key(action) {
+    if (this.touch && TOUCH_LABELS[action]) return TOUCH_LABELS[action];
+    const ks = this.game.input.bindings[action] || [];
+    return ks.length ? keyName(ks[0]) : '—';
+  }
+  // "Tap SWING" / "Press Space"
+  press(action) { return `${this.touch ? 'Tap' : 'Press'} ${this.key(action)}`; }
   // on-screen buttons rather than a keyboard: prompts name those instead
   get touch() { return document.body.classList.contains('touch'); }
 
@@ -71,17 +102,12 @@ export class UI {
       <div class="cc-teach"><b>Teaches</b><ul>${course.teaches.map((t) => `<li>${t}</li>`).join('')}</ul></div>
       ${bests.length ? `<div class="cc-best">${bests.map(([m, b]) => `Best ${MODES[m].name}: ${toParStr(b.toPar)} (${b.strokes})`).join(' · ')}</div>` : ''}`;
 
-    // quick play: the signature hole, no setup
-    let sig = SIGNATURE[course.id] ?? 0;
-    // right after the lesson, don't offer the hole they just played: take the next par 3 on the card
-    if (!firstRun() && !history.length && course.id === TUTORIAL_ROUND.courseId && sig === TUTORIAL_ROUND.holes[0]) {
-      const alt = course.holes.findIndex((h, i) => h.par === 3 && i !== sig);
-      if (alt >= 0) sig = alt;
-    }
+    // quick play: the signature hole, no setup (the same hole every visit, so the button is predictable)
+    const sig = SIGNATURE[course.id] ?? 0;
     const sh = course.holes[sig];
     if (this.tutorial && firstRun()) {
       // never played: the primary button is the guided hole
-      $('btnQuick').innerHTML = 'Start here: guided first hole ▶<small>Augusta 12 · par 3 · about 5 minutes</small>';
+      $('btnQuick').innerHTML = 'Start here: guided first hole ▶<small>Augusta 12 · par 3 · about 5 minutes · explains every control</small>';
       $('btnQuick').onclick = () => this.tutorial.start();
     } else {
       $('btnQuick').innerHTML = `Play a hole now ▶<small>${sig + 1}. ${sh.name} · par ${sh.par}</small>`;
@@ -154,7 +180,10 @@ export class UI {
     names.innerHTML = '';
     for (let i = 0; i < this.sel.players && this.sel.players > 1; i++) {
       const inp = el('input', 'name-input');
-      inp.value = this.sel.names[i] || `Player ${i + 1}`;
+      const given = this.sel.names[i];
+      inp.value = !given || /^Player \d$/.test(given) ? '' : given;
+      inp.placeholder = `Player ${i + 1} name`;
+      inp.setAttribute('aria-label', `Player ${i + 1} name`);
       inp.maxLength = 16;
       inp.oninput = () => { this.sel.names[i] = inp.value; this.saveSel(); };
       names.appendChild(inp);
@@ -166,7 +195,6 @@ export class UI {
     $('btnAcademy').onclick = () => { this.academy.open(); };
     $('btnHow').onclick = () => this.showHelp(true);
     $('btnStats').onclick = () => this.showStats(true);
-    $('btnEditor').onclick = () => this.editor.open();
     $('btnSettings').onclick = () => this.showSettings(true);
   }
   setOpt(id, k) {
@@ -272,11 +300,14 @@ export class UI {
     const units = this.game.settings.units;
     $('hcNum').textContent = d.hole;
     $('hcName').textContent = d.name;
-    $('hcPar').textContent = `Par ${d.par} · ${this.game.fmtDist(d.yards * YD)}`;
+    // a long drive has no par or hole length to play to: the card says what the round is
+    $('hcPar').textContent = d.mode === 'drive' ? 'Long drive' : d.mode === 'ctp' ? `Closest to the pin · par ${d.par}` : `Par ${d.par} · ${this.game.fmtDist(d.yards * YD)}`;
     $('hcShot').textContent = (d.player ? `${d.player} · ` : '') + d.shot;
     $('hcScore').textContent = d.challenge ? '' : toParStr(d.toPar);
     $('hcScore').className = 'hc-score ' + (d.toPar < 0 ? 'under' : d.toPar > 0 ? 'over' : '');
     $('dPin').textContent = d.dist;
+    if (d.state !== 'address') this.tipNow = '';
+    if (d.plays) this.firstTip('plays', '“Plays like” is the distance adjusted for wind and elevation. Pick a club for that number, not the yardage.');
     let sub = '';
     if (d.plays) sub = `Plays like <b>${d.plays}</b>`;
     else if (d.puttEq != null) sub = `Stroke it <b>${d.puttEq.toFixed(0)} ft</b><br><small>to finish 17 in past</small>`;
@@ -411,6 +442,18 @@ export class UI {
     while (this.toasts.children.length > 3) this.toasts.firstChild.remove();
     setTimeout(() => t.classList.add('out'), 1900);
     setTimeout(() => t.remove(), 2400);
+  }
+  // a one-time plain-English explainer the first time a piece of golf jargon appears
+  // (the guided hole covers them already, so it stays quiet during the lesson)
+  firstTip(id, text) {
+    if (this.game.tutorial || this.game.state !== 'address') return;
+    let seen = {};
+    try { seen = JSON.parse(localStorage.getItem('psg-tips') || '{}'); } catch (e) { /* ignore */ }
+    if (seen[id]) return;
+    seen[id] = 1;
+    try { localStorage.setItem('psg-tips', JSON.stringify(seen)); } catch (e) { /* ignore */ }
+    this.tipNow = text; // rides in the caddie bubble until the swing, then is gone
+    this.game.caddieNote();
   }
   banner(text, kind = '', ms = 2600) {
     const b = $('banner');
@@ -577,11 +620,22 @@ export class UI {
     const outright = lead.length > 1 && lead[0].t.strokes < lead[1].t.strokes;
     const board = multi ? `<h3>Leaderboard</h3><div class="sc-board big">${lead.map(({ pl, t: x }, i) => `<div><span>${i === 0 && outright ? '🏆 ' : ''}${esc(pl.name)}</span><b>${toParStr(x.strokes - x.par)} <small>${x.strokes}</small></b></div>`).join('')}</div>` : '';
     const n = round.players[0].scores.length;
+    // the closing tip under the strokes-gained bars: only claims what the numbers show (a category
+    // with nothing recorded, like no chips on a round that never missed a green, is not a "gain")
+    const sgTip = (t) => {
+      const played = cats.filter(([k]) => Math.abs(t.sg[k]) >= 0.005);
+      if (!played.length) return `<div class="tip"><b>Not enough to compare</b><p>No strokes-gained data was recorded this time, so there is nothing to measure against the tour average. Play a full hole to see where you gain and lose strokes.</p></div>`;
+      const worst = played.slice().sort((a, b) => t.sg[a[0]] - t.sg[b[0]])[0];
+      if (t.sg[worst[0]] < 0) return `<div class="tip"><b>Where to improve: ${worst[1]}</b><p>${advice[worst[0]]}</p></div>`;
+      const names = played.map(([, n]) => n.toLowerCase());
+      const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0];
+      const skipped = cats.length - played.length;
+      return `<div class="tip"><b>${skipped ? 'Strokes gained where it counted' : 'Strokes gained everywhere'}</b><p>You beat the tour average ${skipped ? `in ${list}` : 'in every part of the game'}. The smallest gain was ${worst[1].toLowerCase()} (${sgn(t.sg[worst[0]])}).${skipped ? ` Nothing was recorded for the other ${skipped === 1 ? 'category' : 'categories'}.` : ''}${settings.difficulty !== 'pro' ? ' Try a harder difficulty in Settings for a tougher test.' : ''}</p></div>`;
+    };
     // one player's card: score, key stats and strokes gained (hot seat: a tab per player)
     const card = (pl, t) => {
       const toPar = t.strokes - t.par;
       const max = Math.max(1, ...cats.map(([k]) => Math.abs(t.sg[k])));
-      const worst = cats.slice().sort((a, b) => t.sg[a[0]] - t.sg[b[0]])[0];
       return `<div class="sum-score ${toPar < 0 ? 'under' : toPar > 0 ? 'over' : ''}">${toParStr(toPar)}<small>${multi ? `${esc(pl.name)} · ` : ''}${t.strokes} strokes · par ${t.par}</small></div>
       ${best ? `<div class="muted">Previous best: ${toParStr(best.toPar)} (${best.date})</div>` : ''}
       ${hcp != null ? `<div class="muted">Handicap index estimate: <b>${hcp.toFixed(1)}</b></div>` : ''}
@@ -597,9 +651,7 @@ export class UI {
         return `<div class="sg-row"><span>${nm}</span><div class="bar"><i class="${v >= 0 ? 'pos' : 'neg'}" style="width:${w}%;${v >= 0 ? 'left:50%' : `left:${50 - w}%`}"></i></div><b>${sgn(v)}</b></div>`;
       }).join('')}</div>
       <p class="sum-total">Total: <b>${sgn(t.sgTotal)}</b> strokes vs. a tour player over ${n} hole${n === 1 ? '' : 's'}.</p>
-      ${cats.every(([k]) => Math.abs(t.sg[k]) < 0.005) ? `<div class="tip"><b>Not enough to compare</b><p>No strokes-gained data was recorded this time, so there is nothing to measure against the tour average. Play a full hole to see where you gain and lose strokes.</p></div>`
-    : t.sg[worst[0]] < 0 ? `<div class="tip"><b>Where to improve: ${worst[1]}</b><p>${advice[worst[0]]}</p></div>`
-    : `<div class="tip"><b>Strokes gained everywhere</b><p>You beat the tour average in every part of the game. The smallest gain was ${worst[1].toLowerCase()} (${sgn(t.sg[worst[0]])}).${settings.difficulty !== 'pro' ? ' Try a harder difficulty in Settings for a tougher test.' : ''}</p></div>`}`;
+      ${sgTip(t)}`;
     };
     const tabs = multi ? `<div class="segs sum-tabs">${round.players.map((pl, i) => `<button class="seg${i === 0 ? ' on' : ''}" data-p="${i}">${esc(pl.name)}</button>`).join('')}</div>` : '';
     const info = [course.name, MODES[round.mode]?.name, PROFILES[settings.profile]?.name || settings.profile, DIFFICULTY[settings.difficulty]?.name].filter(Boolean).join(' · ');
@@ -725,7 +777,7 @@ export class UI {
       <label class="set"><span>Swing control</span><select id="sCtl"><option value="meter" ${s.control === 'meter' ? 'selected' : ''}>3-click meter</option><option value="mouse" ${s.control === 'mouse' ? 'selected' : ''}>Analog mouse swing</option></select></label>
       <label class="set"><span>Assists</span><select id="sDiff">${['beginner', 'standard', 'pro'].map((d) => `<option value="${d}" ${s.difficulty === d ? 'selected' : ''}>${d[0].toUpperCase() + d.slice(1)}</option>`).join('')}</select></label>
       <label class="set"><span>Graphics<small id="sQualDesc">${this.qualityDesc()}</small></span><select id="sQual">${Object.keys(QUALITY).map((q) => `<option value="${q}" ${(s.quality || 'auto') === q ? 'selected' : ''}>${QUALITY[q].name}</option>`).join('')}</select></label>
-      <label class="set"><span>HUD detail<small>Essential folds the lie into the distance panel and hides the minimap and shape row until you use them. ${this.key('hudDetail')} toggles in play.</small></span><select id="sHud"><option value="essential" ${s.hudDetail !== 'full' ? 'selected' : ''}>Essential</option><option value="full" ${s.hudDetail === 'full' ? 'selected' : ''}>Full</option></select></label>
+      <label class="set"><span>HUD detail<small>Essential folds the lie into the distance panel and hides the minimap and shape row until you use them.${this.touch ? '' : ` ${this.key('hudDetail')} toggles in play.`}</small></span><select id="sHud"><option value="essential" ${s.hudDetail !== 'full' ? 'selected' : ''}>Essential</option><option value="full" ${s.hudDetail === 'full' ? 'selected' : ''}>Full</option></select></label>
       <h3>Accessibility</h3>
       ${chk('sOne', 'One-button swing', s.oneButton, 'Power is set to the caddie’s number – you only time the impact.')}
       ${chk('sReduce', 'Reduced motion', s.reducedMotion, 'No flyovers, slow-motion or camera punches.')}
@@ -737,7 +789,7 @@ export class UI {
       <button class="btn small-btn" id="sKeysReset">Reset keys</button>
       <p class="muted small">Gamepad: A swing · B skip · X fade · Y view/replay · LB/RB club · D-pad aim &amp; flight · right stick: pull back then push up for a tempo swing.</p>
       </div></div>
-      <button class="btn primary" id="sClose">Done</button>`;
+      <div class="row wrap"><button class="btn primary" id="sClose">Done</button><button class="btn" id="sEditor" title="Build your own hole from a JSON course file">Course editor (advanced)</button></div>`;
     const save = () => { g.saveSettings(); this.helpBar(); if (g.state === 'address') g.enterAddress(); };
     $('sVol').oninput = (e) => { s.volume = +e.target.value; g.audio.setVolume(s.volume); g.saveSettings(); };
     $('sTracer').onchange = (e) => { s.tracer = e.target.checked; save(); };
@@ -751,20 +803,29 @@ export class UI {
     $('sScale').oninput = (e) => { s.uiScale = +e.target.value; g.saveSettings(); };
     $('sKeysReset').onclick = () => { s.keys = {}; save(); this.showSettings(true); };
     $('sClose').onclick = () => this.showSettings(false);
+    $('sEditor').onclick = () => { this.showSettings(false); this.editor.open(); };
     for (const b of box.querySelectorAll('.remap [data-act]')) {
       b.onclick = () => {
         const a = b.dataset.act;
-        b.textContent = 'Press a key…';
+        b.textContent = 'Press a key… (Esc cancels)';
         b.classList.add('on');
-        g.input.capture = (e) => {
-          g.input.capture = null;
-          if (e.key !== 'Escape') {
-            const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-            s.keys = { ...s.keys, [a]: [k] };
-            save();
+        b.classList.remove('clash');
+        const capture = (e) => {
+          if (e.key === 'Escape') { g.input.capture = null; this.showSettings(true); return; }
+          const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+          const clash = keyConflict({ ...g.input.bindings, [a]: [k] }, a, k);
+          if (clash) {
+            // keep listening: say who has the key and let the player pick another
+            b.textContent = `${keyName(k)} is ${ACTION_LABELS[clash]} – press another key`;
+            b.classList.add('on', 'clash');
+            return;
           }
+          g.input.capture = null;
+          s.keys = { ...s.keys, [a]: [k] };
+          save();
           this.showSettings(true);
         };
+        g.input.capture = capture;
       };
     }
   }
@@ -818,23 +879,36 @@ export class UI {
     h.classList.toggle('hidden', !on);
     if (!on) return;
     const k = (a) => this.key(a);
-    h.innerHTML = `<h2>How to play</h2>
-      <div class="help-cols">
-      <div><h3>3-Click swing meter</h3>
-        <ol><li>Press <b>${k('swing')}</b> (or click) to start the swing.</li><li>Press again to set <b>power</b>. The blue marker is the caddie's suggestion for the pin. Past 100% (red) you gain distance but lose control.</li><li>Press a third time as the cursor returns to the green <b>impact zone</b>. Early = closed face (pull/hook). Late = open face (push/slice).</li></ol>
-        <p class="muted small">One-button swing (Settings → Accessibility) sets the power for you.</p>
-      <h3>Analog swing</h3>
-        <ol><li>Hold the left mouse button and pull <b>down</b> – that's the backswing length.</li><li>Push <b>up</b> past the start point to swing. A smooth, quick push gives full power.</li><li>Drifting left or right opens/closes the face; the stroke direction sets the club path.</li></ol>
-        <p class="muted small">Gamepad: the right stick does the same – pull back, then push up.</p></div>
-      <div><h3>Shot setup</h3>
-        <ul><li><b>${k('aimLeft')} ${k('aimRight')}</b> aim, <b>${k('aimFine')}</b> for fine aim. <b>${k('aimPin')}</b> re-aims at the pin (on the green it flips between the caddie's read and the cup). Click the mini-map, or press <b>${k('targetView')}</b> and click the ground.</li>
+    const touch = this.touch, tap = touch ? 'Tap' : 'Press';
+    const setup = touch
+      ? `<li>Hold <b>${k('aimLeft')}</b> or <b>${k('aimRight')}</b> to turn your aim; <b>${k('aimPin')}</b> re-aims at the pin (on the green it flips between the caddie's read and the cup). Tap the mini-map, or tap <b>${k('targetView')}</b> and then the ground.</li>
+        <li><b>${k('clubUp')} ${k('clubDown')}</b> change club. Carry / total distances are shown for a full swing.</li>
+        <li><b>${k('shapeLeft')}</b> cycles draw, straight and fade: the club path is set in-to-out or out-to-in with the face between them (the D-plane).</li>
+        <li><b>${k('trajUp')}</b> cycles low, standard and high flight.</li>
+        <li><b>Plays like</b> includes elevation and wind. The lie box shows how the lie affects distance.</li>
+        <li>In flight: hold <b>${k('fastForward')}</b> to fast-forward, <b>${k('skip')}</b> skips to where it finishes. <b>${k('replay')}</b> replays the shot from a new angle.</li>
+        <li>Drag one finger on the view to look around.</li>`
+      : `<li><b>${k('aimLeft')} ${k('aimRight')}</b> aim, <b>${k('aimFine')}</b> for fine aim. <b>${k('aimPin')}</b> re-aims at the pin (on the green it flips between the caddie's read and the cup). Click the mini-map, or press <b>${k('targetView')}</b> and click the ground.</li>
         <li><b>${k('clubUp')} ${k('clubDown')}</b> change club. Carry / total distances are shown for a full swing.</li>
         <li><b>${k('shapeLeft')} / ${k('shapeRight')}</b> draw or fade: the club path is set in-to-out or out-to-in with the face between them (the D-plane).</li>
         <li><b>${k('trajUp')} / ${k('trajDown')}</b> high or low trajectory.</li>
         <li><b>Plays like</b> includes elevation and wind. The lie box shows how the lie affects distance.</li>
         <li><b>${k('grid')}</b> shows the green grid: colour = slope, and the dots flow downhill.</li>
         <li>In flight: hold <b>${k('fastForward')}</b> to fast-forward, <b>${k('skip')}</b> skips to where it finishes. <b>${k('replay')}</b> replays the shot from a new angle.</li>
-        <li>Right-drag (or one-finger drag) orbits the camera; the wheel zooms.</li></ul>
+        <li>Right-drag orbits the camera; the wheel zooms.</li>`;
+    const analog = touch
+      ? `<ol><li>Put one finger on the view and drag <b>down</b> – that's the backswing length.</li><li>Drag <b>up</b> past the start point to swing. A smooth, quick push gives full power.</li><li>Drifting left or right opens/closes the face; the stroke direction sets the club path.</li></ol>`
+      : `<ol><li>Hold the left mouse button and pull <b>down</b> – that's the backswing length.</li><li>Push <b>up</b> past the start point to swing. A smooth, quick push gives full power.</li><li>Drifting left or right opens/closes the face; the stroke direction sets the club path.</li></ol>
+        <p class="muted small">Gamepad: the right stick does the same – pull back, then push up.</p>`;
+    h.innerHTML = `<h2>How to play</h2>
+      <div class="help-cols">
+      <div><h3>3-Click swing meter</h3>
+        <ol><li>${tap} <b>${k('swing')}</b>${touch ? '' : ' (or click)'} to start the swing.</li><li>${tap} again to set <b>power</b>. The blue marker is the caddie's suggestion for the pin. Past 100% (red) you gain distance but lose control.</li><li>${tap} a third time as the cursor returns to the green <b>impact zone</b>. Early = closed face (pull/hook). Late = open face (push/slice).</li></ol>
+        <p class="muted small">One-button swing (Settings → Accessibility) sets the power for you.</p>
+      <h3>Analog swing</h3>
+        ${analog}</div>
+      <div><h3>Shot setup</h3>
+        <ul>${setup}</ul>
       <h3>Learn while you play</h3>
         <p>After every shot you'll see launch-monitor numbers, <b>strokes gained</b> against a tour average, and coaching on why the ball did what it did. Open the <b>Golf Academy</b> from the menu to experiment in the ball-flight lab.</p></div>
       </div>
