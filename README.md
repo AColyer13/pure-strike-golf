@@ -16,7 +16,7 @@ Four tribute courses, plus random courses and your own edits:
 
 ## Run it
 
-You need [Node.js](https://nodejs.org) 18 or newer. Running the game needs no install, because three.js is vendored in `vendor/`.
+You need [Node.js](https://nodejs.org) 18 or newer. Running the game needs no install: three.js is vendored in `vendor/` and the game ships as one prebuilt file, `dist/game.js`.
 
 Double-click `start.bat`, or run:
 
@@ -125,7 +125,8 @@ Difficulty levels (Beginner, Standard, Pro) change meter speed, the size of the 
 ```
 index.html, styles.css    UI shell, menu and broadcast-style HUD
 sw.js, manifest.json      offline / installable PWA
-vendor/three/             three.js 0.169 (MIT), loaded through the import map; copied by tools/vendor.mjs
+vendor/three/             three.js 0.169 (MIT); copied by tools/vendor.mjs and bundled into dist/game.js
+dist/game.js              the whole game (src/ plus three.js) as one minified file, built by tools/bundle.mjs; index.html loads only this
 fonts/                    Barlow / Barlow Condensed (OFL), self-hosted so the game has no runtime CDN dependency
 src/main.js               boot: wires UI, game, academy and editor together
 src/game.js               game loop and round flow (state machine)
@@ -167,11 +168,13 @@ npm install
 npm run check
 ```
 
-`npm run check` runs ESLint and the test suite. You can also run `npm test` or `npm run lint` on their own. `jsconfig.json` turns on type-checking from JSDoc comments in editors that support it (such as VS Code).
+`npm run check` runs ESLint and the test suite (which includes a check that `dist/game.js` matches `src/`). You can also run `npm test` or `npm run lint` on their own. `jsconfig.json` turns on type-checking from JSDoc comments in editors that support it (such as VS Code).
 
-Pushes and pull requests run the same checks in GitHub Actions (`.github/workflows/ci.yml`), plus `npm run vendor:check`.
+Pushes and pull requests run the same checks in GitHub Actions (`.github/workflows/ci.yml`), plus `npm run vendor:check` and `npm run bundle:check`.
 
 three.js and the fonts are pinned as dev dependencies and copied into the repo with `npm run vendor` (it walks each addon's imports, so adding an addon is one line in `tools/vendor.mjs`). `npm run vendor:check` fails if the vendored copies drift from `node_modules`.
+
+The game loads as one file because ~50 separate modules cost a network round trip per level of the import graph on a slow connection. **After changing anything in `src/` or `vendor/`, run `npm run bundle` and commit `dist/game.js`.** `node tools/serve.mjs` (and `start.bat`) rebuild the bundle on every request when dev dependencies are installed, so local edits show on reload; the unbundled `src/` files are what the tests import.
 
 Strikes (including bunker shots), landings on turf, sand and cart paths, the cup, the flagstick, trees, water and the crowd play CC0 recordings from freesound.org (`audio/sfx/`, credited in `audio/CREDITS.md`); everything else, and any slot left empty, is synthesized with Web Audio. To use other samples, drop files into `audio/` and list them in `audio/manifest.json` under the matching slot (`driver`, `iron`, `wedge`, `putter`, `sand`, `cup`, `pin`, `tree`, `splash`, `cheer`, `applause`, `groan`, and so on; the file documents each one). A slot with two or three files plays a random variant with a slight pitch change each time; a slot left empty keeps the synthesized sound. Only ship files you have the rights to (your own recordings or CC0 packs). `game.audio.bank.status()` in the console shows what loaded.
 
