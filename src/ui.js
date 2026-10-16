@@ -630,7 +630,7 @@ export class UI {
       const names = played.map(([, n]) => n.toLowerCase());
       const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0];
       const skipped = cats.length - played.length;
-      return `<div class="tip"><b>${skipped ? 'Strokes gained where it counted' : 'Strokes gained everywhere'}</b><p>You beat the tour average ${skipped ? `in ${list}` : 'in every part of the game'}. The smallest gain was ${worst[1].toLowerCase()} (${sgn(t.sg[worst[0]])}).${skipped ? ` Nothing was recorded for the other ${skipped === 1 ? 'category' : 'categories'}.` : ''}${settings.difficulty !== 'pro' ? ' Try a harder difficulty in Settings for a tougher test.' : ''}</p></div>`;
+      return `<div class="tip"><b>${skipped ? 'Strokes gained where it counted' : 'Strokes gained everywhere'}</b><p>You beat the tour average ${skipped ? `in these areas: ${list}` : 'in every part of the game'}. The smallest gain was ${worst[1].toLowerCase()} (${sgn(t.sg[worst[0]])}).${skipped ? ` Nothing was recorded for the other ${skipped === 1 ? 'category' : 'categories'}.` : ''}${settings.difficulty !== 'pro' ? ' Try a harder difficulty in Settings for a tougher test.' : ''}</p></div>`;
     };
     // one player's card: score, key stats and strokes gained (hot seat: a tab per player)
     const card = (pl, t) => {
