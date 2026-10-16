@@ -185,5 +185,13 @@
 <div id="loading" class="hidden"><div class="spinner"></div><div id="loadingText"></div></div>
 
 <script type="module" src="src/main.js"></script>
+<script>
+// a dropped connection or a hiccup on the host can fail one module and leave "Loading…" up for ever:
+// say so and offer a reload instead
+document.querySelector('script[type="module"]').addEventListener('error', function () {
+  var b = document.getElementById('boot');
+  if (b) b.innerHTML = '<div class="logo">PURE <span>STRIKE</span> GOLF</div><div class="muted">Couldn’t load the game. Check your connection.</div><button class="btn primary" onclick="location.reload()">Try again</button>';
+});
+</script>
 </body>
 </html>
