@@ -64,6 +64,7 @@ export class Tutorial {
   constructor(game, ui) {
     this.g = game; this.ui = ui;
     this.cur = null; this.seen = new Set();
+    this.suspended = false; this.stamp = 0;
     this.onKey = (e) => { if (e.key === 'Enter' && this.cur && this.g.state === 'address') { e.preventDefault(); this.advance(); } };
   }
   get active() { return this.g.tutorial === this; }
@@ -100,15 +101,38 @@ export class Tutorial {
     const g = this.g;
     if (this.cur) {
       if (this.cur.done && this.cur.done(g)) { this.advance(); return; }
+      // a pause menu or dialog is up: tuck the tip away rather than stack it on top
+      if (this.blocked(this.cur)) { this.suspend(true); return; }
+      this.suspend(false);
       this.place();
       return;
     }
     for (const s of STEPS) {
       if (this.seen.has(s.id) || (s.skip && s.skip(g)) || !s.when(g)) continue;
+      if (this.blocked(s)) break;
       this.show(s);
       break;
     }
   }
+
+  // a dialog that is not the step's own anchor (the relief card is its own lesson)
+  blocked(step) {
+    const ui = this.ui;
+    if (ui.paused) return true;
+    if (!ui.modalOpen()) return false;
+    const a = step.anchor ? $(step.anchor) : null;
+    return !(a && a.classList.contains('modal') && !a.classList.contains('hidden'));
+  }
+  suspend(on) {
+    if (on === !!this.suspended || !this.el) return;
+    this.suspended = on;
+    this.el.classList.toggle('hidden', on);
+    this.focus(on ? null : this.cur?.anchor);
+    this.stamp = performance.now();
+  }
+  // true for a moment after a tip appears, changes or disappears, so a second click aimed at
+  // "Next" cannot fall through to the 3D view and start the swing
+  settling() { return performance.now() - this.stamp < 350; }
 
   advance() {
     const s = this.cur;
@@ -139,11 +163,15 @@ export class Tutorial {
     this.el.querySelector('.cm-skip').classList.toggle('hidden', !!step.finish);
     this.el.querySelector('.cm-next').textContent = step.finish ? 'Finish' : step.done ? 'Got it' : 'Next';
     this.el.classList.remove('hidden');
+    this.suspended = false;
+    this.stamp = performance.now();
     this.focus(step.anchor);
     this.place();
   }
   hide() {
     this.cur = null;
+    this.suspended = false;
+    this.stamp = performance.now();
     this.focus(null);
     this.el?.classList.add('hidden');
   }

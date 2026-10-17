@@ -139,6 +139,7 @@ export class Input {
   primary(x, y, e) {
     const g = this.g;
     if (g.ui.paused || g.ui.modalOpen()) return;
+    if (g.tutorial?.settling()) return;
     if (g.state === 'flyover') { g.endFlyover(); return; }
     if (g.state === 'result') { g.continueAfterResult(); return; }
     if (g.state === 'replay') { g.endReplay(); return; }
