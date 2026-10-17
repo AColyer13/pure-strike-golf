@@ -310,3 +310,17 @@ test('only multi-hole rounds are saved, and a bad save is ignored', () => {
   assert.equal(restoreRound({ ...snap, i: 5 }), null, 'hole index out of range');
   assert.equal(restoreRound({ ...snap, players: [] }), null, 'player count changed');
 });
+
+test('the guided hole is flagged as a lesson and survives a save', () => {
+  const lesson = createRound({ courseId: 'augusta', holes: [11], mode: 'single', seed: 3, solo: true });
+  assert.equal(lesson.opts.solo, true);
+  assert.equal(createRound({ courseId: 'augusta', holes: [11], mode: 'single', seed: 3 }).opts.solo, false);
+});
+
+test('lesson skill levels map to real settings', async () => {
+  const { LEVELS } = await import('../src/tutorial.js');
+  assert.deepEqual(LEVELS.map((l) => l.id), ['new', 'casual', 'regular']);
+  assert.deepEqual(LEVELS[0].settings, { profile: 'mid', difficulty: 'beginner' });
+  assert.deepEqual(LEVELS[1].settings, { profile: 'mid', difficulty: 'standard' });
+  assert.equal(LEVELS[2].settings, null, 'regular players keep what they had');
+});

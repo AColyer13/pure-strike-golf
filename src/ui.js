@@ -60,6 +60,24 @@ export class UI {
     if (!$('academy').classList.contains('hidden')) return true;
     return MODALS.some((id) => !$(id).classList.contains('hidden'));
   }
+  // Esc: close the topmost open dialog (the confirm box handles its own Esc). True if one closed.
+  closeTopModal() {
+    const open = (id) => !$(id).classList.contains('hidden');
+    if (open('academy')) { this.academy.close(); return true; }
+    if (open('editor')) { this.editor.close(); return true; }
+    if (open('settings')) { this.showSettings(false); return true; }
+    if (open('help')) { this.showHelp(false); return true; }
+    if (open('stats')) { this.showStats(false); return true; }
+    return false;
+  }
+  // settings / how-to-play opened from the pause menu hand back to it when closed, so the game
+  // stays paused underneath and Esc never leaves two overlays stacked
+  returnToPause() {
+    if (!this.fromPause) return;
+    this.fromPause = false;
+    this.paused = false;
+    this.togglePause();
+  }
   // what to call a control in a prompt: the on-screen button on touch, the bound key otherwise
   key(action) {
     if (this.touch && TOUCH_LABELS[action]) return TOUCH_LABELS[action];
@@ -125,7 +143,7 @@ export class UI {
       const where = snap.done ? `All ${r.holes.length} holes played – see the summary` : `Hole ${r.holes[r.i] + 1}${thru ? ` · ${toParStr(toPar)} thru ${thru}` : ''}`;
       rc.innerHTML = `<div class="lbl">Resume round</div>
         <div><b>${r.course.name}</b> · ${MODES[r.mode]?.name || ''}${r.players.length > 1 ? ` · ${r.players.length} players` : ''}</div>
-        <div class="muted small">${where}</div>`;
+        <div class="muted small">${where}</div><span class="rc-go" aria-hidden="true">Resume ▸</span>`;
       rc.setAttribute('aria-label', `Resume round: ${r.course.name}. ${where}`);
       rc.onclick = () => this.resume(snap);
     }
@@ -590,7 +608,7 @@ export class UI {
     s.innerHTML = `<div class="sc-head"><div><h2>${course.name}</h2><div class="muted">${course.location}</div></div>${totals}</div>
       ${half(0)}${half(9)}
       ${multi ? '' : `<div class="sc-stats">
-        <div><span>Fairways</span><b>${t.fir}/${t.firN}</b></div><div><span>Greens in reg.</span><b>${t.gir}/${n}</b></div>
+        <div><span>Fairways</span><b>${t.firN ? `${t.fir}/${t.firN}` : '–'}</b></div><div><span>Greens in reg.</span><b>${t.gir}/${n}</b></div>
         <div><span>Putts</span><b>${t.putts}</b></div><div><span>Penalties</span><b>${t.penalties}</b></div>
         <div><span>SG total</span><b class="${t.sgTotal >= 0 ? 'good' : 'bad'}">${n ? sgn(t.sgTotal) : '–'}</b></div>
       </div>`}
@@ -643,7 +661,7 @@ export class UI {
       ${best ? `<div class="muted">Previous best: ${toParStr(best.toPar)} (${best.date})</div>` : ''}
       ${hcp != null ? `<div class="muted">Handicap index estimate: <b>${hcp.toFixed(1)}</b></div>` : ''}
       <div class="sum-grid">
-        <div><span>Fairways hit</span><b>${t.fir}/${t.firN}</b></div>
+        <div><span>Fairways hit</span><b>${t.firN ? `${t.fir}/${t.firN}` : '–'}</b></div>
         <div><span>Greens in regulation</span><b>${t.gir}/${n}</b></div>
         <div><span>Putts</span><b>${t.putts}</b></div>
         <div><span>Penalty strokes</span><b>${t.penalties}</b></div>
@@ -657,13 +675,16 @@ export class UI {
       ${sgTip(t)}`;
     };
     const tabs = multi ? `<div class="segs sum-tabs">${round.players.map((pl, i) => `<button class="seg${i === 0 ? ' on' : ''}" data-p="${i}">${esc(pl.name)}</button>`).join('')}</div>` : '';
+    const lesson = !!round.opts?.solo;
     const info = [course.name, round.holes.length === 1 ? null : MODES[round.mode]?.name, PROFILES[settings.profile]?.name || settings.profile, DIFFICULTY[settings.difficulty]?.name].filter(Boolean).join(' · ');
     s.innerHTML = `<h1>${round.daily ? 'Daily challenge complete' : round.holes.length === 1 ? 'Hole complete' : 'Round complete'}</h1>
       <div class="muted">${info}</div>
       ${board}
       ${tabs}
       <div id="sumCard">${card(round.players[0], t)}</div>
-      <div class="row wrap sum-actions"><button class="btn primary" id="sumAgain">Play again</button><button class="btn" id="sumShare">Copy challenge link</button><button class="btn" id="sumMenu">Main menu</button></div>`;
+      ${lesson
+        ? '<div class="row wrap sum-actions"><button class="btn primary" id="sumFront">Play the front 9</button><button class="btn" id="sumAgain">Replay this hole</button><button class="btn" id="sumMenu">Main menu</button></div>'
+        : '<div class="row wrap sum-actions"><button class="btn primary" id="sumAgain">Play again</button><button class="btn" id="sumShare">Copy challenge link</button><button class="btn" id="sumMenu">Main menu</button></div>'}`;
     for (const b of s.querySelectorAll('.sum-tabs button')) {
       b.onclick = () => {
         const pl = round.players[+b.dataset.p];
@@ -700,6 +721,9 @@ export class UI {
     const players = round.players.length > 1 ? round.players.map((p) => p.name) : null;
     $('sumAgain').onclick = () => { s.classList.add('hidden'); this.game.startRound({ courseId: course.id, holes: round.holes, mode: round.mode, players, seed: course.generated ? round.seed : undefined }); };
     $('sumMenu').onclick = () => { s.classList.add('hidden'); this.game.quitToMenu(); };
+    // after the guided hole the obvious next step is a real round on the same course
+    if ($('sumFront')) $('sumFront').onclick = () => { s.classList.add('hidden'); this.game.startRound({ courseId: course.id, holes: [...Array(9).keys()], mode: 'front' }); };
+    if (!$('sumShare')) return;
     $('sumShare').onclick = async () => {
       const url = location.origin + location.pathname + challengeHash(round);
       try {
@@ -735,8 +759,8 @@ export class UI {
       <button class="btn danger" id="pQuit">Main menu</button>`;
     $('pResume').onclick = () => this.togglePause();
     $('pCard').onclick = () => { this.togglePause(); this.scorecard(this.game.course, this.game.round, true, () => {}, 'Close'); };
-    $('pSettings').onclick = () => { this.togglePause(); this.showSettings(true); };
-    $('pHelp').onclick = () => { this.togglePause(); this.showHelp(true); };
+    $('pSettings').onclick = () => { this.fromPause = true; p.classList.add('hidden'); this.showSettings(true); };
+    $('pHelp').onclick = () => { this.fromPause = true; p.classList.add('hidden'); this.showHelp(true); };
     $('pQuit').onclick = () => {
       this.togglePause();
       const g = this.game, r = g.round;
@@ -768,7 +792,7 @@ export class UI {
   showSettings(on) {
     const box = $('settings');
     box.classList.toggle('hidden', !on);
-    if (!on) { this.game.input.capture = null; return; }
+    if (!on) { this.game.input.capture = null; this.returnToPause(); return; }
     const g = this.game, s = g.settings;
     const chk = (id, label, val, desc) => `<label class="set"><span>${label}${desc ? `<small>${desc}</small>` : ''}</span><input type="checkbox" id="${id}" ${val ? 'checked' : ''}></label>`;
     const binds = g.input.bindings;
@@ -807,7 +831,8 @@ export class UI {
     $('sScale').oninput = (e) => { s.uiScale = +e.target.value; g.saveSettings(); };
     if ($('sKeysReset')) $('sKeysReset').onclick = () => { s.keys = {}; save(); this.showSettings(true); };
     $('sClose').onclick = () => this.showSettings(false);
-    $('sEditor').onclick = () => { this.showSettings(false); this.editor.open(); };
+    // the editor is its own screen: leave the pause state behind rather than hand back to it
+    $('sEditor').onclick = () => { if (this.fromPause) { this.fromPause = false; this.togglePause(); } this.showSettings(false); this.editor.open(); };
     for (const b of box.querySelectorAll('.remap [data-act]')) {
       b.onclick = () => {
         const a = b.dataset.act;
@@ -881,7 +906,7 @@ export class UI {
   showHelp(on) {
     const h = $('help');
     h.classList.toggle('hidden', !on);
-    if (!on) return;
+    if (!on) { this.returnToPause(); return; }
     const k = (a) => this.key(a);
     const touch = this.touch, tap = touch ? 'Tap' : 'Press';
     const setup = touch

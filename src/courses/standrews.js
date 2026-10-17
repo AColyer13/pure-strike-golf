@@ -21,9 +21,9 @@ export default {
     roughType: 'rough', roughWidth: 16, farType: 'deep', cutWidth: 1.6, greenCut: 4, bunker: 'pot',
     trees: { density: 0, types: [] }, gorse: 1.0, forest: 'none', dunes: true,
     palette: {
-      fairway: ['#8fb25a', '#84a651'], cut: '#7f9e4e', rough: '#a3a55c', second: '#a3a55c', deep: '#8c8a4a',
-      green: ['#79ad4e', '#72a449'], fringe: '#7fa650', bunker: '#e3d4a6', waste: '#e3d4a6', straw: '#8a5a2e',
-      tee: ['#88ab55', '#7d9f4e'], dirt: '#7a6a48', path: '#8f8a82', water: '#3b6e84',
+      fairway: ['#86b84f', '#7bac46'], cut: '#76a243', rough: '#a3a55c', second: '#a3a55c', deep: '#8c8a4a',
+      green: ['#69b53e', '#62ab38'], fringe: '#73ad46', bunker: '#e3d4a6', waste: '#e3d4a6', straw: '#8a5a2e',
+      tee: ['#7db04a', '#72a443'], dirt: '#7a6a48', path: '#8f8a82', water: '#3b6e84',
     },
     sand: '#e6d7aa',
   },

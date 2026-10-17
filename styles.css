@@ -84,12 +84,17 @@ h1.logo { margin: 0; line-height: 1.1; }
 .menu-play { display: grid; grid-template-columns: 1.3fr 1fr; gap: 10px; }
 .menu-play .btn { display: flex; flex-direction: column; align-items: flex-start; text-align: left; }
 .menu-play .btn small { font: 500 13px Barlow, sans-serif; opacity: .8; margin-top: 2px; }
+/* the second big button is a real call to action, not a ghost: solid so it reads over bright scenery */
+#btnPlay { background: linear-gradient(180deg, #2f6b46, #1f4d33); border-color: rgba(190, 240, 205, .65); }
+#btnPlay:hover { background: linear-gradient(180deg, #38794f, #265a3b); }
 .daily-card { text-align: left; font: 500 14px Barlow, sans-serif; color: var(--text); background: linear-gradient(90deg, rgba(95,212,255,.16), rgba(95,212,255,.04)); border: 1px solid rgba(95,212,255,.4); border-radius: var(--radius); padding: 10px 14px; cursor: pointer; display: flex; flex-direction: column; gap: 3px; }
 .daily-card:hover { background: linear-gradient(90deg, rgba(95,212,255,.26), rgba(95,212,255,.08)); }
 .daily-card .lbl { font: 700 11px Barlow, sans-serif; letter-spacing: .12em; text-transform: uppercase; color: var(--blue); }
 .resume-card { background: linear-gradient(90deg, rgba(79,208,122,.2), rgba(79,208,122,.05)); border-color: rgba(79,208,122,.5); }
 .resume-card:hover { background: linear-gradient(90deg, rgba(79,208,122,.3), rgba(79,208,122,.08)); }
 .resume-card .lbl { color: var(--green); }
+.resume-card { position: relative; padding-right: 110px; }
+.resume-card .rc-go { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font: 700 14px Barlow, sans-serif; color: #0d2415; background: var(--green); border-radius: 999px; padding: 6px 14px; }
 .challenge { background: rgba(244,211,31,.12); border: 1px solid rgba(244,211,31,.5); border-radius: var(--radius); padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
 .row { display: flex; gap: 8px; }
 .row.wrap { flex-wrap: wrap; margin-top: 14px; }
@@ -466,6 +471,11 @@ body:not(.hud-essential) .lie-line { display: none; }
 #coachMark .cm-btns { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 #coachMark .cm-skip { background: none; border: 0; color: #6a5a10; font: 600 13px Barlow, sans-serif; cursor: pointer; text-decoration: underline; padding: 4px 0; }
 #coachMark .cm-next { padding: 7px 18px; }
+#coachMark .cm-level { display: flex; flex-direction: column; gap: 6px; }
+#coachMark .cm-ask { font: 700 13px Barlow, sans-serif; color: #6a5a10; }
+#coachMark .cm-lv { display: flex; flex-direction: column; align-items: flex-start; text-align: left; color: #1d2a20; background: rgba(0,0,0,.06); border-color: rgba(0,0,0,.2); padding: 7px 12px; }
+#coachMark .cm-lv:hover { background: rgba(255, 226, 90, .6); }
+#coachMark .cm-lv small { font: 500 12px Barlow, sans-serif; opacity: .75; }
 #coachMark::before { content: ''; position: absolute; width: 14px; height: 14px; background: inherit; transform: rotate(45deg); box-shadow: -2px -2px 0 #ffe25a; }
 #coachMark[data-side="right"]::before { left: -8px; top: 22px; box-shadow: -2px 2px 0 #ffe25a; }
 #coachMark[data-side="left"]::before { right: -8px; top: 22px; box-shadow: 2px -2px 0 #ffe25a; }
@@ -512,6 +522,8 @@ body.reduced-motion *, body.reduced-motion *::before, body.reduced-motion *::aft
   /* the 3-D view can't show a far green at this width, so the map (zoomed on the green when the
      shot can reach it) stays up at address; not for putts, where the green fills the view anyway */
   body.hud-essential.in-round:not(.target-view) #hud[data-state="address"]:not([data-putt="1"]) #minimap { display: block; }
+  /* the lesson's tips sit in this column on a narrow phone: the map waits until the lesson ends */
+  body.hud-essential.in-round.coaching #hud #minimap { display: none; }
 }
 
 /* ---------- course editor ---------- */

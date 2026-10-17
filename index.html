@@ -22,7 +22,7 @@
 <canvas id="swingOverlay"></canvas>
 
 <div id="gfxLost" class="hidden" role="alert"><div class="boot-msg"><b>Graphics paused</b><p id="gfxLostMsg">The graphics card was reset. Restoring…</p><button class="btn primary hidden" id="gfxReload">Reload</button></div></div>
-<div id="boot"><div class="logo">PURE <span>STRIKE</span> GOLF</div><div class="muted">Loading…</div></div>
+<div id="boot"><div class="logo">PURE <span>STRIKE</span> GOLF</div><div class="muted">Loading…</div><noscript><p class="muted">Pure Strike Golf needs JavaScript and WebGL. Turn JavaScript on, or try a current Chrome, Safari, Edge or Firefox.</p></noscript></div>
 
 <!-- ============ main menu ============ -->
 <div id="menu" class="hidden">
@@ -99,9 +99,9 @@
     <button data-act="clubDown" aria-label="Shorter club">▼</button>
   </div>
   <div class="tc-right">
-    <button data-act="menu" aria-label="Menu">☰</button>
-    <button data-act="targetView" aria-label="Target view">👁</button>
-    <button data-act="skip" aria-label="Skip">⏭</button>
+    <button data-act="menu" aria-label="Menu">☰<small>menu</small></button>
+    <button data-act="targetView" aria-label="Target view">👁<small>view</small></button>
+    <button data-act="skip" aria-label="Skip">⏭<small>skip</small></button>
     <button data-act="shapeCycle" aria-label="Shot shape: draw, straight, fade">⤳<small>shape</small></button>
     <button data-act="trajCycle" aria-label="Ball flight: low, standard, high">⤒<small>flight</small></button>
     <button data-act="aimPin" aria-label="Aim at the pin">⚑<small>pin</small></button>

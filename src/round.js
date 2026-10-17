@@ -88,7 +88,7 @@ export function createRound(opts) {
   const balls = MODES[opts.mode]?.balls || 0;
   return {
     course, holes: opts.holes, i: 0, seed, mode: opts.mode, daily: opts.daily || null, setup, balls,
-    opts: { courseId: opts.courseId, holes: opts.holes, mode: opts.mode, seed, players: opts.players || null, daily: opts.daily || null },
+    opts: { courseId: opts.courseId, holes: opts.holes, mode: opts.mode, seed, players: opts.players || null, daily: opts.daily || null, solo: !!opts.solo },
     players: names.map((name) => ({ name, scores: [], stats: new RoundStats(), attempts: [] })),
     p: 0,
     get player() { return this.players[this.p]; },

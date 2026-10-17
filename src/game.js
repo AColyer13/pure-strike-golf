@@ -197,6 +197,8 @@ export class Game {
     this.audio.setVolume(this.settings.volume);
     this.round = snap ? restoreRound(snap) : createRound(opts);
     if (!this.round) { this.quitToMenu(); return; }
+    // what this round is played with, for its summary and history (the lesson swaps in beginner assists)
+    this.round.played = { profile: this.settings.profile, difficulty: this.settings.difficulty };
     const course = this.round.course;
     this.course = course;
     this.bag = buildBag(this.settings.profile);
@@ -956,11 +958,12 @@ export class Game {
     if (this.challenge) { this.ui.challengeSummary(this.course, r, (m) => this.fmtDist(m)); return; }
     const history = loadHistory();
     const prevBest = r.players.length === 1 && !this.course.generated ? bestFor(history, this.course.id, r.mode) : null;
+    const played = r.played ?? { profile: this.settings.profile, difficulty: this.settings.difficulty };
     for (const pl of r.players) {
       if (!pl.scores.length) continue;
       saveRound(roundEntry({
-        course: this.course, mode: r.mode, holes: pl.scores, totals: pl.stats.totals(), profile: this.settings.profile,
-        difficulty: this.settings.difficulty, player: r.players.length > 1 ? pl.name : null, seed: r.seed,
+        course: this.course, mode: r.mode, holes: pl.scores, totals: pl.stats.totals(), profile: played.profile,
+        difficulty: played.difficulty, player: r.players.length > 1 ? pl.name : null, seed: r.seed,
       }));
     }
     if (r.daily) {
@@ -971,7 +974,7 @@ export class Game {
         if (!old || t.strokes - t.par < old.toPar) localStorage.setItem(key, JSON.stringify({ toPar: t.strokes - t.par, strokes: t.strokes }));
       } catch (e) { /* ignore */ }
     }
-    this.ui.summary(this.course, r, r.players[0].stats.totals(), prevBest, this.settings);
+    this.ui.summary(this.course, r, r.players[0].stats.totals(), prevBest, { ...this.settings, ...played });
   }
 
   // the round so far, for "Resume round" on the menu (not the guided first hole)
@@ -1004,11 +1007,12 @@ export class Game {
   updateHUD(force) {
     if (!this.round || !this.hole || !this.club) return;
     const h = this.hole, r = this.round;
-    const toPar = r.scores.reduce((s, x) => s + x.strokes - x.par, 0);
     // After the ball stops the club, plays-like and putt-speed numbers describe the shot just played,
     // so the HUD shows only where the ball finished (and "Holed" once it drops) until the next address.
     const resting = this.state === 'result' || this.state === 'replay';
     const holed = resting && this.resultNext === 'holed';
+    // a hole counts toward the running score the moment it drops, not only once the scorecard is shown
+    const toPar = r.scores.reduce((s, x) => s + x.strokes - x.par, 0) + (holed && !this.challenge ? this.strokes - h.par : 0);
     const fromSim = resting && this.sim && (this.challenge || this.resultNext === 'water');
     const b = fromSim ? { p: this.sim.p, surface: this.lastInfo?.after || this.ball.surface } : this.ball;
     const d = holed ? 0 : distToPin(h, b);

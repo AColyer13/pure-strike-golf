@@ -60,7 +60,12 @@ export class Input {
   // actions – e.g. Space = swing and fast-forward – only triggers one).
   dispatch(a, repeat = false) {
     const g = this.g, st = g.state;
-    if (a === 'pause') { if (g.round && st !== 'menu' && st !== 'summary') g.ui.togglePause(); return true; }
+    if (a === 'pause') {
+      // Esc backs out of the topmost dialog first; only with none open does it pause
+      if (g.ui.closeTopModal()) return true;
+      if (g.round && st !== 'menu' && st !== 'summary') g.ui.togglePause();
+      return true;
+    }
     if (g.ui.paused || g.ui.modalOpen()) return false;
     if (a === 'mute') { g.toggleMute(); return true; }
     if (a === 'hudDetail') { if (g.round) g.toggleHudDetail(); return true; }

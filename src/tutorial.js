@@ -9,6 +9,13 @@ const $ = (id) => document.getElementById(id);
 const DONE_KEY = 'psg-tutorial-done';
 export const TUTORIAL_ROUND = { courseId: 'augusta', holes: [11], mode: 'single', seed: 27, solo: true };
 
+// asked once, on the lesson's last card: what the player's own rounds start with (null keeps their settings)
+export const LEVELS = [
+  { id: 'new', label: 'New to golf', hint: 'Gentle swing meter, wind helps', settings: { profile: 'mid', difficulty: 'beginner' } },
+  { id: 'casual', label: 'Play casually', hint: 'Typical club golfer', settings: { profile: 'mid', difficulty: 'standard' } },
+  { id: 'regular', label: 'I play regularly', hint: 'Keep scratch golfer, standard', settings: null },
+];
+
 export function tutorialDone() { try { return !!localStorage.getItem(DONE_KEY); } catch (e) { return true; } }
 export function markTutorialDone() { try { localStorage.setItem(DONE_KEY, '1'); } catch (e) { /* ignore */ } }
 // a player who has never finished a round and never seen the lesson
@@ -56,7 +63,7 @@ export const STEPS = [
   { id: 'again', when: (g) => g.state === 'address' && !g.club?.putter && g.strokes > 0, anchor: 'clubBox', title: 'Not on yet',
     text: () => 'Same routine: the caddie re-reads the distance and lie every shot. The lie percentage is how much distance the grass costs you.' },
   { id: 'holed', when: (g) => g.state === 'result' && g.resultNext === 'holed', anchor: 'shotPanel', title: 'Hole complete', finish: true,
-    text: () => 'That’s golf. Your coach explains every shot, the scorecard tracks Strokes Gained by category, and the Golf Academy in the menu explains the physics. You are ready for a full round.',
+    text: () => `That’s golf. Your coach explains every shot, the scorecard tracks Strokes Gained by category, and the Golf Academy in the menu explains the physics. ${tutorialDone() ? 'You are ready for a full round.' : 'Pick the closest match and your first round starts at the right difficulty (change it any time in Settings).'}`,
     done: (g) => g.state !== 'result' },
 ];
 
@@ -81,11 +88,13 @@ export class Tutorial {
     this.ui.start(TUTORIAL_ROUND);
   }
 
-  end() {
+  end(level = null) {
     if (!this.active) return;
     const g = this.g;
     g.tutorial = null;
-    Object.assign(g.settings, this.saved);
+    // finished the hole but left without answering (Space/Continue past the card): start gently
+    const lv = level ?? (this.seen.has('holed') && !tutorialDone() ? LEVELS[0] : null);
+    Object.assign(g.settings, this.saved, lv?.settings);
     this.saved = null;
     g.saveSettings();
     this.hide();
@@ -135,11 +144,11 @@ export class Tutorial {
   // "Next" cannot fall through to the 3D view and start the swing
   settling() { return performance.now() - this.stamp < 350; }
 
-  advance() {
+  advance(level = null) {
     const s = this.cur;
     if (!s) return;
     this.hide();
-    if (s.finish) this.end();
+    if (s.finish) this.end(level);
   }
 
   // ------------------------------------------------------------ rendering
@@ -148,9 +157,11 @@ export class Tutorial {
     const el = document.createElement('div');
     el.id = 'coachMark';
     el.className = 'hidden';
-    el.innerHTML = '<div class="cm-step">Guided first hole</div><h4></h4><p></p><div class="cm-btns"><button class="cm-skip" type="button">Skip the lesson</button><button class="btn primary cm-next" type="button">Next</button></div>';
+    el.innerHTML = '<div class="cm-step">Guided first hole</div><h4></h4><p></p><div class="cm-btns"><button class="cm-skip" type="button">Skip the lesson</button><button class="btn primary cm-next" type="button">Next</button></div>'
+      + `<div class="cm-level hidden"><div class="cm-ask">How much golf do you play?</div>${LEVELS.map((l) => `<button class="btn cm-lv" type="button" data-lv="${l.id}">${l.label}<small>${l.hint}</small></button>`).join('')}</div>`;
     el.querySelector('.cm-skip').onclick = () => this.end();
     el.querySelector('.cm-next').onclick = () => this.advance();
+    for (const b of el.querySelectorAll('.cm-lv')) b.onclick = () => this.advance(LEVELS.find((l) => l.id === b.dataset.lv));
     document.body.appendChild(el);
     this.el = el;
   }
@@ -161,7 +172,11 @@ export class Tutorial {
     const k = (a) => this.ui.key(a);
     this.el.querySelector('h4').textContent = step.title;
     this.el.querySelector('p').textContent = step.text(this.g, k, this.ui.touch);
+    // the first time through, the last card asks the player's level instead of offering a bare Finish
+    const asks = !!step.finish && !tutorialDone();
     this.el.querySelector('.cm-skip').classList.toggle('hidden', !!step.finish);
+    this.el.querySelector('.cm-btns').classList.toggle('hidden', asks);
+    this.el.querySelector('.cm-level').classList.toggle('hidden', !asks);
     this.el.querySelector('.cm-next').textContent = step.finish ? 'Finish' : step.done ? 'Got it' : 'Next';
     this.el.classList.remove('hidden');
     document.body.classList.add('coaching');
@@ -215,7 +230,11 @@ export class Tutorial {
       // keep clear of the swing meter (and the hint printed on it) unless the tip is about the meter
       const mt = this.cur.anchor !== 'meter' && this.g.state === 'address' ? $('meter').getBoundingClientRect() : null;
       const hitsMeter = (x, y) => mt && mt.height && x < mt.right && x + W > mt.left && y < mt.bottom && y + H > mt.top;
-      const fits = cands.find(([, x, y]) => x >= m && y >= m && x + W <= vw - m && y + H <= vh - m && !hitsMeter(x, y));
+      // ...and of the distance, wind and hole panels the player reads while the tip is up (unless the tip points at one)
+      const hud = ['distBox', 'windBox', 'holeCard'].map((id) => $(id)?.getBoundingClientRect())
+        .filter((b) => b && b.height && !(b.left < r.right && b.right > r.left && b.top < r.bottom && b.bottom > r.top));
+      const hitsHud = (x, y) => hud.some((b) => x < b.right && x + W > b.left && y < b.bottom && y + H > b.top);
+      const fits = cands.find(([, x, y]) => x >= m && y >= m && x + W <= vw - m && y + H <= vh - m && !hitsMeter(x, y) && !hitsHud(x, y));
       if (fits) [side, left, top] = fits;
       else { side = r.top > vh / 2 ? 'above' : 'below'; left = r.left; top = side === 'above' ? r.top - H - gap : r.bottom + gap; }
     } else { left = (vw - W) / 2; top = 14; }
