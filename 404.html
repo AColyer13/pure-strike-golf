@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#14281b">
+<title>Page not found · Pure Strike Golf</title>
+<style>
+  /* self-contained: a 404 can be served from any path, so no relative assets */
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; color: #eef6f0; background: radial-gradient(circle at 50% 35%, #1d4a2c 0%, #0c1a12 70%); font-family: Barlow, "Segoe UI", system-ui, sans-serif; }
+  main { max-width: 440px; }
+  .logo { font: 800 46px/1.1 "Barlow Condensed", "Arial Narrow", Impact, sans-serif; letter-spacing: .04em; text-shadow: 0 3px 18px rgba(0,0,0,.5); }
+  .logo span { color: #f4d31f; }
+  svg { width: 120px; height: 60px; margin: 18px 0 4px; }
+  h1 { margin: 6px 0; font-size: 24px; }
+  p { margin: 0 0 24px; color: #a9bfb1; line-height: 1.5; }
+  a { display: inline-block; min-height: 48px; padding: 13px 28px; border-radius: 12px; background: #f4d31f; color: #1b1b10; font-weight: 700; font-size: 18px; text-decoration: none; }
+  a:hover, a:focus-visible { background: #ffe25a; }
+</style>
+</head>
+<body>
+<main>
+  <div class="logo">PURE <span>STRIKE</span> GOLF</div>
+  <svg viewBox="0 0 120 60" role="img" aria-label="A ball that has missed the green"><path d="M0 52 Q60 44 120 52 V60 H0Z" fill="#2f8f4d"/><circle cx="60" cy="40" r="9" fill="#fff"/><path d="M56 37 q4 -3 8 0 M55 42 q5 3 10 0" stroke="#c9d3cc" stroke-width="1.4" fill="none"/></svg>
+  <h1>That shot went out of bounds</h1>
+  <p>There is no page at this address. The course is still open.</p>
+  <a id="back" href="/">Back to game</a>
+</main>
+<script>
+  // on GitHub project pages the game lives under /<repo>/, not at the site root
+  (function () {
+    var seg = location.pathname.split('/')[1];
+    if (/\.github\.io$/.test(location.hostname) && seg) document.getElementById('back').href = '/' + seg + '/';
+  })();
+</script>
+</body>
+</html>

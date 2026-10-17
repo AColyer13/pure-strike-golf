@@ -59,6 +59,21 @@ function getWaterNormal() {
   return waterNormal;
 }
 
+// Stakes are thin posts, but one a metre from the camera (the player dropped beside it after
+// relief) fills a fifth of the screen: fragments closer than `near` metres are dropped.
+function hideNearCamera(mat, near = 2.5) {
+  mat.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying float vNearDist;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\nvNearDist = length(mvPosition.xyz);');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vNearDist;')
+      .replace('void main() {', `void main() {
+  if (vNearDist < ${near.toFixed(1)}) discard;`);
+  };
+  return mat;
+}
+
 // Terrain material: painted map + world-space detail noise + rocky slopes,
 // plus two things that only make sense in the shader: a view-dependent sheen on
 // the mowing stripes (blades bent away from you are light, toward you dark, so
@@ -827,7 +842,7 @@ export class World {
     const keep = stakes.filter(([x, z]) => hole.inBounds(x, z) && hole.greenSdf(x, z) > 3 && hole.teeSdf(x, z) > 1 && hole.waterSdf(x, z).d > 0.3);
     if (!keep.length) return;
     const geo = new THREE.CylinderGeometry(0.025, 0.03, 0.9, 6).translate(0, 0.45, 0);
-    const mat = new THREE.MeshLambertMaterial({ color: '#d42a1f' });
+    const mat = hideNearCamera(new THREE.MeshLambertMaterial({ color: '#d42a1f' }));
     const inst = new THREE.InstancedMesh(geo, mat, keep.length);
     const m4 = new THREE.Matrix4();
     keep.forEach(([x, z], i) => { m4.makeTranslation(x, hole.height(x, z) - 0.05, z); inst.setMatrixAt(i, m4); });
@@ -847,7 +862,7 @@ export class World {
     const keep = pts.filter(([x, z]) => hole.waterSdf(x, z).d > 0.5 && hole.teeSdf(x, z) > 1 && hole.bunkerSdf(x, z).d > 0.3);
     if (!keep.length) return;
     const geo = new THREE.CylinderGeometry(0.03, 0.035, 1.0, 6).translate(0, 0.5, 0);
-    const mat = new THREE.MeshLambertMaterial({ color: '#f4f4f0' });
+    const mat = hideNearCamera(new THREE.MeshLambertMaterial({ color: '#f4f4f0' }));
     const inst = new THREE.InstancedMesh(geo, mat, keep.length);
     const m4 = new THREE.Matrix4();
     keep.forEach(([x, z], i) => { m4.makeTranslation(x, hole.height(x, z) - 0.05, z); inst.setMatrixAt(i, m4); });

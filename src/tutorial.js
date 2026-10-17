@@ -127,6 +127,7 @@ export class Tutorial {
     if (on === !!this.suspended || !this.el) return;
     this.suspended = on;
     this.el.classList.toggle('hidden', on);
+    document.body.classList.toggle('coaching', !on);
     this.focus(on ? null : this.cur?.anchor);
     this.stamp = performance.now();
   }
@@ -163,6 +164,7 @@ export class Tutorial {
     this.el.querySelector('.cm-skip').classList.toggle('hidden', !!step.finish);
     this.el.querySelector('.cm-next').textContent = step.finish ? 'Finish' : step.done ? 'Got it' : 'Next';
     this.el.classList.remove('hidden');
+    document.body.classList.add('coaching');
     this.suspended = false;
     this.stamp = performance.now();
     this.focus(step.anchor);
@@ -172,6 +174,7 @@ export class Tutorial {
     this.cur = null;
     this.suspended = false;
     this.stamp = performance.now();
+    document.body.classList.remove('coaching');
     this.focus(null);
     this.el?.classList.add('hidden');
   }
@@ -196,14 +199,23 @@ export class Tutorial {
     const W = el.offsetWidth, H = el.offsetHeight;
     const r = this.anchorRect();
     let left, top, side = 'none';
-    if (r) {
+    // portrait phone: the golfer fills the middle of the screen, so the tip sits just above the club box
+    const dock = this.ui.touch && vh > vw && this.g.state === 'address' ? $('clubBox').getBoundingClientRect() : null;
+    if (dock && dock.height) {
+      left = m;
+      top = dock.top - H - gap;
+      side = r && r.top >= dock.top ? 'above' : 'none';
+    } else if (r) {
       const cands = [
         ['right', r.right + gap, r.top],
         ['left', r.left - W - gap, r.top],
         ['below', r.left, r.bottom + gap],
         ['above', r.left, r.top - H - gap],
       ];
-      const fits = cands.find(([, x, y]) => x >= m && y >= m && x + W <= vw - m && y + H <= vh - m);
+      // keep clear of the swing meter (and the hint printed on it) unless the tip is about the meter
+      const mt = this.cur.anchor !== 'meter' && this.g.state === 'address' ? $('meter').getBoundingClientRect() : null;
+      const hitsMeter = (x, y) => mt && mt.height && x < mt.right && x + W > mt.left && y < mt.bottom && y + H > mt.top;
+      const fits = cands.find(([, x, y]) => x >= m && y >= m && x + W <= vw - m && y + H <= vh - m && !hitsMeter(x, y));
       if (fits) [side, left, top] = fits;
       else { side = r.top > vh / 2 ? 'above' : 'below'; left = r.left; top = side === 'above' ? r.top - H - gap : r.bottom + gap; }
     } else { left = (vw - W) / 2; top = 14; }

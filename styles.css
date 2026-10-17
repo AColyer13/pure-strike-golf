@@ -167,7 +167,7 @@ select { font: 500 13px Barlow, sans-serif; background: #173022; color: var(--te
 .toast.bad { border-color: var(--red); color: #ffd2cf; }
 .toast.out { opacity: 0; transform: translateY(-8px); }
 @keyframes tin { from { opacity: 0; transform: translateY(8px); } }
-.banner { position: fixed; top: 34%; left: 50%; transform: translate(-50%, -50%) scale(.7); font: 800 76px 'Barlow Condensed', sans-serif; letter-spacing: .03em; opacity: 0; pointer-events: none; z-index: 16; text-shadow: 0 4px 30px rgba(0,0,0,.6), 0 2px 0 rgba(0,0,0,.4); transition: opacity .3s, transform .45s cubic-bezier(.2, 1.6, .4, 1); white-space: nowrap; }
+.banner { position: fixed; top: 26%; left: 50%; transform: translate(-50%, -50%) scale(.7); font: 800 76px 'Barlow Condensed', sans-serif; letter-spacing: .03em; opacity: 0; pointer-events: none; z-index: 31; text-shadow: 0 4px 30px rgba(0,0,0,.6), 0 2px 0 rgba(0,0,0,.4); transition: opacity .3s, transform .45s cubic-bezier(.2, 1.6, .4, 1); white-space: nowrap; }
 .banner.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 .banner.great { color: #ff6b5e; }
 .banner.good { color: #fff; }
@@ -391,6 +391,11 @@ body.touch.in-round #lieBox { bottom: 246px; }
   body.touch.in-round #lieBox { bottom: 406px; }
   /* …and the caddie's note above the club box (and the lie box, when the full HUD shows it) */
   body.touch.in-round #caddie { bottom: 392px; }
+  /* the coach tip takes that slot while a lesson step is up */
+  body.touch.coaching #caddie { visibility: hidden; }
+  body.touch #coachMark { font-size: 13px; padding: 10px 12px 8px; }
+  body.touch #coachMark h4 { font-size: 18px; }
+  body.touch #coachMark p { margin-bottom: 8px; }
   body.touch.in-round:not(.hud-essential) #caddie { bottom: 502px; }
 }
 @media (orientation: landscape) {
@@ -398,13 +403,19 @@ body.touch.in-round #lieBox { bottom: 246px; }
   body.touch.in-round #shotPanel { right: 210px; width: min(400px, calc(100vw - 440px)); }
   body.touch.in-round #meter { width: min(620px, calc(100vw - 420px)); bottom: 24px; }
 }
+/* the caddie's note must not run down into the ball or under the button columns: three lines at most */
+body.touch.in-round #caddieText { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
 /* short landscape window (phone, or a small desktop window): the top-left stack would run into the club box, so the distance panel moves beside the hole card */
 @media (orientation: landscape) and (max-height: 500px) {
   body.in-round #holeCard { top: 8px; left: 8px; min-width: 0; max-width: 230px; gap: 8px; }
   body.in-round #holeCard .hc-info { min-width: 0; }
   body.in-round #holeCard :is(.hc-name, .hc-par) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   body.in-round #holeCard .hc-shot { white-space: nowrap; }
-  body.in-round #distBox { top: 8px; left: 246px; }
+  /* slim enough to stay clear of the golfer's head, which sits just below it */
+  body.in-round #distBox { top: 8px; left: 246px; min-width: 0; padding: 6px 10px; }
+  body.in-round #distBox .lbl { display: none; }
+  body.in-round #distBox .big { font-size: 26px; line-height: 1.05; }
+  body.in-round #distBox .sub { font-size: 11px; line-height: 1.25; }
   body.in-round #lieBox { display: none; }
   body.in-round #windBox { display: flex; top: 8px; right: 8px; }
   body.in-round #minimap { top: 8px; right: 150px; width: 72px; height: 120px; }
@@ -439,7 +450,7 @@ body.hud-essential.in-round:not(.target-view) #hud:not([data-state="flight"]) #m
 body.hud-essential.in-round:not(.target-view) #hud:not([data-state="flight"]) #caddie { right: 14px; }
 /* phone landscape: with the map hidden the caddie moves up under the wind dial */
 @media (orientation: landscape) and (max-height: 500px) {
-  body.hud-essential.in-round:not(.target-view) #hud:not([data-state="flight"]) #caddie { top: 78px; right: 8px; }
+  body.hud-essential.in-round:not(.target-view) #hud:not([data-state="flight"]) #caddie { top: 78px; right: 8px; max-width: min(330px, calc(100vw - 480px)); }
 }
 .lie-line { display: flex; gap: 6px; align-items: baseline; font-size: 12px; margin-top: 3px; padding-top: 4px; border-top: 1px solid var(--line); }
 .lie-line b { font: 700 15px 'Barlow Condensed', sans-serif; color: var(--text); }
@@ -521,3 +532,15 @@ body.reduced-motion *, body.reduced-motion *::before, body.reduced-motion *::aft
 .ed-right { max-width: 360px; display: flex; flex-direction: column; gap: 6px; align-items: center; }
 #edCanvas { border-radius: 8px; border: 1px solid var(--line); max-width: 100%; }
 @media (max-width: 760px) { .ed-body { grid-template-columns: 1fr; } }
+
+/* settings: phones have no keyboard column, and the course editor tucks away */
+body.touch .set-cols { grid-template-columns: 1fr; }
+.adv { margin-top: 12px; color: var(--muted); }
+.adv summary { cursor: pointer; font: 600 13px Barlow, sans-serif; padding: 6px 0; }
+.adv .btn { margin-top: 6px; }
+
+/* finger-sized menu tabs */
+@media (pointer: coarse) { .course-tab { min-height: 44px; } }
+body.touch .course-tab { min-height: 44px; }
+.tip details.why { margin-top: 4px; }
+.tip details.why summary { cursor: pointer; font: 600 12px Barlow, sans-serif; color: var(--blue); }

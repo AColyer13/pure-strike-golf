@@ -107,13 +107,15 @@ export class CameraDirector {
     // a portrait phone sees a narrow slice either side: stand further back, nearer the line,
     // and keep the ball above the middle (the meter, buttons and caddie fill the lower half)
     const wide = this.camera.aspect > 0 ? clamp((this.camera.aspect - 0.5) / 0.8, 0, 1) : 1;
-    let back = (putt ? clamp(1.5 + toCup * 0.9, 1.9, 3.3) : 3.9) * z * (1.15 - 0.15 * wide), up = (putt && toCup < 2.5 ? 0.9 : 1.35) * z + this.orbit.pitch * 4;
-    const side = (putt ? 0.55 : 0.3) * (0.5 + 0.5 * wide); // shift right of the line, away from the golfer
+    let back = (putt ? clamp(1.5 + toCup * 0.9, 1.9, 3.3) : 3.9) * z * (1.35 - 0.35 * wide), up = (putt && toCup < 2.5 ? 0.9 : 1.35) * z + this.orbit.pitch * 4;
+    // shift right of the line, away from the golfer; on a narrow screen full swings stand left of it
+    // instead so the golfer, who is left of the ball, is not cut off by the screen edge
+    const side = putt ? 0.55 * (0.5 + 0.5 * wide) : lerp(-0.5, 0.3, wide);
     if (!putt) { const e = this.sightLift(f, back, up, side); up += e; back += e * 2.2; }
     const px = b.p[0] - f.x * back - f.z * side, pz = b.p[2] - f.z * back + f.x * side;
     const py = Math.max(h.height(px, pz) + 0.6, b.p[1] + up);
     // tilt the view so the ball sits below the screen centre (above the swing meter)
-    const dep = Math.atan2(py - b.p[1], back) - lerp(-8, 11.5, wide) * DEG;
+    const dep = Math.atan2(py - b.p[1], back) - lerp(-15.5, 11.5, wide) * DEG;
     const lx = px + f.x * 20 * Math.cos(dep), lz = pz + f.z * 20 * Math.cos(dep);
     const ly = py - 20 * Math.sin(dep);
     return { pos: new THREE.Vector3(px, py, pz), look: new THREE.Vector3(lx, ly, lz) };

@@ -126,6 +126,7 @@ export class UI {
       rc.innerHTML = `<div class="lbl">Resume round</div>
         <div><b>${r.course.name}</b> · ${MODES[r.mode]?.name || ''}${r.players.length > 1 ? ` · ${r.players.length} players` : ''}</div>
         <div class="muted small">${where}</div>`;
+      rc.setAttribute('aria-label', `Resume round: ${r.course.name}. ${where}`);
       rc.onclick = () => this.resume(snap);
     }
 
@@ -305,6 +306,7 @@ export class UI {
     $('hcShot').textContent = (d.player ? `${d.player} · ` : '') + d.shot;
     $('hcScore').textContent = d.challenge ? '' : toParStr(d.toPar);
     $('hcScore').className = 'hc-score ' + (d.toPar < 0 ? 'under' : d.toPar > 0 ? 'over' : '');
+    $('distBox').querySelector('.lbl').textContent = d.mode === 'drive' ? 'To fairway end' : 'To pin';
     $('dPin').textContent = d.dist;
     if (d.state !== 'address') this.tipNow = '';
     if (d.plays) this.firstTip('plays', '“Plays like” is the distance adjusted for wind and elevation. Pick a club for that number, not the yardage.');
@@ -510,7 +512,7 @@ export class UI {
     }
     const sgHtml = sg ? `<div class="sg ${sg.sg >= 0 ? 'pos' : 'neg'}"><span>Strokes gained</span><b>${sgn(sg.sg)}</b><em>${{ OTT: 'Off the tee', APP: 'Approach', ARG: 'Around the green', PUTT: 'Putting' }[sg.cat]}</em><small>Tour avg from there: ${sg.eb.toFixed(2)} → ${sg.ea.toFixed(2)}</small></div>` : '';
     const exHtml = extra ? `<div class="sp-extra ${extra.isBest ? 'best' : ''}"><span>${extra.title}</span><b>${extra.label}</b><small>Best so far: ${extra.best}</small></div>` : '';
-    const tipsHtml = tips.map((t) => `<div class="tip"><b>${t.title}</b><p>${t.text}</p></div>`).join('');
+    const tipsHtml = tips.map((t) => `<div class="tip"><b>${t.title}</b><p>${t.text}</p>${t.why ? `<details class="why"><summary>Why?</summary><p>${t.why}</p></details>` : ''}</div>`).join('');
     p.innerHTML = `
       <div class="sp-head">${info.putt ? 'Putt' : 'Launch monitor'}</div>
       ${exHtml}
@@ -521,6 +523,7 @@ export class UI {
       <div class="sp-cont">${this.touch ? 'Tap anywhere to continue' : `${this.key('swing')} / click to continue`}${canReplay ? ` · <b>${this.touch ? '👁' : this.key('replay')}</b> replay` : ''}</div>`;
     p.classList.remove('hidden', 'open');
     p.onclick = () => this.game.continueAfterResult();
+    for (const d of p.querySelectorAll('details.why')) d.onclick = (e) => e.stopPropagation(); // opening it must not skip the panel
     const more = p.querySelector('.sp-more');
     more.onclick = (e) => { e.stopPropagation(); const open = p.classList.toggle('open'); more.textContent = open ? 'Less' : 'Details'; };
   }
@@ -654,8 +657,8 @@ export class UI {
       ${sgTip(t)}`;
     };
     const tabs = multi ? `<div class="segs sum-tabs">${round.players.map((pl, i) => `<button class="seg${i === 0 ? ' on' : ''}" data-p="${i}">${esc(pl.name)}</button>`).join('')}</div>` : '';
-    const info = [course.name, MODES[round.mode]?.name, PROFILES[settings.profile]?.name || settings.profile, DIFFICULTY[settings.difficulty]?.name].filter(Boolean).join(' · ');
-    s.innerHTML = `<h1>${round.daily ? 'Daily challenge complete' : 'Round complete'}</h1>
+    const info = [course.name, round.holes.length === 1 ? null : MODES[round.mode]?.name, PROFILES[settings.profile]?.name || settings.profile, DIFFICULTY[settings.difficulty]?.name].filter(Boolean).join(' · ');
+    s.innerHTML = `<h1>${round.daily ? 'Daily challenge complete' : round.holes.length === 1 ? 'Hole complete' : 'Round complete'}</h1>
       <div class="muted">${info}</div>
       ${board}
       ${tabs}
@@ -729,7 +732,7 @@ export class UI {
       <button class="btn" id="pCard">Scorecard</button>
       <button class="btn" id="pSettings">Settings & controls</button>
       <button class="btn" id="pHelp">How to play</button>
-      <button class="btn danger" id="pQuit">Quit to menu</button>`;
+      <button class="btn danger" id="pQuit">Main menu</button>`;
     $('pResume').onclick = () => this.togglePause();
     $('pCard').onclick = () => { this.togglePause(); this.scorecard(this.game.course, this.game.round, true, () => {}, 'Close'); };
     $('pSettings').onclick = () => { this.togglePause(); this.showSettings(true); };
@@ -739,7 +742,7 @@ export class UI {
       const g = this.game, r = g.round;
       // multi-hole rounds are saved as they go, so leaving costs nothing; a single hole or the lesson is lost
       if (r && resumable(r.opts) && !g.tutorial) { g.quitToMenu(); return; }
-      this.confirm({ title: 'Quit this hole?', text: g.tutorial ? 'You can restart the guided hole from the menu.' : 'Single holes are not saved, so your progress on this hole will be lost.', ok: 'Quit to menu', cancel: 'Keep playing', danger: true },
+      this.confirm({ title: 'Quit this hole?', text: g.tutorial ? 'You can restart the guided hole from the menu.' : 'Single holes are not saved, so your progress on this hole will be lost.', ok: 'Leave hole', cancel: 'Keep playing', danger: true },
         () => g.quitToMenu(), () => this.togglePause());
     };
   }
@@ -783,13 +786,14 @@ export class UI {
       ${chk('sReduce', 'Reduced motion', s.reducedMotion, 'No flyovers, slow-motion or camera punches.')}
       ${chk('sCap', 'Sound captions', s.captions, 'On-screen text for crowd, cup and splash sounds.')}
       <label class="set"><span>Interface size</span><input type="range" id="sScale" min="0.8" max="1.5" step="0.05" value="${s.uiScale}"></label>
-      </div><div>
+      </div>${this.touch ? '' : `<div>
       <h3>Keyboard</h3>
       <div class="remap">${Object.keys(DEFAULT_KEYS).map((a) => `<div class="remap-row"><span>${ACTION_LABELS[a]}</span><button class="seg" data-act="${a}">${binds[a].map(keyName).join(' / ')}</button></div>`).join('')}</div>
       <button class="btn small-btn" id="sKeysReset">Reset keys</button>
       <p class="muted small">Gamepad: A swing · B skip · X fade · Y view/replay · LB/RB club · D-pad aim &amp; flight · right stick: pull back then push up for a tempo swing.</p>
-      </div></div>
-      <div class="row wrap"><button class="btn primary" id="sClose">Done</button><button class="btn" id="sEditor" title="Build your own hole from a JSON course file">Course editor (advanced)</button></div>`;
+      </div>`}</div>
+      <div class="row wrap"><button class="btn primary" id="sClose">Done</button></div>
+      <details class="adv"><summary>Advanced</summary><button class="btn" id="sEditor" title="Build your own hole from a JSON course file">Course editor</button></details>`;
     const save = () => { g.saveSettings(); this.helpBar(); if (g.state === 'address') g.enterAddress(); };
     $('sVol').oninput = (e) => { s.volume = +e.target.value; g.audio.setVolume(s.volume); g.saveSettings(); };
     $('sTracer').onchange = (e) => { s.tracer = e.target.checked; save(); };
@@ -801,7 +805,7 @@ export class UI {
     $('sReduce').onchange = (e) => { s.reducedMotion = e.target.checked; save(); };
     $('sCap').onchange = (e) => { s.captions = e.target.checked; save(); };
     $('sScale').oninput = (e) => { s.uiScale = +e.target.value; g.saveSettings(); };
-    $('sKeysReset').onclick = () => { s.keys = {}; save(); this.showSettings(true); };
+    if ($('sKeysReset')) $('sKeysReset').onclick = () => { s.keys = {}; save(); this.showSettings(true); };
     $('sClose').onclick = () => this.showSettings(false);
     $('sEditor').onclick = () => { this.showSettings(false); this.editor.open(); };
     for (const b of box.querySelectorAll('.remap [data-act]')) {
@@ -853,7 +857,7 @@ export class UI {
       ${mine.length ? `
       <div class="sum-grid">
         <div><span>Handicap index (est.)</span><b>${hcp != null ? hcp.toFixed(1) : '—'}</b></div>
-        <div><span>Rounds played</span><b>${mine.length}</b></div>
+        <div><span>Rounds played</span><b>${mine.filter((r) => r.holes > 1).length}</b></div>
         <div><span>Holes played</span><b>${mine.reduce((s, r) => s + r.holes, 0)}</b></div>
         <div><span>SG / 18${trend.length ? ` (last ${trend.length})` : ''}</span><b class="${avg('total') >= 0 ? 'good' : 'bad'}">${trend.length ? sgn(avg('total'), 1) : '—'}</b></div>
       </div>
