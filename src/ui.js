@@ -51,6 +51,51 @@ export class UI {
     if (!MODES[this.sel.mode] || this.sel.mode === 'daily') this.sel.mode = '18';
     this.toasts = $('toasts');
     $('minimap').addEventListener('pointerdown', (e) => this.minimapClick(e));
+    this.initDialogs();
+  }
+
+  // Every dialog is announced and focus-managed in one place: when it opens it gets a dialog role and a name,
+  // takes focus, and the page behind it goes inert (so Tab and screen readers stay inside); when it closes,
+  // focus goes back to what opened it. Dialogs stack, so the newest one is the one that stays live.
+  initDialogs() {
+    const NAMES = { pause: 'Paused', scorecard: 'Scorecard', summary: 'Round summary', relief: 'Penalty relief', academy: 'Practice academy', confirmBox: 'Confirm' };
+    const dialogs = [...MODALS, 'scorecard', 'academy'].map($);
+    const stack = [];
+    const apply = () => {
+      const top = stack.length ? stack[stack.length - 1].el : null;
+      for (const c of document.body.children) {
+        if (c.tagName === 'SCRIPT' || c.id === 'coachMark' || c.id === 'toasts') continue;
+        c.inert = !!top && c !== top && !c.contains(top);
+      }
+      for (const d of dialogs) if (d !== top && stack.some((e) => e.el === d)) d.inert = true;
+      if (top) top.inert = false;
+    };
+    const sync = (el) => {
+      const open = !el.classList.contains('hidden');
+      const at = stack.findIndex((e) => e.el === el);
+      if (open && at < 0) {
+        const from = document.activeElement;
+        el.setAttribute('role', el.id === 'confirmBox' ? 'alertdialog' : 'dialog');
+        el.setAttribute('aria-modal', 'true');
+        const h = el.querySelector('h1, h2, h3');
+        if (h) { h.id = h.id || el.id + 'Title'; el.setAttribute('aria-labelledby', h.id); el.removeAttribute('aria-label'); }
+        else el.setAttribute('aria-label', NAMES[el.id] || 'Dialog');
+        el.tabIndex = -1;
+        stack.push({ el, from });
+        apply();
+        el.focus({ preventScroll: true });
+      } else if (!open && at >= 0) {
+        const [{ from }] = stack.splice(at, 1);
+        el.inert = false;
+        apply();
+        const top = stack.length ? stack[stack.length - 1].el : null;
+        const back = from && document.contains(from) && !from.closest('[inert], .hidden') ? from : null;
+        if (back) back.focus({ preventScroll: true });
+        else if (top) top.focus({ preventScroll: true });
+      }
+    };
+    const mo = new MutationObserver((list) => { for (const m of list) sync(m.target); });
+    for (const d of dialogs) { if (d) mo.observe(d, { attributes: true, attributeFilter: ['class'] }); }
   }
   attach(game, academy, editor, tutorial) { this.game = game; this.academy = academy; this.editor = editor; this.tutorial = tutorial; }
 
@@ -326,7 +371,7 @@ export class UI {
     $('hcShot').textContent = (d.player ? `${d.player} · ` : '') + d.shot;
     $('hcScore').textContent = d.challenge ? '' : toParStr(d.toPar);
     $('hcScore').className = 'hc-score ' + (d.toPar < 0 ? 'under' : d.toPar > 0 ? 'over' : '');
-    $('distBox').querySelector('.lbl').textContent = d.mode === 'drive' ? 'To fairway end' : 'To pin';
+    $('distBox').querySelector('.lbl').textContent = d.mode === 'drive' ? 'Fairway ahead' : 'To pin';
     $('dPin').textContent = d.dist;
     if (d.state !== 'address') this.tipNow = '';
     if (d.plays) this.firstTip('plays', '“Plays like” is the distance adjusted for wind and elevation. Pick a club for that number, not the yardage.');
@@ -512,23 +557,23 @@ export class UI {
     if (info.putt) {
       rows.push(['Putt length', `${info.startFt.toFixed(0)} ft`]);
       rows.push(['Result', info.holed ? '<b class="good">Holed</b>' : `${Math.abs(info.shortFt).toFixed(1)} ft ${info.shortFt > 0 ? 'short' : 'past'}${Math.abs(info.lateralFt) >= 0.4 ? ` · ${Math.abs(info.lateralFt).toFixed(1)} ft ${info.lateralFt > 0 ? 'right' : 'left'}` : ''}`]);
-      rows.push(['Start speed', `${(ld.speed * 2.237).toFixed(1)} mph`]);
-      rows.push(['Face at impact', `${Math.abs(ld.face).toFixed(1)}° ${ld.face > 0.05 ? 'open' : ld.face < -0.05 ? 'closed' : 'square'}`]);
+      rows.push(['Start speed', `${(ld.speed * 2.237).toFixed(1)} mph`, 1]);
+      rows.push(['Face at impact', `${Math.abs(ld.face).toFixed(1)}° ${ld.face > 0.05 ? 'open' : ld.face < -0.05 ? 'closed' : 'square'}`, 1]);
     } else {
       const u = this.game.settings.units;
       const d = (yd) => (u === 'm' ? `${(yd * YD).toFixed(0)} m` : `${yd.toFixed(0)} yds`);
-      rows.push(['Club', info.club.name]);
-      rows.push(['Club speed', `${ld.clubMph.toFixed(1)} mph`]);
-      rows.push(['Ball speed', `${ld.ballMph.toFixed(1)} mph`]);
-      rows.push(['Smash factor', ld.smash.toFixed(2)]);
-      rows.push(['Launch', `${ld.launch.toFixed(1)}° · ${Math.abs(ld.hLaunch).toFixed(1)}° ${ld.hLaunch >= 0 ? 'R' : 'L'}`]);
-      rows.push(['Spin', `${Math.round(ld.spinRpm).toLocaleString()} rpm · axis ${ld.axisTilt.toFixed(1)}°`]);
-      rows.push(['Face / Path', `${sgn(ld.face, 1)}° / ${sgn(ld.path, 1)}°`]);
       rows.push(['Carry', d(info.carryYd)]);
       rows.push(['Total', d(info.totalYd)]);
       rows.push(['Offline', `${d(Math.abs(info.offlineYd))} ${info.offlineYd >= 0 ? 'R' : 'L'}`]);
-      rows.push(['Apex', u === 'm' ? `${Math.max(0, info.apexFt * 0.3048).toFixed(0)} m` : `${Math.max(0, info.apexFt).toFixed(0)} ft`]);
-      if (info.descent != null) rows.push(['Land angle', `${info.descent.toFixed(0)}°`]);
+      rows.push(['Club', info.club.name, 1]);
+      rows.push(['Club speed', `${ld.clubMph.toFixed(1)} mph`, 1]);
+      rows.push(['Ball speed', `${ld.ballMph.toFixed(1)} mph`, 1]);
+      rows.push(['Smash factor', ld.smash.toFixed(2), 1, 'Ball speed divided by club speed: how cleanly the club hit the ball']);
+      rows.push(['Launch', `${ld.launch.toFixed(1)}° · ${Math.abs(ld.hLaunch).toFixed(1)}° ${ld.hLaunch >= 0 ? 'R' : 'L'}`, 1, 'Launch angle up, and the start direction left or right']);
+      rows.push(['Spin', `${Math.round(ld.spinRpm).toLocaleString()} rpm · axis ${ld.axisTilt.toFixed(1)}°`, 1, 'Backspin, and the tilt of the spin axis that curves the ball']);
+      rows.push(['Face / Path', `${sgn(ld.face, 1)}° / ${sgn(ld.path, 1)}°`, 1, 'Where the clubface pointed and where the club was travelling at impact']);
+      rows.push(['Apex', u === 'm' ? `${Math.max(0, info.apexFt * 0.3048).toFixed(0)} m` : `${Math.max(0, info.apexFt).toFixed(0)} ft`, 1]);
+      if (info.descent != null) rows.push(['Land angle', `${info.descent.toFixed(0)}°`, 1]);
     }
     const sgHtml = sg ? `<div class="sg ${sg.sg >= 0 ? 'pos' : 'neg'}"><span>Strokes gained</span><b>${sgn(sg.sg)}</b><em>${{ OTT: 'Off the tee', APP: 'Approach', ARG: 'Around the green', PUTT: 'Putting' }[sg.cat]}</em><small>Tour avg from there: ${sg.eb.toFixed(2)} → ${sg.ea.toFixed(2)}</small></div>` : '';
     const exHtml = extra ? `<div class="sp-extra ${extra.isBest ? 'best' : ''}"><span>${extra.title}</span><b>${extra.label}</b><small>Best so far: ${extra.best}</small></div>` : '';
@@ -536,7 +581,8 @@ export class UI {
     p.innerHTML = `
       <div class="sp-head">${info.putt ? 'Putt' : 'Launch monitor'}</div>
       ${exHtml}
-      <div class="sp-grid">${rows.map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('')}</div>
+      <div class="sp-grid">${rows.filter((r) => !r[2]).map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('')}</div>
+      <div class="sp-grid sp-adv">${rows.filter((r) => r[2]).map(([k, v, , tip]) => `<div${tip ? ` title="${tip}"` : ''}><span>${k}</span><b>${v}</b></div>`).join('')}</div>
       ${sgHtml}
       ${tipsHtml ? `<div class="sp-tips"><div class="sp-sub">Caddie</div>${tipsHtml}</div>` : ''}
       <div class="sp-btns"><button class="btn primary sp-go">Continue</button><button class="btn sp-more">Details</button></div>
@@ -595,7 +641,7 @@ export class UI {
         }).join('');
         return `<tr class="sc"><th>${multi ? esc(pl.name) : 'Score'}</th>${cells}<th>${any ? tot : ''}</th></tr>`;
       };
-      return `<table><tr class="num"><th>Hole</th>${nums.map((n) => `<td>${n}</td>`).join('')}<th>${holes.length < 9 ? 'Tot' : from ? 'In' : 'Out'}</th></tr>
+      return `<table class="${holes.length <= 3 ? 'few' : ''}"><tr class="num"><th>Hole</th>${nums.map((n) => `<td>${n}</td>`).join('')}<th>${holes.length < 9 ? 'Tot' : from ? 'In' : 'Out'}</th></tr>
         <tr class="yd"><th>${metric ? 'Metres' : 'Yards'}</th>${holes.map((h) => `<td>${yd(h.yds)}</td>`).join('')}<th>${yd(holes.reduce((a, h) => a + h.yds, 0))}</th></tr>
         <tr class="par"><th>Par</th>${holes.map((h) => `<td>${h.par}</td>`).join('')}<th>${holes.reduce((a, h) => a + h.par, 0)}</th></tr>
         ${players.map(scoreRow).join('')}</table>`;
@@ -712,6 +758,7 @@ export class UI {
     s.innerHTML = `<h1>${MODES[round.mode].name}</h1>
       <div class="muted">${course.name} · hole ${round.holes[0] + 1}</div>
       <div class="sc-board big">${rows.map(({ pl, best }, i) => `<div><span>${i === 0 && solo ? '🏆 ' : ''}${esc(pl.name || 'Best')}</span><b>${show(best)}</b></div>`).join('')}</div>
+      ${rows.every((r) => r.best == null) ? `<p class="muted">${ctp ? 'No ball finished on the course. Water and out of bounds score nothing: aim at the middle of the green and pick the club for the plays-like number.' : 'No drive finished in the fairway or first cut. Aim down the middle and keep the swing smooth: a drive that stays in play beats a longer one in the trees.'}</p>` : ''}
       ${round.players.map((pl) => `<div class="attempts"><span>${esc(pl.name || 'Your balls')}</span>${pl.attempts.map((v) => `<i class="${v == null ? 'miss' : ''}">${v == null ? '✕' : ctp ? `${v.toFixed(0)} ft` : fmt(v * YD)}</i>`).join('')}</div>`).join('')}
       <div class="row wrap sum-actions"><button class="btn primary" id="sumAgain">Play again</button><button class="btn" id="sumShare">Copy challenge link</button><button class="btn" id="sumMenu">Main menu</button></div>`;
     s.classList.remove('hidden');
@@ -819,8 +866,7 @@ export class UI {
       <button class="btn small-btn" id="sKeysReset">Reset keys</button>
       <p class="muted small">Gamepad: A swing · B skip · X fade · Y view/replay · LB/RB club · D-pad aim &amp; flight · right stick: pull back then push up for a tempo swing.</p>
       </div>`}</div>
-      <div class="row wrap"><button class="btn primary" id="sClose">Done</button></div>
-      <details class="adv"><summary>Advanced</summary><button class="btn" id="sEditor" title="Build your own hole from a JSON course file">Course editor</button></details>`;
+      <div class="set-foot"><button class="btn" id="sEditor" title="Build your own hole from a JSON course file">Course editor</button><button class="btn primary" id="sClose">Done</button></div>`;
     const save = () => { g.saveSettings(); this.helpBar(); if (g.state === 'address') g.enterAddress(); };
     $('sVol').oninput = (e) => { s.volume = +e.target.value; g.audio.setVolume(s.volume); g.saveSettings(); };
     $('sTracer').onchange = (e) => { s.tracer = e.target.checked; save(); };

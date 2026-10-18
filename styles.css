@@ -161,6 +161,8 @@ select { font: 500 13px Barlow, sans-serif; background: #173022; color: var(--te
 #lieBox[data-lie="deep"] .lie-range, #lieBox[data-lie="splash"] .lie-range { color: var(--red); }
 #minimap { right: 14px; top: 90px; width: 170px; height: 300px; padding: 0 !important; pointer-events: auto; cursor: crosshair; }
 #caddie { position: absolute; right: 200px; top: 92px; max-width: 330px; display: flex; gap: 8px; align-items: flex-start; background: rgba(255, 250, 230, .94); color: #1d2a20; border-radius: 12px; padding: 9px 12px; font-size: 13px; line-height: 1.35; box-shadow: 0 8px 24px rgba(0,0,0,.25); font-weight: 500; }
+/* the lesson card takes the caddie note's slot while a lesson step is up */
+body.coaching #caddie { visibility: hidden; }
 .caddie-ico { font-size: 18px; }
 #meter { position: absolute; left: 50%; bottom: 44px; transform: translateX(-50%); width: min(620px, 92vw); height: 70px; }
 #helpBar { position: fixed; bottom: 8px; left: 50%; transform: translateX(-50%); display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; font-size: 12px; color: rgba(255,255,255,.75); z-index: 10; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,.8); width: 96vw; }
@@ -208,13 +210,17 @@ select { font: 500 13px Barlow, sans-serif; background: #173022; color: var(--te
 .sp-cont { text-align: center; margin-top: 10px; font-size: 12px; color: var(--muted); }
 .sp-btns { display: flex; gap: 8px; margin-top: 12px; }
 .sp-btns .btn { flex: 1; }
-.sp-more { display: none; }
+.sp-more { display: block; }
+.sp-adv { display: none; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.08); }
+#shotPanel.open .sp-adv { display: grid; }
 /* a dialog is open: dim the scene and take the shot readout out from behind it */
 body:has(.modal:not(.hidden))::after { content: ''; position: fixed; inset: 0; z-index: 29; background: rgba(4, 10, 6, .5); pointer-events: none; }
 body:has(.modal:not(.hidden)) #shotPanel { visibility: hidden; }
 
 /* ---------- modals ---------- */
 .modal { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 30; background: rgba(12, 26, 18, .95); border: 1px solid var(--line); border-radius: 16px; padding: 20px 24px; width: min(760px, 94vw); max-height: 92vh; overflow-y: auto; box-shadow: 0 30px 80px rgba(0,0,0,.5); animation: tin .25s ease-out; }
+.modal:focus, #academy:focus { outline: none; }
+#settings .set-foot { position: sticky; bottom: 0; display: flex; gap: 10px; justify-content: flex-end; margin: 14px -24px -20px; padding: 12px 24px; background: rgba(12, 26, 18, .98); border-top: 1px solid var(--line); }
 #confirmBox { z-index: 31; width: min(420px, 94vw); }
 #confirmBox p { margin: 6px 0 16px; color: var(--muted); line-height: 1.4; }
 #confirmBox .row { display: flex; gap: 8px; }
@@ -239,6 +245,9 @@ body:has(.modal:not(.hidden)) #shotPanel { visibility: hidden; }
 #scorecard tr.yd td { color: var(--muted); font-size: 12px; }
 #scorecard tr.sc td { font: 700 17px 'Barlow Condensed', sans-serif; height: 34px; }
 #scorecard td span { display: inline-grid; place-items: center; min-width: 24px; height: 24px; }
+#scorecard table.few { width: auto; min-width: 280px; margin-left: auto; margin-right: auto; }
+#scorecard table.few td { min-width: 64px; }
+#scorecard table.few th { width: 76px; }
 td span.birdie { border: 2px solid #ff6b5e; border-radius: 50%; color: #ff8d83; }
 td span.eagle { border: 2px solid #ff6b5e; border-radius: 50%; box-shadow: 0 0 0 2px #0e1e15, 0 0 0 4px #ff6b5e; color: #ff8d83; }
 td span.bogey { border: 2px solid #8fc6ff; }
@@ -396,8 +405,6 @@ body.touch.in-round #lieBox { bottom: 246px; }
   body.touch.in-round #lieBox { bottom: 406px; }
   /* …and the caddie's note above the club box (and the lie box, when the full HUD shows it) */
   body.touch.in-round #caddie { bottom: 392px; }
-  /* the coach tip takes that slot while a lesson step is up */
-  body.touch.coaching #caddie { visibility: hidden; }
   body.touch #coachMark { font-size: 13px; padding: 10px 12px 8px; }
   body.touch #coachMark h4 { font-size: 18px; }
   body.touch #coachMark p { margin-bottom: 8px; }
@@ -515,8 +522,8 @@ body.reduced-motion *, body.reduced-motion *::before, body.reduced-motion *::aft
   #minimap { width: 90px; height: 150px; }
   #shotPanel { max-height: 60vh; overflow-y: auto; }
   /* phones: a short result with the numbers one tap away, so the ball and flag stay visible */
-  .sp-more { display: block; }
-  #shotPanel:not(.open) .sp-grid > div:nth-child(n+4), #shotPanel:not(.open) .sp-tips, #shotPanel:not(.open) .sp-extra { display: none; }
+
+  #shotPanel:not(.open) .sp-tips, #shotPanel:not(.open) .sp-extra { display: none; }
 }
 /* portrait phone: the golfer stands left of the ball, so the distance panel moves to the right-hand column
    under a compact wind dial (wind matters on every shot, so it stays on screen) */
@@ -535,6 +542,17 @@ body.reduced-motion *, body.reduced-motion *::before, body.reduced-motion *::aft
   body.hud-essential.in-round:not(.target-view) #hud[data-state="address"]:not([data-putt="1"]) #minimap { display: block; }
   /* the lesson's tips sit in this column on a narrow phone: the map waits until the lesson ends */
   body.in-round.coaching #hud #minimap { display: none !important; }
+}
+/* short phones (360x640, iPhone SE): the map would sit on the swing meter and club box, so it only shows
+   in flight and in target view, and the caddie's note moves into the gap under the distance panel */
+@media (max-width: 760px) and (orientation: portrait) and (max-height: 700px) {
+  body.in-round:not(.target-view) #hud:not([data-state="flight"]) #minimap { display: none !important; }
+}
+@media (max-width: 760px) and (orientation: portrait) and (max-height: 600px) {
+  body.touch.in-round #caddie { top: 166px !important; bottom: auto !important; left: 8px; right: 8px; max-width: none; font-size: 12px; padding: 5px 10px; line-height: 1.3; }
+  body.touch.in-round #caddie .caddie-ico { display: none; }
+  body.touch.in-round #caddieText { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
+  body.touch.in-round #clubBox { bottom: 306px !important; }
 }
 
 /* ---------- course editor ---------- */
