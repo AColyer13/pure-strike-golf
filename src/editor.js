@@ -55,9 +55,13 @@ export class Editor {
             <label>Yards <input id="edYds" type="number" min="60" max="700" step="1"></label>
             <label class="grow">Strategy note <input id="edTip" type="text" maxlength="400" placeholder="Shown on the hole intro card"></label>
           </div>
-          <label class="ed-adv" for="edJson">Hole data (JSON): bunkers, water, trees, elevation and pins live here. See the field reference below.</label>
-          <textarea id="edJson" spellcheck="false"></textarea>
-          <div id="edErr" class="ed-err"></div>
+          <p class="muted small ed-intro">Change the par, yardage and strategy note above, then press Play-test. Bunkers, water, trees, slopes and pin positions are in the advanced section.</p>
+          <details class="ed-advanced" id="edAdv">
+            <summary>Advanced: hole layout (JSON)</summary>
+            <label class="ed-adv" for="edJson">Bunkers, water, trees, elevation and pins live here. See the field reference below.</label>
+            <textarea id="edJson" spellcheck="false"></textarea>
+          </details>
+          <div id="edErr" class="ed-err" role="alert"></div>
           <div class="row wrap">
             <button class="btn primary" id="edPlay">Play-test this hole</button>
             <button class="btn" id="edSave">Save</button>
@@ -92,7 +96,7 @@ export class Editor {
       par.value = String(d.par); yds.value = d.yds ?? ''; tip.value = d.tip || '';
     };
     const syncJson = () => {
-      let d; try { d = JSON.parse(ta.value); } catch (e) { $('edErr').textContent = 'Fix the JSON error before using these fields'; return; }
+      let d; try { d = JSON.parse(ta.value); } catch (e) { this.fail('The layout in the advanced section has a typo. Fix it (or press Revert to original) before changing these fields.'); return; }
       d.par = +par.value;
       if (yds.value !== '') d.yds = +yds.value;
       if (tip.value.trim()) d.tip = tip.value; else delete d.tip;
@@ -116,14 +120,20 @@ export class Editor {
     this.preview();
   }
 
+  // show a problem with the layout, opening the advanced section it lives in
+  fail(msg) {
+    $('edErr').textContent = msg;
+    $('edAdv').open = true;
+  }
+
   parse() {
     const err = $('edErr');
     let def;
-    try { def = JSON.parse($('edJson').value); } catch (e) { err.textContent = `JSON error: ${e.message}`; return null; }
+    try { def = JSON.parse($('edJson').value); } catch (e) { this.fail(`The hole layout has a typo (${e.message}). Check the commas, brackets and quotes, or press Revert to original to start again.`); return null; }
     if (![3, 4, 5].includes(def.par)) { err.textContent = 'par must be 3, 4 or 5'; return null; }
     if (!(def.yds >= 60 && def.yds <= 700)) { err.textContent = 'yds must be between 60 and 700'; return null; }
     let hole;
-    try { hole = new Hole(def, courseById(this.baseId), this.idx, { pinIndex: 0 }); } catch (e) { err.textContent = `Could not build the hole: ${e.message}`; return null; }
+    try { hole = new Hole(def, courseById(this.baseId), this.idx, { pinIndex: 0 }); } catch (e) { this.fail(`That layout can't be built (${e.message}). Revert to original to start again.`); return null; }
     err.textContent = '';
     return { def, hole };
   }

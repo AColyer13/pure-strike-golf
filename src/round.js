@@ -55,16 +55,32 @@ export function holesFor(mode, courseId, single = 1) {
   return [(+single || 1) - 1];
 }
 
-// Challenge links: #c=<course>.<mode>.<holes>.<seed>
+// Challenge links: #c=<course>.<mode>.<holes>.<seed>[.<score>]
+// The optional score is what the sender made, as one integer: total strokes, tenths of a
+// foot (closest to the pin) or yards (long drive). Links without it still work.
+export function challengeScore(r) {
+  const vals = [];
+  for (const pl of r.players || []) {
+    if (r.balls) {
+      const a = pl.attempts.filter((v) => v != null);
+      if (a.length) vals.push(r.mode === 'ctp' ? Math.round(Math.min(...a) * 10) : Math.round(Math.max(...a)));
+    } else if (pl.scores.length === r.holes.length) vals.push(pl.scores.reduce((t, x) => t + x.strokes, 0));
+  }
+  if (!vals.length) return null;
+  return r.mode === 'drive' ? Math.max(...vals) : Math.min(...vals);
+}
 export function challengeHash(r) {
-  return `#c=${r.course.id}.${r.mode}.${r.holes.join('-')}.${r.seed}`;
+  const sc = challengeScore(r);
+  return `#c=${r.course.id}.${r.mode}.${r.holes.join('-')}.${r.seed}${sc == null ? '' : `.${sc}`}`;
 }
 export function parseChallenge(hash) {
-  const m = /#c=([a-z]+)\.([a-z0-9]+)\.([0-9-]+)\.(\d+)/.exec(hash || '');
+  const m = /#c=([a-z]+)\.([a-z0-9]+)\.([0-9-]+)\.(\d+)(?:\.(\d{1,5}))?(?![\w.])/.exec(hash || '');
   if (!m || !courseById(m[1], +m[4]) || !MODES[m[2]]) return null;
   const holes = m[3].split('-').map(Number).filter((i) => i >= 0 && i < 18);
   if (!holes.length) return null;
-  return { courseId: m[1], mode: m[2], holes, seed: +m[4] };
+  const c = { courseId: m[1], mode: m[2], holes, seed: +m[4] };
+  if (m[5] != null) c.score = +m[5];
+  return c;
 }
 
 // Each course's signature hole (0-based): the menu backdrop and "Play a hole now".
@@ -87,8 +103,8 @@ export function createRound(opts) {
   const names = opts.players?.length ? opts.players : [null];
   const balls = MODES[opts.mode]?.balls || 0;
   return {
-    course, holes: opts.holes, i: 0, seed, mode: opts.mode, daily: opts.daily || null, setup, balls,
-    opts: { courseId: opts.courseId, holes: opts.holes, mode: opts.mode, seed, players: opts.players || null, daily: opts.daily || null, solo: !!opts.solo },
+    course, holes: opts.holes, i: 0, seed, mode: opts.mode, daily: opts.daily || null, setup, balls, target: opts.target ?? null,
+    opts: { courseId: opts.courseId, holes: opts.holes, mode: opts.mode, seed, players: opts.players || null, daily: opts.daily || null, solo: !!opts.solo, target: opts.target ?? null },
     players: names.map((name) => ({ name, scores: [], stats: new RoundStats(), attempts: [] })),
     p: 0,
     get player() { return this.players[this.p]; },

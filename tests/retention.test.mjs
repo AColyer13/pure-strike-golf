@@ -3,7 +3,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Hole } from '../src/hole.js';
 import { courseById, COURSES } from '../src/courses/index.js';
-import { MODES, dailySpec, holesFor, challengeHash, parseChallenge, seedFrom } from '../src/round.js';
+import { MODES, dailySpec, holesFor, challengeHash, challengeScore, parseChallenge, seedFrom } from '../src/round.js';
+import { coachShot, resetCoach } from '../src/coach.js';
 import { roundEntry, bestFor, handicapIndex, sgTrend } from '../src/history.js';
 
 // minimal in-memory localStorage so history.js can be exercised
@@ -44,6 +45,14 @@ test('challenge links round-trip', () => {
   assert.deepEqual(parseChallenge(challengeHash(r)), { courseId: 'sawgrass', mode: 'single', holes: [16], seed: 123456 });
   const g = { course: { id: 'gen' }, mode: 'random', holes: [0, 1, 2, 3, 4, 5, 6, 7, 8], seed: 99 };
   assert.equal(parseChallenge(challengeHash(g)).courseId, 'gen');
+  // a finished round puts its score in the link: strokes, tenths of a foot or yards
+  const played = { course: { id: 'sawgrass' }, mode: 'front', holes: [0, 1], seed: 77, balls: 0, players: [{ scores: [{ strokes: 4 }, { strokes: 5 }], attempts: [] }] };
+  assert.equal(challengeHash(played), '#c=sawgrass.front.0-1.77.9');
+  assert.deepEqual(parseChallenge(challengeHash(played)), { courseId: 'sawgrass', mode: 'front', holes: [0, 1], seed: 77, score: 9 });
+  assert.equal(challengeScore({ mode: 'ctp', balls: 3, holes: [0], players: [{ scores: [], attempts: [null, 12.34, 20] }] }), 123);
+  assert.equal(challengeScore({ mode: 'drive', balls: 3, holes: [0], players: [{ scores: [], attempts: [240.4, null, 262.6] }] }), 263);
+  assert.equal(challengeScore({ mode: 'front', balls: 0, holes: [0, 1], players: [{ scores: [{ strokes: 4 }], attempts: [] }] }), null);
+  assert.equal(parseChallenge('#c=sawgrass.front.0-1.77.x'), null);
   assert.equal(parseChallenge('#c=nowhere.18.1.5'), null);
   assert.equal(parseChallenge('#c=augusta.bogus.1.5'), null);
   assert.equal(parseChallenge(''), null);
@@ -99,4 +108,12 @@ test('procedural courses are deterministic and playable', () => {
       }
     });
   }
+});
+
+test('coach: a clean short swing is a partial swing, a bad strike is a mishit', () => {
+  const base = { club: { name: '7 Iron' }, result: 'ok', lie: 'fairway', carryFrac: 0.2, duffed: false, par: 4 };
+  const title = (s) => { resetCoach(); return coachShot(s)[0]?.title; };
+  assert.equal(title({ ...base, strikeQ: 1 }), 'Partial swing');
+  assert.equal(title({ ...base, strikeQ: 0.9 }), 'Mishit');
+  assert.equal(title({ ...base, duffed: true, strikeQ: 0.9 }), 'Chunked it');
 });

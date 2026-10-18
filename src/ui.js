@@ -4,7 +4,7 @@ import { PROFILES } from './clubs.js';
 import { YD } from './hole.js';
 import { SURFACES } from './physics.js';
 import { DEFAULT_KEYS, ACTION_LABELS, DIFFICULTY } from './config.js';
-import { MODES, SIGNATURE, dailySpec, holesFor, challengeHash, RESUME_KEY, resumable, restoreRound } from './round.js';
+import { MODES, SIGNATURE, dailySpec, holesFor, challengeHash, challengeScore, RESUME_KEY, resumable, restoreRound } from './round.js';
 import { loadHistory, bestFor, handicapIndex, sgTrend, clearHistory, localDay, RATINGS } from './history.js';
 import { firstRun } from './tutorial.js';
 import { QUALITY } from './post.js';
@@ -12,7 +12,8 @@ import { fmtYd, fmtElev, windUnit, windValue, localizeText } from './units.js';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
-const sgn = (x, d = 2) => (x >= 0 ? '+' : '') + x.toFixed(d);
+// signed number; a value that rounds to zero is "+0.0", never "-0.0"
+const sgn = (x, d = 2) => { const v = +x.toFixed(d); return (v >= 0 ? '+' : '') + (v === 0 ? (0).toFixed(d) : v.toFixed(d)); };
 const toParStr = (d) => (d === 0 ? 'E' : d > 0 ? `+${d}` : `${d}`);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const keyName = (k) => ({ ' ': 'Space', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Escape: 'Esc' }[k] || (k.length === 1 ? k.toUpperCase() : k));
@@ -150,6 +151,7 @@ export class UI {
     tabs.innerHTML = '';
     for (const c of COURSES) {
       const b = el('button', 'course-tab' + (c.id === course.id ? ' sel' : ''), `<span class="cc-flag"></span>${c.name}`);
+      b.setAttribute('aria-pressed', c.id === course.id);
       b.style.setProperty('--accent', c.flag);
       b.onclick = () => { this.sel.courseId = c.id; this.saveSel(); g.showcase(c.id); this.mainMenu(); };
       tabs.appendChild(b);
@@ -209,10 +211,11 @@ export class UI {
     const cb = $('challengeBanner');
     if (this.challenge) {
       const c = this.challenge, cc = courseById(c.courseId, c.seed);
-      cb.innerHTML = `<div><b>Challenge received:</b> ${cc.name} · ${MODES[c.mode].name} · ${c.holes.length === 1 ? `hole ${c.holes[0] + 1}` : `${c.holes.length} holes`} – same pins and wind as your friend.</div>
+      const beat = c.score != null ? this.scoreToBeat(c.mode, c.score, cc, c.holes) : null;
+      cb.innerHTML = `<div><b>Challenge received:</b> ${cc.name} · ${MODES[c.mode].name} · ${c.holes.length === 1 ? `hole ${c.holes[0] + 1}` : `${c.holes.length} holes`} – same pins and wind as your friend.${beat ? ` <b>Score to beat: ${beat}</b>` : ''}</div>
         <div class="row"><button class="btn primary" id="chAccept">Accept</button><button class="btn" id="chDismiss">Dismiss</button></div>`;
       cb.classList.remove('hidden');
-      $('chAccept').onclick = () => { const x = this.challenge; this.challenge = null; window.history.replaceState?.(null, '', location.pathname + location.search); g.showcase(x.courseId); this.start({ courseId: x.courseId, holes: x.holes, mode: x.mode, seed: x.seed }); };
+      $('chAccept').onclick = () => { const x = this.challenge; this.challenge = null; window.history.replaceState?.(null, '', location.pathname + location.search); g.showcase(x.courseId); this.start({ courseId: x.courseId, holes: x.holes, mode: x.mode, seed: x.seed, target: x.score }); };
       $('chDismiss').onclick = () => { this.challenge = null; window.history.replaceState?.(null, '', location.pathname + location.search); this.mainMenu(); };
     } else cb.classList.add('hidden');
 
@@ -223,6 +226,7 @@ export class UI {
       box.innerHTML = '';
       for (const [k, label, title] of list) {
         const b = el('button', 'seg' + (String(k) === String(val) ? ' on' : ''), label);
+        b.setAttribute('aria-pressed', String(k) === String(val));
         if (title) b.title = title;
         b.onclick = () => { this.setOpt(id, k); this.mainMenu(); };
         box.appendChild(b);
@@ -548,6 +552,7 @@ export class UI {
   }
 
   // ------------------------------------------------------------ shot panel
+  shotPanelShown() { return !$('shotPanel').classList.contains('hidden'); }
   showShotPanel(o) {
     const p = $('shotPanel');
     if (!o) { p.classList.add('hidden'); return; }
@@ -605,7 +610,7 @@ export class UI {
     const best = Math.min(...opts.map((o) => o.es));
     for (const o of opts) {
       const b = el('button', 'relief-opt' + (o.es === best ? ' best' : ''));
-      b.innerHTML = `<b>${o.title}${o.es === best ? ' <span class="tag">best</span>' : ''}</b><p>${o.desc}</p><div><span>${fmt(o.dist)} to pin</span><span>${o.isTee ? 'Tee' : SURFACES[o.surface]?.name || o.surface}</span><span>Expected ${o.es.toFixed(2)}</span></div>`;
+      b.innerHTML = `<b>${o.title}</b>${o.es === best ? '<span class="tag">Best</span>' : ''}<p>${o.desc}</p><div><span>${fmt(o.dist)} to pin</span><span>${o.isTee ? 'Tee' : SURFACES[o.surface]?.name || o.surface}</span><span>Expected ${o.es.toFixed(2)}</span></div>`;
       b.onclick = () => cb(o);
       box.appendChild(b);
     }
@@ -671,6 +676,23 @@ export class UI {
     }
   }
 
+  // a challenge link's score as the player reads it: "+2 (74)", "12.5 ft" or "285 yds"
+  scoreToBeat(mode, score, course, holes) {
+    if (mode === 'ctp') return score === 0 ? 'hole in one' : `${(score / 10).toFixed(1)} ft`;
+    if (mode === 'drive') return this.game.fmtDist(score * YD);
+    const par = holes.reduce((a, i) => a + (course.holes[i]?.par || 0), 0);
+    return `${toParStr(score - par)} (${score})`;
+  }
+  // under the summary title when the round was played from a challenge link
+  targetNote(round) {
+    const mine = challengeScore(round);
+    if (round.target == null || mine == null) return '';
+    const beat = this.scoreToBeat(round.mode, round.target, round.course, round.holes);
+    const better = round.mode === 'drive' ? mine > round.target : mine < round.target; // strokes and distance to the pin: lower wins
+    const tied = mine === round.target;
+    return `<div class="challenge-note ${better ? 'won' : ''}">Score to beat: <b>${beat}</b> – ${better ? 'you beat it!' : tied ? 'you matched it.' : 'not this time.'}</div>`;
+  }
+
   // ------------------------------------------------------------ summaries
   summary(course, round, t, best, settings) {
     this.showHUD(false);
@@ -722,11 +744,12 @@ export class UI {
       <p class="sum-total">Total: <b>${sgn(t.sgTotal)}</b> strokes vs. a tour player over ${n} hole${n === 1 ? '' : 's'}.</p>
       ${sgTip(t)}`;
     };
-    const tabs = multi ? `<div class="segs sum-tabs">${round.players.map((pl, i) => `<button class="seg${i === 0 ? ' on' : ''}" data-p="${i}">${esc(pl.name)}</button>`).join('')}</div>` : '';
+    const tabs = multi ? `<div class="segs sum-tabs">${round.players.map((pl, i) => `<button class="seg${i === 0 ? ' on' : ''}" aria-pressed="${i === 0}" data-p="${i}">${esc(pl.name)}</button>`).join('')}</div>` : '';
     const lesson = !!round.opts?.solo;
     const info = lesson ? `${course.name} · Guided lesson` : [course.name, round.holes.length === 1 ? null : MODES[round.mode]?.name, PROFILES[settings.profile]?.name || settings.profile, DIFFICULTY[settings.difficulty]?.name].filter(Boolean).join(' · ');
     s.innerHTML = `<h1>${round.daily ? 'Daily challenge complete' : round.holes.length === 1 ? 'Hole complete' : 'Round complete'}</h1>
       <div class="muted">${info}</div>
+      ${this.targetNote(round)}
       ${board}
       ${tabs}
       <div id="sumCard">${card(round.players[0], t)}</div>
@@ -737,7 +760,7 @@ export class UI {
       b.onclick = () => {
         const pl = round.players[+b.dataset.p];
         $('sumCard').innerHTML = card(pl, pl.stats.totals());
-        for (const x of s.querySelectorAll('.sum-tabs button')) x.classList.toggle('on', x === b);
+        for (const x of s.querySelectorAll('.sum-tabs button')) { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); }
       };
     }
     s.classList.remove('hidden');
@@ -757,6 +780,7 @@ export class UI {
     const show = (v) => (v == null ? 'No score' : ctp ? (v === 0 ? 'Hole in one!' : `${v.toFixed(1)} ft`) : fmt(v * YD));
     s.innerHTML = `<h1>${MODES[round.mode].name}</h1>
       <div class="muted">${course.name} · hole ${round.holes[0] + 1}</div>
+      ${this.targetNote(round)}
       <div class="sc-board big">${rows.map(({ pl, best }, i) => `<div><span>${i === 0 && solo ? '🏆 ' : ''}${esc(pl.name || 'Best')}</span><b>${show(best)}</b></div>`).join('')}</div>
       ${rows.every((r) => r.best == null) ? `<p class="muted">${ctp ? 'No ball finished on the course. Water and out of bounds score nothing: aim at the middle of the green and pick the club for the plays-like number.' : 'No drive finished in the fairway or first cut. Aim down the middle and keep the swing smooth: a drive that stays in play beats a longer one in the trees.'}</p>` : ''}
       ${round.players.map((pl) => `<div class="attempts"><span>${esc(pl.name || 'Your balls')}</span>${pl.attempts.map((v) => `<i class="${v == null ? 'miss' : ''}">${v == null ? '✕' : ctp ? `${v.toFixed(0)} ft` : fmt(v * YD)}</i>`).join('')}</div>`).join('')}
@@ -768,7 +792,7 @@ export class UI {
   summaryButtons(course, round) {
     const s = $('summary');
     const players = round.players.length > 1 ? round.players.map((p) => p.name) : null;
-    $('sumAgain').onclick = () => { s.classList.add('hidden'); this.game.startRound({ courseId: course.id, holes: round.holes, mode: round.mode, players, seed: course.generated ? round.seed : undefined }); };
+    $('sumAgain').onclick = () => { s.classList.add('hidden'); this.game.startRound({ courseId: course.id, holes: round.holes, mode: round.mode, players, seed: course.generated ? round.seed : undefined, target: round.target }); };
     $('sumMenu').onclick = () => { s.classList.add('hidden'); this.game.quitToMenu(); };
     // after the guided hole the obvious next step is a real round on the same course
     if ($('sumFront')) $('sumFront').onclick = () => { s.classList.add('hidden'); this.game.startRound({ courseId: course.id, holes: [...Array(9).keys()], mode: 'front' }); };
@@ -777,7 +801,7 @@ export class UI {
       const url = location.origin + location.pathname + challengeHash(round);
       try {
         await navigator.clipboard.writeText(url);
-        this.toast('Challenge link copied – same pins and wind for whoever opens it', 'good');
+        this.toast('Challenge link copied – same pins and wind, and your score to beat', 'good');
       } catch (e) {
         // no clipboard access (insecure context, permissions, embedded browser): show the link, selected, to copy by hand
         let box = $('shareBox');
@@ -866,7 +890,7 @@ export class UI {
       <button class="btn small-btn" id="sKeysReset">Reset keys</button>
       <p class="muted small">Gamepad: A swing · B skip · X fade · Y view/replay · LB/RB club · D-pad aim &amp; flight · right stick: pull back then push up for a tempo swing.</p>
       </div>`}</div>
-      <div class="set-foot"><button class="btn" id="sEditor" title="Build your own hole from a JSON course file">Course editor</button><button class="btn primary" id="sClose">Done</button></div>`;
+      <div class="set-foot"><button class="btn" id="sEditor" title="Change par, yardage and layout of a hole, then play-test it">Course editor</button><button class="btn primary" id="sClose">Done</button></div>`;
     const save = () => { g.saveSettings(); this.helpBar(); if (g.state === 'address') g.enterAddress(); };
     $('sVol').oninput = (e) => { s.volume = +e.target.value; g.audio.setVolume(s.volume); g.saveSettings(); };
     $('sTracer').onchange = (e) => { s.tracer = e.target.checked; save(); };

@@ -230,10 +230,11 @@ body:has(.modal:not(.hidden)) #shotPanel { visibility: hidden; }
 #pause { width: min(380px, 94vw); display: flex; flex-direction: column; gap: 10px; }
 .set { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-weight: 600; font-size: 14px; }
 .relief-opts { display: grid; gap: 10px; margin-top: 12px; }
-.relief-opt { text-align: left; font-family: inherit; color: var(--text); background: rgba(255,255,255,.05); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; cursor: pointer; }
+.relief-opt { position: relative; text-align: left; font-family: inherit; color: var(--text); background: rgba(255,255,255,.05); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; cursor: pointer; }
 .relief-opt:hover { background: rgba(255,255,255,.1); }
 .relief-opt.best { border-color: var(--green); }
 .relief-opt b { font-size: 17px; }
+.relief-opt .tag { position: absolute; top: 10px; right: 12px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #0b1b10; background: var(--green); border-radius: 999px; padding: 2px 9px; }
 .relief-opt p { margin: 3px 0 6px; font-size: 13px; color: var(--muted); }
 .relief-opt div { display: flex; gap: 16px; font-size: 13px; font-weight: 600; }
 .relief-opt.best div span:last-child { color: var(--green); }
@@ -509,6 +510,18 @@ body.flyover #hud > .panel.tut-focus { opacity: 1; }
 #hud .panel, #caddie, #shotPanel, .modal, #helpBar, #intro { zoom: var(--ui-scale, 1); }
 body.reduced-motion *, body.reduced-motion *::before, body.reduced-motion *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 
+/* ---------- landscape phone: two menu columns so Tee off is on the first screen ---------- */
+.menu-col { display: contents; }
+@media (orientation: landscape) and (max-height: 500px) and (min-width: 600px) {
+  #menu { padding: 10px 16px; background: rgba(6,14,9,.84); }
+  .menu-panel { width: min(960px, 100%); display: grid; grid-template-columns: 1fr 1fr; gap: 8px 20px; align-items: start; }
+  .menu-col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .menu-foot { grid-column: 1 / -1; }
+  .logo { font-size: 28px; }
+  .tagline { font-size: 12px; }
+  .menu-play { grid-template-columns: 1fr; }
+}
+
 /* ---------- small screens ---------- */
 @media (max-width: 760px) {
   #menu { background: rgba(6,14,9,.82); padding: 14px 16px; }
@@ -564,6 +577,9 @@ body.reduced-motion *, body.reduced-motion *::before, body.reduced-motion *::aft
 .ed-basics label.grow { flex: 1; min-width: 200px; }
 .ed-basics input, .ed-basics select { font: 500 14px Barlow, sans-serif; letter-spacing: normal; text-transform: none; background: #173022; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; user-select: text; }
 .ed-basics input[type=number] { width: 90px; }
+.ed-intro { margin: 8px 0; }
+.ed-advanced { margin-bottom: 8px; }
+.ed-advanced summary { cursor: pointer; font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
 .ed-adv { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
 #edJson { width: 100%; height: min(420px, 50vh); font: 12px/1.45 ui-monospace, Consolas, monospace; background: #0b1710; color: #d8f0de; border: 1px solid var(--line); border-radius: 8px; padding: 8px; resize: vertical; user-select: text; tab-size: 2; }
 .ed-err { color: var(--red); font-size: 13px; min-height: 18px; }
@@ -585,3 +601,6 @@ body.touch .set-cols { grid-template-columns: 1fr; }
 body.touch .course-tab { min-height: 44px; }
 .tip details.why { margin-top: 4px; }
 .tip details.why summary { cursor: pointer; font: 600 12px Barlow, sans-serif; color: var(--blue); }
+
+.challenge-note { margin: 8px 0 4px; padding: 8px 12px; border-radius: 10px; background: rgba(255,255,255,.06); font-size: 14px; }
+.challenge-note.won { background: rgba(80,200,120,.18); }

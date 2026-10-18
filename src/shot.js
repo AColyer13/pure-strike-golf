@@ -186,6 +186,8 @@ export function shotInfoFor({ sim, hole: h, shotStart: S, club, ld, landV, puttE
   };
   // how much of the club's normal carry this shot got – a chunk or a top is < 0.3
   info.carryFrac = putt ? 1 : info.carryYd / Math.max(1, (club.carry || 0) / YD);
+  // strike quality alone, 1 = dead centre: tells a deliberate short swing from a bad contact
+  info.strikeQ = !putt && ld?.strikeSmash && club.smash ? ld.strikeSmash / club.smash : 1;
   const toCup = { x: cup.x - S.p[0], z: cup.z - S.p[2] };
   const dC = Math.hypot(toCup.x, toCup.z) || 1;
   const along = ((p[0] - S.p[0]) * toCup.x + (p[2] - S.p[2]) * toCup.z) / dC;

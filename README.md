@@ -40,7 +40,7 @@ To test a phone or tablet, open the game with `?perf` (for example https://acoly
 - **Long drive.** Five drives; only drives that finish in the fairway or first cut count.
 - **Random holes.** A procedurally generated 9-hole, par-36 course. The same seed always makes the same holes.
 - **Hot-seat.** Up to 4 players share one device. Each player gets their own outfit and scorecard row, plus a leaderboard at the end.
-- **Challenge links.** After a round, *Copy challenge link* gives a URL with the course, holes, pins and wind. A friend who opens it plays the same conditions and sees your score to beat.
+- **Challenge links.** After a round, *Copy challenge link* gives a URL with the course, holes, pins and wind. The link also carries your score. A friend who opens it plays the same conditions, sees your score to beat on the banner, and gets a win/lose line on their summary. Older links without a score still work.
 - **Course editor.** Edit any hole's definition as JSON with a live plan-view preview, then play-test it. Your edits are saved to a separate "custom" course, so the tribute courses never change.
 
 **Stats** (menu) shows:

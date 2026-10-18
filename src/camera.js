@@ -25,6 +25,8 @@ export class CameraDirector {
     this.shakeT = 0;
     this.shakeDur = 0;
     this.shakeClock = 0;
+    this.lift = 0; // fraction of the screen height the picture is slid up for the result card
+    this.liftApplied = 0;
   }
 
   kick(deg) { this.fovKick = deg; }
@@ -193,8 +195,10 @@ export class CameraDirector {
     }
     if (putt || totalD < 45) {
       // low follow camera
-      const back = putt ? clamp(1.4 + totalD * 0.9, 1.9, 3.2) : 8;
-      this.tPos.set(b0[0] - dir.x * back + (p[0] - b0[0]) * 0.55, Math.max(p[1], h.height(p[0], p[2])) + (putt ? 1.3 : 3), b0[2] - dir.z * back + (p[2] - b0[2]) * 0.55);
+      // a putt is framed from further back, higher and off to the right (away from the golfer,
+      // who stands left of the ball) so the golfer does not fill the screen
+      const back = putt ? clamp(2.8 + totalD * 0.9, 3.2, 4.4) : 8, side = putt ? 1.1 : 0;
+      this.tPos.set(b0[0] - dir.x * back - dir.z * side + (p[0] - b0[0]) * 0.55, Math.max(p[1], h.height(p[0], p[2])) + (putt ? 1.8 : 3), b0[2] - dir.z * back + dir.x * side + (p[2] - b0[2]) * 0.55);
       this.tLook.copy(pv);
       this.k = 3;
       return;
@@ -236,9 +240,10 @@ export class CameraDirector {
   // after a skipped flight: a view of where the ball finished
   snapToRest(sim, shot) {
     const h = this.g.hole, p = sim.p, dir = dirOf(shot.aim);
-    const back = shot.club.putter ? clamp(1.4 + Math.hypot(p[0] - shot.p[0], p[2] - shot.p[2]) * 0.9, 1.9, 3) : 14;
-    const cx = p[0] - dir.x * back, cz = p[2] - dir.z * back;
-    this.tPos.set(cx, h.height(cx, cz) + (shot.club.putter ? 1.2 : 5), cz);
+    const back = shot.club.putter ? clamp(2.8 + Math.hypot(p[0] - shot.p[0], p[2] - shot.p[2]) * 0.9, 3.2, 4.2) : 14;
+    const side = shot.club.putter ? 1.1 : 0; // clear of the golfer, as in flight()
+    const cx = p[0] - dir.x * back - dir.z * side, cz = p[2] - dir.z * back + dir.x * side;
+    this.tPos.set(cx, h.height(cx, cz) + (shot.club.putter ? 1.7 : 5), cz);
     this.tLook.set(p[0], p[1], p[2]);
     this.k = 3;
     this.fov = 50;
@@ -312,6 +317,18 @@ export class CameraDirector {
       const oz = e * (Math.sin(t * 71 + 2.4) * 0.5);
       this.camera.position.x += ox; this.camera.position.y += oy; this.camera.position.z += oz;
       if (this.shakeT === 0) this.shakeAmp = 0;
+    }
+    // portrait phone, shot result showing: the result card fills the lower half, so slide the
+    // picture up (a view offset, not a camera move) until the ball and flag sit above it
+    const a = this.camera.aspect;
+    const wantLift = a > 0 && a < 0.8 && this.g.state === 'result' && this.g.ui.shotPanelShown() ? 0.2 : 0;
+    this.lift += (wantLift - this.lift) * (1 - Math.exp(-dt * 6));
+    if (Math.abs(this.lift - wantLift) < 0.002) this.lift = wantLift;
+    if (this.lift !== this.liftApplied) {
+      this.liftApplied = this.lift;
+      if (this.lift > 0) this.camera.setViewOffset(1000 * a, 1000, 0, 1000 * this.lift, 1000 * a, 1000);
+      else this.camera.clearViewOffset();
+      this.camera.updateProjectionMatrix();
     }
     // field of view eases to its target; the impact kick decays quickly
     this.fovKick *= Math.exp(-dt * 5);
