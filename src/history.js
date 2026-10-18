@@ -23,10 +23,23 @@ function storage() {
   try { return globalThis.localStorage || null; } catch (e) { return null; }
 }
 
+// One stored round, or null if it is not usable (hand-edited or damaged storage must never
+// stop the menu from opening): it needs a course and numeric score fields.
+function cleanEntry(e) {
+  if (!e || typeof e !== 'object' || typeof e.course !== 'string') return null;
+  if (![e.strokes, e.par, e.holes].every(Number.isFinite)) return null;
+  const sg = e.sg && typeof e.sg === 'object' ? e.sg : {};
+  const n = (v) => (Number.isFinite(v) ? v : 0);
+  return { ...e, sg: { ...sg, OTT: n(sg.OTT), APP: n(sg.APP), ARG: n(sg.ARG), PUTT: n(sg.PUTT) }, sgTotal: n(e.sgTotal) };
+}
+
 export function loadHistory() {
   const ls = storage();
   if (!ls) return [];
-  try { return JSON.parse(ls.getItem(KEY) || '[]'); } catch (e) { return []; }
+  try {
+    const all = JSON.parse(ls.getItem(KEY) || '[]');
+    return Array.isArray(all) ? all.map(cleanEntry).filter(Boolean) : [];
+  } catch (e) { return []; }
 }
 
 export function saveRound(entry) {

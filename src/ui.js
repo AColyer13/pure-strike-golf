@@ -14,6 +14,21 @@ const $ = (id) => document.getElementById(id);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
 // signed number; a value that rounds to zero is "+0.0", never "-0.0"
 const sgn = (x, d = 2) => { const v = +x.toFixed(d); return (v >= 0 ? '+' : '') + (v === 0 ? (0).toFixed(d) : v.toFixed(d)); };
+// On a phone the caddie's note has two or three lines of room: end it at a sentence rather than
+// let the line clamp cut it mid-thought. The full text stays in the tooltip / on desktop.
+const caddieBrief = (text) => {
+  const max = innerHeight <= 600 ? 90 : 140;
+  const parts = text.match(/[^.!?]+[.!?]+(s+|$)|[^.!?]+$/g) || [text];
+  let out = parts[0].trim();
+  for (let i = 1; i < parts.length && (out + ' ' + parts[i].trim()).length <= max; i++) out += ' ' + parts[i].trim();
+  return out;
+};
+// "2026-10-18" (a local calendar day) as "Sun 18 Oct"
+const dayLabel = (key) => {
+  const [y, m, d] = String(key).split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  return Number.isNaN(dt.getTime()) ? String(key) : dt.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+};
 const toParStr = (d) => (d === 0 ? 'E' : d > 0 ? `+${d}` : `${d}`);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const keyName = (k) => ({ ' ': 'Space', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Escape: 'Esc' }[k] || (k.length === 1 ? k.toUpperCase() : k));
@@ -174,7 +189,7 @@ export class UI {
     const sh = course.holes[sig];
     if (this.tutorial && firstRun()) {
       // never played: the primary button is the guided hole
-      $('btnQuick').innerHTML = 'Start here: guided first hole ▶<small>Augusta 12 · par 3 · about 5 minutes · explains every control</small>';
+      $('btnQuick').innerHTML = 'Start here: guided first hole ▶<small>Magnolia 12 · par 3 · about 5 minutes · explains every control</small>';
       $('btnQuick').onclick = () => this.tutorial.start();
     } else {
       $('btnQuick').innerHTML = `Play a hole now ▶<small>${sig + 1}. ${sh.name} · par ${sh.par}</small>`;
@@ -189,7 +204,8 @@ export class UI {
     if (saved) {
       const { snap, round: r } = saved, pl = r.players[0];
       const thru = pl.scores.length, toPar = pl.scores.reduce((t, x) => t + x.strokes - x.par, 0);
-      const where = snap.done ? `All ${r.holes.length} holes played – see the summary` : `Hole ${r.holes[r.i] + 1}${thru ? ` · ${toParStr(toPar)} thru ${thru}` : ''}`;
+      const hn = r.holes[r.i], hname = r.course.holes[hn]?.name;
+      const where = snap.done ? `All ${r.holes.length} holes played – see the summary` : `Hole ${hn + 1}${hname ? `, ${hname}` : ''} · ${thru ? `${toParStr(toPar)} through ${thru}` : 'ready to tee off'}`;
       rc.innerHTML = `<div class="lbl">Resume round</div>
         <div><b>${r.course.name}</b> · ${MODES[r.mode]?.name || ''}${r.players.length > 1 ? ` · ${r.players.length} players` : ''}</div>
         <div class="muted small">${where}</div><span class="rc-go" aria-hidden="true">Resume ▸</span>`;
@@ -202,7 +218,7 @@ export class UI {
     const dc = courseById(d.courseId);
     let dBest = null;
     try { dBest = JSON.parse(localStorage.getItem(`psg-daily-${d.key}`) || 'null'); } catch (e) { /* ignore */ }
-    $('dailyCard').innerHTML = `<div class="lbl">Daily challenge · ${d.key}</div>
+    $('dailyCard').innerHTML = `<div class="lbl">Daily challenge · ${dayLabel(d.key)}</div>
       <div><b>${dc.name}</b>, holes ${d.holes[0] + 1}–${d.holes[2] + 1}. Same pins and wind for everyone today.</div>
       <div class="muted small">${dBest ? `Your best today: <b>${toParStr(dBest.toPar)}</b> (${dBest.strokes})` : 'Not played yet today'}</div>`;
     $('dailyCard').onclick = () => { g.showcase(dc.id); this.start({ courseId: dc.id, holes: d.holes, mode: 'daily', seed: d.seed, daily: d.key }); };
@@ -371,7 +387,7 @@ export class UI {
     $('hcNum').textContent = d.hole;
     $('hcName').textContent = d.name;
     // a long drive has no par or hole length to play to: the card says what the round is
-    $('hcPar').textContent = d.mode === 'drive' ? 'Long drive' : d.mode === 'ctp' ? `Closest to the pin · par ${d.par}` : `Par ${d.par} · ${this.game.fmtDist(d.yards * YD)}`;
+    $('hcPar').textContent = d.mode === 'drive' ? 'Long drive' : d.mode === 'ctp' ? `Closest to pin · par ${d.par}` : `Par ${d.par} · ${this.game.fmtDist(d.yards * YD)}`;
     $('hcShot').textContent = (d.player ? `${d.player} · ` : '') + d.shot;
     $('hcScore').textContent = d.challenge ? '' : toParStr(d.toPar);
     $('hcScore').className = 'hc-score ' + (d.toPar < 0 ? 'under' : d.toPar > 0 ? 'over' : '');
@@ -502,7 +518,7 @@ export class UI {
   caddie(text) {
     const c = $('caddie');
     if (!text) { c.classList.add('hidden'); return; }
-    if (c.dataset.text !== text) { c.dataset.text = text; $('caddieText').textContent = text; }
+    if (c.dataset.text !== text) { c.dataset.text = text; $('caddieText').textContent = this.touch ? caddieBrief(text) : text; $('caddieText').title = text; }
     c.classList.remove('hidden');
   }
 
@@ -736,7 +752,7 @@ export class UI {
         <div><span>Putts</span><b>${t.putts}</b></div>
         <div><span>Penalty strokes</span><b>${t.penalties}</b></div>
       </div>
-      <h3>Strokes gained vs. PGA Tour average</h3>
+      <h3>Strokes gained vs. Tour average</h3>
       <div class="sg-bars">${cats.map(([k, nm]) => {
         const v = t.sg[k], w = (Math.abs(v) / max) * 50;
         return `<div class="sg-row"><span>${nm}</span><div class="bar"><i class="${v >= 0 ? 'pos' : 'neg'}" style="width:${w}%;${v >= 0 ? 'left:50%' : `left:${50 - w}%`}"></i></div><b>${sgn(v)}</b></div>`;
@@ -968,9 +984,11 @@ export class UI {
       <h3>Recent rounds</h3>
       <table class="hist"><tr><th>Date</th><th>Course</th><th>Mode</th><th>Score</th><th>Putts</th><th>SG</th></tr>
       ${mine.slice(-12).reverse().map((r) => `<tr><td>${localDay(r.date)}</td><td>${r.course === 'gen' ? 'Random course' : r.course === 'custom' ? 'Custom course' : courseById(r.course)?.name || r.course}</td><td>${MODES[r.mode]?.name || r.mode}</td><td>${toParStr(r.strokes - r.par)} (${r.strokes})</td><td>${r.putts}</td><td class="${r.sgTotal >= 0 ? 'good' : 'bad'}">${sgn(r.sgTotal, 1)}</td></tr>`).join('')}</table>
-      ` : '<p class="muted">No rounds yet. Finish a round and your scores, strokes-gained trends and a handicap estimate appear here.</p>'}
+      ` : `<div class="empty-state"><b>No rounds yet</b><p class="muted">Finish a hole or a round and your scores, strokes-gained trends, personal bests and a handicap estimate appear here.</p>${$('menu').classList.contains('hidden') ? '' : '<button class="btn primary" id="stPlay">Play a hole now ▶</button>'}</div>`}
       <div class="row wrap"><button class="btn primary" id="stClose">Close</button>${mine.length ? '<button class="btn danger" id="stClear">Clear history</button>' : ''}</div>`;
     $('stClose').onclick = () => this.showStats(false);
+    const stPlay = $('stPlay');
+    if (stPlay) stPlay.onclick = () => { this.showStats(false); $('btnQuick').click(); };
     const clr = $('stClear');
     if (clr) clr.onclick = () => this.confirm({ title: 'Delete all saved rounds?', text: 'This cannot be undone.', ok: 'Delete', danger: true }, () => { clearHistory(); this.showStats(true); });
   }

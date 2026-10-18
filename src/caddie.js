@@ -407,7 +407,7 @@ export class Caddie {
   }
 
   // In range, but a typical miss to one side finds water or out of bounds (the road behind
-  // the Road Hole, a green on the cliff edge): aim off toward the safe side, 1° at a time
+  // a road-hole green, a green on the cliff edge): aim off toward the safe side, 1° at a time
   // up to 4°, while that lowers the expected score (aiming so far away that a good swing
   // finds a bunker is no better). Returns the caddie's line for it, or ''.
   aimAwayFromTrouble(power) {

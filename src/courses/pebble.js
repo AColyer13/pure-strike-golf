@@ -1,10 +1,9 @@
-// Pebble Beach Golf Links – clifftop holes on Carmel Bay, tiny poa annua greens.
-// Pars/yardages from the championship card. Hole names are descriptive
-// nicknames used in this game (Pebble's holes are known by number).
+// Pebble Cliffs – an original clifftop links on the Monterey coast, tiny poa annua
+// greens. Hole names are descriptive nicknames used in this game.
 
 export default {
   id: 'pebble',
-  name: 'Pebble Beach',
+  name: 'Pebble Cliffs',
   location: 'Monterey Peninsula, California',
   blurb: 'Tiny greens perched on cliffs above the Pacific. Holes 4–10 and 17–18 hug the ocean, where club selection in the sea breeze is everything.',
   teaches: ['Hitting small targets: proximity beats distance', 'Carry distance vs. total distance over hazards', 'Crosswinds and aiming off', 'Laying up to a favourite yardage'],
@@ -56,7 +55,7 @@ export default {
       gb: [[-12, -4, 6, 5], [12, -8, 5, 4], [0, 15, 8, 4]],
       water: [{ k: 'ocean', side: 1, pts: [[-40, 44], [250, 32], [540, 36]] }],
       tip: 'The second shot must climb a 40-foot hill with the ocean right. Elevation adds roughly a yard for every yard of rise – take more club.' },
-    { name: 'Postage Stamp', par: 3, yds: 109,
+    { name: 'Postcard', par: 3, yds: 109,
       elev: [[0, 0], [109, -40]],
       green: { w: 16, d: 24, tilt: [0, 2], pins: [[0, 4], [-3, -4]] },
       gb: [[-10, -6, 5, 4], [10, -8, 5, 4], [0, -13, 6, 3], [-9, 7, 5, 3], [9, 6, 5, 3]],
@@ -109,7 +108,7 @@ export default {
       green: { shape: [[-9, 4, 11, 6, 25], [9, -4, 11, 6, 25]], tilt: [-1, 2], tiers: [[90, 0, 1.5, 2]], pins: [[9, -4], [-9, 4]] },
       gb: [[-2, -12, 16, 5], [0, 12, 10, 3]],
       water: [{ k: 'ocean', side: 1, pts: [[250, 40], [236, -32], [0, -46]] }],
-      tip: 'An hourglass green set diagonally, ocean long and left. Where Watson chipped in to win the 1982 U.S. Open.' },
+      tip: 'An hourglass green set diagonally, ocean long and left. The kind of hole where a chip-in can decide a championship.' },
     { name: 'Seawall', par: 5, yds: 543, path: [[0, 0], [20, 250], [2, 420], [-8, 543]],
       fb: [[262, 22, 10, 6]],
       green: { w: 24, d: 26, tilt: [0.5, 2.5], pins: [[0, 4], [3, -3]] },

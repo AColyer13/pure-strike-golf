@@ -1,10 +1,10 @@
-// TPC Sawgrass (Stadium Course) – Pete Dye's target golf: water on 17 holes,
-// railroad-tie bulkheads, waste areas, pot bunkers, mounds and the island green.
-// Pars/yardages from THE PLAYERS card; hole names are descriptive nicknames.
+// Sedgegrass Stadium – an original Florida target-golf course: water on 17 holes,
+// bulkheads, waste areas, pot bunkers, mounds and the island green.
+// Hole names are descriptive nicknames used in this game.
 
 export default {
   id: 'sawgrass',
-  name: 'TPC Sawgrass',
+  name: 'Sedgegrass Stadium',
   location: 'Ponte Vedra Beach, Florida',
   blurb: 'Stadium golf built on a swamp: target greens, water left and right, waste areas and the most famous par 3 in the world – the island green 17th.',
   teaches: ['Aiming at the safe part of the green, not the flag', 'Penalty-area relief options (and why they cost strokes)', 'Wedge distance control and spin', 'Managing risk on reachable par 5s'],
@@ -30,7 +30,7 @@ export default {
     { name: 'Stadium Start', par: 4, yds: 423, path: [[0, 0], [0, 260], [18, 423]],
       fb: [[255, -18, 10, 6]], green: { w: 26, d: 28, tilt: [0, 2], pins: [[0, 4], [-4, -3]] },
       gb: [[-12, -6, 6, 5], [12, -4, 6, 4, 0, 'pot']],
-      tip: 'A slight dogleg right – a fade fits the tee shot. Pete Dye designed many holes to reward a specific shape.' },
+      tip: 'A slight dogleg right – a fade fits the tee shot. Stadium-style designs reward a specific shape.' },
     { name: 'Gentle Five', par: 5, yds: 532, path: [[0, 0], [0, 300], [-30, 532]],
       fb: [[300, 20, 10, 6]], green: { w: 22, d: 30, tilt: [-1, 2.5], pins: [[0, 5], [3, -4]] },
       gb: [[-12, -4, 6, 5], [12, -6, 6, 4]],

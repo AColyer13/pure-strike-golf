@@ -108,7 +108,7 @@ test('putter range covers a monster up a bank', () => {
 
 test('a long fringe lie with only putting surface to the hole is a putt', async () => {
   const { wantsPutter } = await import('../src/caddie.js');
-  // a 25 m fringe lie: green all the way (Augusta 18 back fringe), then the same with rough in between
+  // a 25 m fringe lie: green all the way (Magnolia 18 back fringe), then the same with rough in between
   const hole = (onLine) => ({ cup: { x: 0, z: 0 }, surface: (x, z) => (Math.hypot(x, z) < 20 ? onLine : 'fringe'), greenSdf: () => 0 });
   const ball = (d) => ({ p: [0, 0, d], surface: 'fringe' });
   assert.equal(wantsPutter(hole('green'), ball(25)), true);

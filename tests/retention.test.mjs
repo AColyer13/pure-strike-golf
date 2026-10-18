@@ -5,7 +5,7 @@ import { Hole } from '../src/hole.js';
 import { courseById, COURSES } from '../src/courses/index.js';
 import { MODES, dailySpec, holesFor, challengeHash, challengeScore, parseChallenge, seedFrom } from '../src/round.js';
 import { coachShot, resetCoach } from '../src/coach.js';
-import { roundEntry, bestFor, handicapIndex, sgTrend } from '../src/history.js';
+import { roundEntry, bestFor, handicapIndex, sgTrend, loadHistory } from '../src/history.js';
 
 // minimal in-memory localStorage so history.js can be exercised
 const store = new Map();
@@ -116,4 +116,24 @@ test('coach: a clean short swing is a partial swing, a bad strike is a mishit', 
   assert.equal(title({ ...base, strikeQ: 1 }), 'Partial swing');
   assert.equal(title({ ...base, strikeQ: 0.9 }), 'Mishit');
   assert.equal(title({ ...base, duffed: true, strikeQ: 0.9 }), 'Chunked it');
+});
+
+test('damaged saved history never breaks loading: junk entries are dropped, gaps are filled', () => {
+  store.set('psg-history', '[null, 5, "x", {"x":1}, {"course":"augusta","strokes":80,"par":72,"holes":18}]');
+  const h = loadHistory();
+  assert.equal(h.length, 1);
+  assert.equal(h[0].sgTotal, 0);
+  assert.deepEqual(h[0].sg, { OTT: 0, APP: 0, ARG: 0, PUTT: 0 });
+  assert.doesNotThrow(() => { sgTrend(h); handicapIndex(h); bestFor(h, 'augusta', '18'); });
+  for (const bad of ['{"a":1}', 'null', 'not json', '"str"']) { store.set('psg-history', bad); assert.deepEqual(loadHistory(), []); }
+  store.delete('psg-history');
+});
+
+test('crafted challenge links must describe a playable round', () => {
+  const par3 = courseById('augusta').holes.findIndex((h) => h.par === 3);
+  const par4 = courseById('augusta').holes.findIndex((h) => h.par === 4);
+  assert.ok(parseChallenge(`#c=augusta.ctp.${par3}.5`));
+  assert.equal(parseChallenge(`#c=augusta.ctp.${par4}.5`), null, 'closest to the pin on a par 4');
+  assert.ok(parseChallenge(`#c=augusta.drive.${par4}.5`));
+  assert.equal(parseChallenge(`#c=augusta.drive.${par3}.5`), null, 'long drive on a par 3');
 });

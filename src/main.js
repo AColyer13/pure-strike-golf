@@ -20,15 +20,35 @@ try {
   document.getElementById('bootReload').onclick = () => location.reload();
   throw e;
 }
-const academy = new Academy();
-ui.attach(game, academy, new Editor(game), new Tutorial(game, ui));
-// a shared challenge link (#c=course.mode.holes.seed) replays the same pins and wind
-ui.challenge = parseChallenge(location.hash);
-if (ui.challenge) ui.sel.courseId = ui.challenge.courseId;
-game.showcase(ui.sel.courseId);
-ui.mainMenu();
-document.getElementById('boot').remove();
-window.game = game; // handy for debugging from the console
+try {
+  const academy = new Academy();
+  ui.attach(game, academy, new Editor(game), new Tutorial(game, ui));
+  // a shared challenge link (#c=course.mode.holes.seed) replays the same pins and wind
+  ui.challenge = parseChallenge(location.hash);
+  if (ui.challenge) ui.sel.courseId = ui.challenge.courseId;
+  game.showcase(ui.sel.courseId);
+  ui.mainMenu();
+  document.getElementById('boot').remove();
+  window.game = game; // handy for debugging from the console
+} catch (e) {
+  // damaged saved data (or any start-up error) must not leave "Loading…" up for ever:
+  // offer a reload, and a reset of the saved settings, history and unfinished round
+  const boot = document.getElementById('boot');
+  if (boot) {
+    boot.innerHTML = `<div class="logo">PURE <span>STRIKE</span> GOLF</div>
+      <div class="boot-msg"><b>The game couldn’t start</b>
+      <p>Your saved settings or history may be damaged. Reloading usually fixes it; if it doesn’t, reset the saved data (this clears your rounds, stats and settings on this device).</p>
+      <button class="btn primary" id="bootReload">Reload</button> <button class="btn" id="bootReset">Reset saved data</button></div>`;
+    document.getElementById('bootReload').onclick = () => location.reload();
+    document.getElementById('bootReset').onclick = () => {
+      try {
+        Object.keys(localStorage).filter((k) => k.startsWith('psg-')).forEach((k) => localStorage.removeItem(k));
+      } catch (err) { /* storage blocked: nothing to clear */ }
+      location.reload();
+    };
+  }
+  throw e;
+}
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:' && !/[?&]nosw\b/.test(location.search)) {
   navigator.serviceWorker.register('sw.js').catch(() => { /* offline support is optional */ });

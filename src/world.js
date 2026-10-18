@@ -179,7 +179,7 @@ function blobGeo(r, detail, seed, squash = 1) {
 // collision metrics physics uses. Clump positions are shared by both so the
 // crowns the ball hits are the crowns you see.
 const TREE_BUILDERS = {
-  // Loblolly pine: tall bare trunk with a high, clumpy crown (Augusta)
+  // Loblolly pine: tall bare trunk with a high, clumpy crown (Magnolia National)
   pine: () => {
     const clumps = [[0, 19, 0, 3.4], [1.8, 16.5, 0.6, 2.6], [-1.6, 17.2, -0.9, 2.7], [0.4, 22, 0.4, 2.5], [-0.8, 14.6, 1.2, 2.2], [1.1, 20.2, -1.5, 2.3]];
     const wood = colorGeo(new THREE.CylinderGeometry(0.22, 0.42, 20, 7).translate(0, 10, 0), '#5a4330', 0.1, 1);
@@ -954,7 +954,7 @@ export class World {
         add(g, w.x, w.z, faceAng + Math.PI / 2, -0.4);
       }
     }
-    // Augusta-style white clubhouse near the 1st tee / 18th green is represented generically
+    // Southern-style white clubhouse near the 1st tee / 18th green is represented generically
   }
   building(w, h, d, wall, roof) {
     const g = new THREE.Group();

@@ -134,7 +134,7 @@ export class Game {
     try { s = JSON.parse(localStorage.getItem('psg-settings') || '{}'); } catch (e) { /* ignore */ }
     const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
     return {
-      profile: 'scratch', difficulty: 'standard', control: 'meter', units: 'yd', volume: 0.7, tracer: true,
+      profile: 'mid', difficulty: 'standard', control: 'meter', units: 'yd', volume: 0.7, tracer: true,
       reducedMotion: reduce, oneButton: false, captions: false, uiScale: 1, keys: {}, ffSeen: 0, hudDetail: 'essential', quality: 'auto', ...s,
     };
   }
@@ -1051,6 +1051,36 @@ export class Game {
   // advance the simulation n frames without requestAnimationFrame (testing/debugging)
   debugStep(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) this.frame(dt); }
 
+  // A far flag is only a few pixels, and on a tee shot the green can be out of view or off
+  // to one side: a tag over the flag (an arrow at the screen edge when it is off to the side)
+  // says where the pin is and how far, whatever the HUD detail.
+  updatePinTag(show) {
+    const el = this.pinTagEl || (this.pinTagEl = document.getElementById('pinTag'));
+    if (!el) return;
+    const h = this.hole;
+    if (!show || !h || !this.club || this.club.putter || this.cam.targetView || this.distToPin() < 30) {
+      if (!el.classList.contains('hidden')) el.classList.add('hidden');
+      return;
+    }
+    const c = h.cup, cam = this.camera;
+    const v = (this.pinV = this.pinV || new THREE.Vector3()).set(c.x, h.height(c.x, c.z) + 2.6, c.z);
+    const fwd = (this.pinF = this.pinF || new THREE.Vector3());
+    cam.getWorldDirection(fwd);
+    const behind = (v.x - cam.position.x) * fwd.x + (v.y - cam.position.y) * fwd.y + (v.z - cam.position.z) * fwd.z <= 0;
+    v.project(cam);
+    const W = innerWidth, H = innerHeight, m = 46;
+    if (!W || !H) return;
+    let x = (v.x * 0.5 + 0.5) * W, y = (-v.y * 0.5 + 0.5) * H, side = 0;
+    if (behind) { side = v.x > 0 ? -1 : 1; x = side < 0 ? m : W - m; y = H * 0.3; }
+    else if (x < m) { side = -1; x = m; } else if (x > W - m) { side = 1; x = W - m; }
+    if (side) y = clamp(y, 120, H * 0.5);
+    else y = clamp(y - 20, 100, H * 0.55);
+    const text = `${side < 0 ? '◀ ' : ''}⚑ ${this.fmtDist(this.distToPin())}${side > 0 ? ' ▶' : ''}`;
+    if (el.textContent !== text) el.textContent = text;
+    el.style.transform = `translate(${x.toFixed(0)}px, ${y.toFixed(0)}px) translate(-50%, -50%)`;
+    el.classList.remove('hidden');
+  }
+
   frame(dt) {
     const st = this.state;
     if (!this.ui.paused) {
@@ -1076,6 +1106,7 @@ export class Game {
       this.cam.apply(dt);
       if (st === 'address' && this.meter.state !== 'hidden') this.meter.draw();
     }
+    this.updatePinTag(st === 'address' || st === 'swing' || st === 'backswing');
     // ball visibility scale with distance
     const dCam = this.camera.position.distanceTo(this.ballMesh.position);
     this.ballMesh.scale.setScalar(clamp(dCam / 7, 1.3, 14));

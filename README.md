@@ -4,14 +4,14 @@ A 3D golf game built to be fun and physically honest. Every shot follows real ba
 
 **Play it in your browser: https://acolyer13.github.io/pure-strike-golf/**
 
-Four tribute courses, plus random courses and your own edits:
+Four original courses inspired by famous layouts, plus random courses and your own edits:
 
 | Course | Signature hole | What it teaches |
 |---|---|---|
-| **Augusta National** | 12 – Golden Bell | Elevation (plays-like yardage), fast sloping greens, missing on the correct side |
-| **St Andrews Old Course** | 17 – Road Hole | Firm links bounce-and-run, wind, pot bunkers, huge double greens |
-| **Pebble Beach** | 7 – Postage Stamp | Small targets, crosswinds over the ocean, carry vs total distance |
-| **TPC Sawgrass** | 17 – Island Green | Penalty-area strategy, wedge distance and spin, relief options |
+| **Magnolia National** | 12 – Yellow Bell | Elevation (plays-like yardage), fast sloping greens, missing on the correct side |
+| **The Auld Links** | 17 – Lane | Firm links bounce-and-run, wind, pot bunkers, huge double greens |
+| **Pebble Cliffs** | 7 – Postcard | Small targets, crosswinds over the ocean, carry vs total distance |
+| **Sedgegrass Stadium** | 17 – Island Green | Penalty-area strategy, wedge distance and spin, relief options |
 | **Random course** | – | A new 9 holes built from a seed, in the style of one of the courses above |
 
 ## Run it
@@ -32,7 +32,7 @@ To test a phone or tablet, open the game with `?perf` (for example https://acoly
 
 ## Ways to play
 
-- **Start here: guided first hole.** On a fresh install the big button runs a five-minute lesson on Augusta's 12th (beginner assists, calm wind): coach marks explain the distance and wind panels, the club, aiming, the three-click meter, the shot panel and putting as each comes up. Later it lives under How to play.
+- **Start here: guided first hole.** On a fresh install the big button runs a five-minute lesson on Magnolia National's 12th (beginner assists, calm wind): coach marks explain the distance and wind panels, the club, aiming, the three-click meter, the shot panel and putting as each comes up. Later it lives under How to play.
 - **Play a hole now.** Jumps straight onto the course's signature hole.
 - **Full 18, front 9, back 9 or a single hole.**
 - **Daily challenge.** Three holes, with the same pins and wind for everyone that day. Your best score for the day is kept.
@@ -41,7 +41,7 @@ To test a phone or tablet, open the game with `?perf` (for example https://acoly
 - **Random holes.** A procedurally generated 9-hole, par-36 course. The same seed always makes the same holes.
 - **Hot-seat.** Up to 4 players share one device. Each player gets their own outfit and scorecard row, plus a leaderboard at the end.
 - **Challenge links.** After a round, *Copy challenge link* gives a URL with the course, holes, pins and wind. The link also carries your score. A friend who opens it plays the same conditions, sees your score to beat on the banner, and gets a win/lose line on their summary. Older links without a score still work.
-- **Course editor.** Edit any hole's definition as JSON with a live plan-view preview, then play-test it. Your edits are saved to a separate "custom" course, so the tribute courses never change.
+- **Course editor.** Edit any hole's definition as JSON with a live plan-view preview, then play-test it. Your edits are saved to a separate "custom" course, so the built-in courses never change.
 
 **Stats** (menu) shows:
 - A World Handicap System index, worked out from your rounds.
@@ -72,7 +72,7 @@ All keys can be changed in **Settings → Controls**.
 | Esc | Pause menu |
 | Right-drag, mouse wheel | Orbit, zoom |
 
-**Analog swing** (setup → Swing → Analog) is Tiger Woods PSP style. Drag down for the backswing, then push up for the downswing.
+**Analog swing** (setup → Swing → Analog) is console-golf style. Drag down for the backswing, then push up for the downswing.
 - Length of the backswing sets power.
 - Tempo sets strike quality.
 - Sideways drift opens or closes the face.
@@ -99,11 +99,11 @@ Settings → Accessibility has these options:
 
 - **Ball flight.** A 3D aerodynamic model covers drag, Magnus lift, spin decay, air density and a wind profile. It is calibrated against TrackMan tour averages for carry, apex and landing angle (`npm run calibrate`).
 - **D-plane launch.** Start direction comes mostly from the face (~75% for irons, ~85% for driver). Curve comes from face-to-path. Strike quality changes smash factor.
-- **Turf interaction.** Restitution, friction and a Penner-style "crater" model decide bounce, check and release. Shallow long irons run out; steep wedges stop or spin back. Links turf is firmer than Augusta's.
+- **Turf interaction.** Restitution, friction and a Penner-style "crater" model decide bounce, check and release. Shallow long irons run out; steep wedges stop or spin back. Links turf is firmer than Magnolia National's.
 - **Lies.** Tee, fairway, cuts of rough, deep rough, pine straw, bunkers, waste areas and cart paths each change speed, spin and launch. Mario Golf's "lie %" is shown in the HUD. Sloping lies aim the face left or right.
 - **Putting.** Green speed is set as a real Stimpmeter reading. Break comes from the actual terrain slope. The meter marker teaches Dave Pelz's "17 inches past" speed.
 - **Caddie.** Plays-like distance accounts for elevation and wind. The power marker aims for where the ball *finishes*, not where it lands. The expected-strokes analysis compares clubs from the tee.
-- **Stats.** After every shot you see Strokes Gained against the PGA Tour baseline (Mark Broadie's method), plus a launch-monitor readout and coaching tips. The round summary shows where you lost strokes.
+- **Stats.** After every shot you see Strokes Gained against the professional-tour baseline (Mark Broadie's method), plus a launch-monitor readout and coaching tips. The round summary shows where you lost strokes.
 - **Rules.** Penalty areas offer stroke-and-distance, back-on-the-line and lateral relief. Each option shows its expected score. Out of bounds is stroke and distance.
 - **Determinism.** Each round has a seed that fixes every hole's pin and wind. That seed is what makes daily challenges and challenge links fair.
 - **Ground and light.** Mowing stripes carry a view-dependent sheen (light when the blades bend away from you, dark toward you, so they flip from the reverse angle), the turf has a micro normal that catches the low sun, and a tight shadow box keeps ball and tree shadows crisp.
@@ -118,7 +118,7 @@ Difficulty levels (Beginner, Standard, Pro) change meter speed, the size of the 
 - **Mario Golf: Toadstool Tour (GameCube).** Three-click power meter, lie percentage, green grid, approachable arcade feel. Sources: GameFAQs guide, StrategyWiki controls.
 - **Mario Golf: Super Rush (Switch).** Readable HUD, shot shaping with spin, fast pace of play. Sources: Nintendo site, Game8 controls guide, Wikipedia.
 - **Tiger Woods PGA Tour (PSP).** Analog swing, broadcast-style cameras and presentation. Source: [GameSpot review](https://www.gamespot.com/reviews/tiger-woods-pga-tour-review/1900-6121049/).
-- **Real golf data.** TrackMan PGA Tour averages; Golf Monthly club-distance tables; Broadie's *Every Shot Counts* for strokes gained; Pelz's putting research; the World Handicap System rules. Augusta hole yardages come from the Masters scorecard, and hole character from public hole-by-hole guides.
+- **Real golf data.** TrackMan PGA Tour averages; Golf Monthly club-distance tables; Broadie's *Every Shot Counts* for strokes gained; Pelz's putting research; the World Handicap System rules. The four courses are original designs inspired by famous layouts, with invented names; their character comes from public course-design guides.
 
 ## Project layout
 
@@ -182,4 +182,4 @@ Physics scripts: `node tools/calibrate.mjs`, `node tools/bounce-test.mjs`, `node
 
 ---
 
-The courses are tribute recreations based on public scorecards and hole guides. They are not affiliated with or endorsed by any club, tour or game publisher.
+The courses are original designs inspired by famous layouts, with invented names. They are not affiliated with or endorsed by any club, tour or game publisher.

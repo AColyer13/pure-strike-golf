@@ -94,7 +94,7 @@ function playHole(courseId, holeIndex, seed, policy, { profile = 'tour' } = {}) 
   return { round, hole, stats, strokes, penalties, holed, pickedUp: pu, log, score };
 }
 
-// the signature hole of each course (Sawgrass 17 is the island green: water relief)
+// the signature hole of each course (Sedgegrass 17 is the island green: water relief)
 const CASES = COURSES.filter((c) => SIGNATURE[c.id] !== undefined).map((c) => [c.id, SIGNATURE[c.id]]);
 
 for (const [courseId, idx] of CASES) {
@@ -322,5 +322,5 @@ test('lesson skill levels map to real settings', async () => {
   assert.deepEqual(LEVELS.map((l) => l.id), ['new', 'casual', 'regular']);
   assert.deepEqual(LEVELS[0].settings, { profile: 'mid', difficulty: 'beginner' });
   assert.deepEqual(LEVELS[1].settings, { profile: 'mid', difficulty: 'standard' });
-  assert.equal(LEVELS[2].settings, null, 'regular players keep what they had');
+  assert.deepEqual(LEVELS[2].settings, { profile: 'scratch', difficulty: 'standard' });
 });

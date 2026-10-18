@@ -165,6 +165,7 @@ select { font: 500 13px Barlow, sans-serif; background: #173022; color: var(--te
 body.coaching #caddie { visibility: hidden; }
 .caddie-ico { font-size: 18px; }
 #meter { position: absolute; left: 50%; bottom: 44px; transform: translateX(-50%); width: min(620px, 92vw); height: 70px; }
+#pinTag { position: fixed; left: 0; top: 0; z-index: 9; padding: 3px 10px; border-radius: 999px; background: rgba(8,20,13,.72); border: 1px solid rgba(255,255,255,.3); color: #fff; font: 700 14px "Barlow Condensed", sans-serif; letter-spacing: .03em; white-space: nowrap; pointer-events: none; text-shadow: 0 1px 2px rgba(0,0,0,.7); }
 #helpBar { position: fixed; bottom: 8px; left: 50%; transform: translateX(-50%); display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; font-size: 12px; color: rgba(255,255,255,.75); z-index: 10; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,.8); width: 96vw; }
 #helpBar b { color: #fff; }
 
@@ -544,6 +545,12 @@ body.reduced-motion *, body.reduced-motion *::before, body.reduced-motion *::aft
   body.in-round #windBox { display: flex; top: 8px; right: 8px; gap: 8px; }
   body.in-round #windBox #windTxt { display: none; }
   body.in-round .wind-dial { width: 38px; height: 38px; }
+  /* the hole card stops short of the wind dial: a smaller number tile, and the name and par line give way */
+  body.in-round #holeCard { max-width: calc(100vw - 132px); }
+  body.in-round #holeCard .hc-num { width: 44px; height: 44px; font-size: 32px; }
+  body.in-round #holeCard .hc-info { min-width: 0; }
+  body.in-round #holeCard :is(.hc-name, .hc-par) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  body.in-round #holeCard .hc-shot { white-space: nowrap; }
   body.in-round #windArrow { font-size: 17px; }
   body.in-round #distBox { top: 62px; left: auto; right: 8px; min-width: 0; max-width: 150px; text-align: right; }
   body.in-round #distBox .sub { align-items: flex-end; }
@@ -604,3 +611,18 @@ body.touch .course-tab { min-height: 44px; }
 
 .challenge-note { margin: 8px 0 4px; padding: 8px 12px; border-radius: 10px; background: rgba(255,255,255,.06); font-size: 14px; }
 .challenge-note.won { background: rgba(80,200,120,.18); }
+
+/* ---------- touch targets: every tappable control is at least 44 px (WCAG / Apple HIG) ---------- */
+@media (pointer: coarse) {
+  .seg, .btn, select { min-height: 44px; }
+  .seg { min-width: 44px; padding: 8px 14px; }
+}
+body.touch .seg, body.touch .btn, body.touch select { min-height: 44px; }
+body.touch .seg { min-width: 44px; padding: 8px 14px; }
+body.touch .segs { gap: 6px; }
+body.touch .drawer > summary { min-height: 44px; display: flex; align-items: center; }
+
+/* ---------- empty states ---------- */
+.empty-state { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; padding: 18px 8px 8px; }
+.empty-state b { font: 700 20px 'Barlow Condensed', sans-serif; }
+.empty-state p { margin: 0 0 6px; max-width: 360px; line-height: 1.45; }

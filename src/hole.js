@@ -234,7 +234,7 @@ export class Hole {
     for (const p of this.path) { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z); }
     const mL = (d.margin?.[0] ?? style.margin ?? 70) * YD, mR = (d.margin?.[1] ?? style.margin ?? 70) * YD;
     this.bounds = { minX: minX - mL, maxX: maxX + mR, minZ: minZ - 55, maxZ: maxZ + 30 };
-    // a green is never out of bounds: St Andrews' double greens run well wide of their hole
+    // a green is never out of bounds: links double greens run well wide of their hole
     {
       const B = this.bounds, G = 16;
       for (let x = this.gf.x - 90; x <= this.gf.x + 90; x += 1.5) for (let z = this.gf.z - 90; z <= this.gf.z + 90; z += 1.5) {
@@ -465,10 +465,10 @@ export class Hole {
     const pr = this.project(x, z);
     const st = this.style;
     let h = this.baseHeight(x, z) + pr.o * this.tilt;
-    // links humps (St Andrews), reduced on fairways
+    // links humps, reduced on fairways
     const fsd = this.fairwaySdf(x, z, pr);
     if (st.humps) h += fbm(x * 0.07, z * 0.07, this.seed + 21, 2) * st.humps * (0.45 + 0.55 * smooth(-4, 10, fsd));
-    // mounding along the edges of the rough (Sawgrass style)
+    // mounding along the edges of the rough (stadium style)
     if (st.mounds) h += Math.max(0, fbm(x * 0.025, z * 0.025, this.seed + 33, 2)) * st.mounds * smooth(6, 30, fsd);
 
     // tee pad

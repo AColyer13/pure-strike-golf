@@ -44,7 +44,7 @@ const LESSONS = [
   { id: 'putting', title: 'Putting: speed first',
     text: `<p>Dave Pelz measured the ideal putting speed as the one that would roll the ball <b>~17 inches (43 cm) past the hole</b>. It holds its line through the footprinted, bumpy ring near the cup and still drops when it catches the edge.</p>
       <ul><li>A ball dying at the hole breaks the most – most golfers under-read break and miss on the low side.</li><li>From 30+ ft, pros two-putt ~90% of the time: the goal is leaving it inside 3 ft, not making it.</li><li>Uphill putts break less and need more pace; downhill putts break more.</li></ul>
-      <p>The Stimpmeter number is how many feet a ball released at 1.83 m/s rolls: Augusta ~13, a typical club course ~9.</p>` },
+      <p>The Stimpmeter number is how many feet a ball released at 1.83 m/s rolls: Magnolia ~13, a typical club course ~9.</p>` },
   { id: 'sg', title: 'Strokes gained: what matters',
     text: `<p>Mark Broadie's <b>strokes gained</b> compares every shot to the tour average from the same spot. A 7 ft putt is holed about half the time (~1.5 strokes expected), so making it gains +0.5 and missing loses −0.5.</p>
       <p>His findings changed how golf is taught:</p>

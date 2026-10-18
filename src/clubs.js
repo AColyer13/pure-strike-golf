@@ -22,7 +22,7 @@ const TOUR = [
 ];
 
 export const PROFILES = {
-  tour:    { name: 'Tour Pro',       desc: 'PGA Tour average: 113 mph driver swing, ~275 yd carry.', speed: 1.0, smash: 1.0, spin: 1.0, launch: 0 },
+  tour:    { name: 'Tour Pro',       desc: 'Tour average: 113 mph driver swing, ~275 yd carry.', speed: 1.0, smash: 1.0, spin: 1.0, launch: 0 },
   // Amateur speeds are tuned so the full-swing carries match the descriptions (tests/physics.test.mjs)
   scratch: { name: 'Scratch Golfer', desc: 'Low handicap amateur: ~250 yd driver carry, 7 iron ~155.',    speed: 0.965, smash: 0.99, spin: 0.98, launch: 0.5 },
   mid:     { name: '15 Handicap',    desc: 'Typical club golfer: ~210 yd driver carry, 7 iron ~135.',        speed: 0.9, smash: 0.96, spin: 1.08, launch: 1.0 },

@@ -4,7 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Pure Strike Golf</title>
-<meta name="description" content="Free browser golf with real ball-flight physics, four tribute courses, and a caddie that explains every shot. Play on your phone or desktop, no download.">
+<meta name="description" content="Free browser golf with real ball-flight physics, four original courses, and a caddie that explains every shot. Play on your phone or desktop, no download.">
+<link rel="canonical" href="https://acolyer13.github.io/pure-strike-golf/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Pure Strike Golf">
+<meta property="og:title" content="Pure Strike Golf – free browser golf with real ball flight">
+<meta property="og:description" content="Four original courses, real ball-flight physics and a caddie that explains every shot. Play on your phone or desktop, no download. Can you beat my score?">
+<meta property="og:url" content="https://acolyer13.github.io/pure-strike-golf/">
+<meta property="og:image" content="https://acolyer13.github.io/pure-strike-golf/og-image.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="A golf ball on the tee looking down a fairway toward the flag in Pure Strike Golf">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Pure Strike Golf – free browser golf with real ball flight">
+<meta name="twitter:description" content="Four original courses, real ball-flight physics and a caddie that explains every shot. No download.">
+<meta name="twitter:image" content="https://acolyer13.github.io/pure-strike-golf/og-image.jpg">
 <link rel="preload" href="fonts/barlow-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/barlow-condensed-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="styles.css">
@@ -61,7 +75,7 @@
       <button id="btnHow" class="btn">How to play</button>
     </div>
     </div>
-    <div class="menu-foot muted small">Tribute recreations of famous courses based on public scorecards and hole guides. Not affiliated with or endorsed by any club, tour or game publisher.</div>
+    <div class="menu-foot muted small">Original courses inspired by famous layouts; all names are invented. Not affiliated with or endorsed by any club, tour or game publisher.</div>
   </div>
 </div>
 
@@ -92,6 +106,7 @@
   <div id="caddie" class="hidden"><div class="caddie-ico">🧢</div><div id="caddieText"></div></div>
   <canvas id="meter"></canvas>
 </div>
+<div id="pinTag" class="hidden" aria-hidden="true"></div>
 <div id="helpBar" class="hidden"></div>
 <div id="ffHint" class="hidden"></div>
 <div id="captions" aria-live="polite"></div>

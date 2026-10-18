@@ -76,8 +76,13 @@ export function challengeHash(r) {
 export function parseChallenge(hash) {
   const m = /#c=([a-z]+)\.([a-z0-9]+)\.([0-9-]+)\.(\d+)(?:\.(\d{1,5}))?(?![\w.])/.exec(hash || '');
   if (!m || !courseById(m[1], +m[4]) || !MODES[m[2]]) return null;
+  const course = courseById(m[1], +m[4]);
   const holes = m[3].split('-').map(Number).filter((i) => i >= 0 && i < 18);
   if (!holes.length) return null;
+  // a crafted link must still describe a playable round: closest-to-the-pin needs a par 3,
+  // long drive a par 4 or 5
+  if (m[2] === 'ctp' && !holes.every((i) => course.holes[i]?.par === 3)) return null;
+  if (m[2] === 'drive' && !holes.every((i) => course.holes[i]?.par >= 4)) return null;
   const c = { courseId: m[1], mode: m[2], holes, seed: +m[4] };
   if (m[5] != null) c.score = +m[5];
   return c;
