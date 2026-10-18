@@ -158,6 +158,7 @@ export class Game {
   get diff() { return DIFFICULTY[this.settings.difficulty] || DIFFICULTY.standard; }
 
   resize() {
+    if (!(innerWidth > 0 && innerHeight > 0)) return; // minimised or hidden: nothing to size to
     this.renderer.setSize(innerWidth, innerHeight);
     this.camera.aspect = innerWidth / innerHeight;
     this.camera.updateProjectionMatrix();
@@ -483,7 +484,7 @@ export class Game {
       w.reticle.position.set(land[0], h.height(land[0], land[2]) + 0.06, land[2]);
       w.reticle.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(...n));
       const carry = Math.hypot(land[0] - b.p[0], land[2] - b.p[2]);
-      w.reticle.scale.setScalar(clamp(carry / 55, 0.6, 6));
+      w.reticle.scale.setScalar(clamp(carry / 40, 0.8, 8));
       w.reticle.visible = true;
       w.setArc(out.path.concat([land]));
       w.arc.visible = this.settings.difficulty !== 'pro';
@@ -1075,6 +1076,13 @@ export class Game {
     else if (x < m) { side = -1; x = m; } else if (x > W - m) { side = 1; x = W - m; }
     if (side) y = clamp(y, 120, H * 0.5);
     else y = clamp(y - 20, 100, H * 0.55);
+    // keep the tag off the golfer's head when the flag lines up behind them
+    const hp = this.ball?.p;
+    if (hp) {
+      const hv = (this.pinH = this.pinH || new THREE.Vector3()).set(hp[0], hp[1] + 1.9, hp[2]).project(cam);
+      const hx = (hv.x * 0.5 + 0.5) * W, hy = (-hv.y * 0.5 + 0.5) * H;
+      if (Math.abs(x - hx) < 80 && Math.abs(y - hy) < 36) y = Math.max(70, hy - 46);
+    }
     const text = `${side < 0 ? '◀ ' : ''}⚑ ${this.fmtDist(this.distToPin())}${side > 0 ? ' ▶' : ''}`;
     if (el.textContent !== text) el.textContent = text;
     el.style.transform = `translate(${x.toFixed(0)}px, ${y.toFixed(0)}px) translate(-50%, -50%)`;

@@ -120,6 +120,10 @@ h1.logo { margin: 0; line-height: 1.1; }
 .segs { display: flex; flex-wrap: wrap; gap: 4px; }
 .seg { font: 600 13px Barlow, sans-serif; color: var(--text); background: rgba(255,255,255,.06); border: 1px solid var(--line); padding: 6px 10px; border-radius: 8px; cursor: pointer; }
 .seg:hover { background: rgba(255,255,255,.14); }
+.seg-desc { margin-top: 6px; min-height: 2.4em; line-height: 1.25; }
+.seg-desc:empty { display: none; }
+body.shot-open #helpBar { visibility: hidden; }
+.hist td.nowrap { white-space: nowrap; }
 .seg.on { background: var(--accent); color: #1b1a0c; border-color: var(--accent); }
 .sum-tabs { margin: 14px 0 2px; }
 select { font: 500 13px Barlow, sans-serif; background: #173022; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
@@ -164,6 +168,8 @@ select { font: 500 13px Barlow, sans-serif; background: #173022; color: var(--te
 /* the lesson card takes the caddie note's slot while a lesson step is up */
 body.coaching #caddie { visibility: hidden; }
 .caddie-ico { font-size: 18px; }
+.ico { width: 1.25em; height: 1.25em; display: block; margin: 0 auto; }
+.caddie-ico .ico { width: 20px; height: 20px; }
 #meter { position: absolute; left: 50%; bottom: 44px; transform: translateX(-50%); width: min(620px, 92vw); height: 70px; }
 #pinTag { position: fixed; left: 0; top: 0; z-index: 9; padding: 3px 10px; border-radius: 999px; background: rgba(8,20,13,.72); border: 1px solid rgba(255,255,255,.3); color: #fff; font: 700 14px "Barlow Condensed", sans-serif; letter-spacing: .03em; white-space: nowrap; pointer-events: none; text-shadow: 0 1px 2px rgba(0,0,0,.7); }
 #helpBar { position: fixed; bottom: 8px; left: 50%; transform: translateX(-50%); display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; font-size: 12px; color: rgba(255,255,255,.75); z-index: 10; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,.8); width: 96vw; }

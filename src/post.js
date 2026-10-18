@@ -93,6 +93,7 @@ export class PostPipeline {
 
   resize(w, h) {
     if (!this.composer) return;
+    if (!(w > 0 && h > 0)) return; // a hidden or collapsed window has no size: keep the old targets
     this.composer.setPixelRatio(this.renderer.getPixelRatio());
     this.composer.setSize(w, h);
   }

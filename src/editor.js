@@ -24,7 +24,12 @@ export class Editor {
     this.idx = 0;
   }
 
-  open() {
+  // opens on the given course and hole (the one being played, when there is one)
+  open(courseId, holeIdx) {
+    if (COURSES.some((c) => c.id === courseId)) {
+      this.baseId = courseId;
+      this.idx = holeIdx >= 0 && holeIdx < courseById(courseId).holes.length ? holeIdx : 0;
+    }
     this.root.classList.remove('hidden');
     this.load();
   }
@@ -130,8 +135,8 @@ export class Editor {
     const err = $('edErr');
     let def;
     try { def = JSON.parse($('edJson').value); } catch (e) { this.fail(`The hole layout has a typo (${e.message}). Check the commas, brackets and quotes, or press Revert to original to start again.`); return null; }
-    if (![3, 4, 5].includes(def.par)) { err.textContent = 'par must be 3, 4 or 5'; return null; }
-    if (!(def.yds >= 60 && def.yds <= 700)) { err.textContent = 'yds must be between 60 and 700'; return null; }
+    if (![3, 4, 5].includes(def.par)) { err.textContent = 'Par must be 3, 4 or 5.'; return null; }
+    if (!(def.yds >= 60 && def.yds <= 700)) { err.textContent = 'Yards must be between 60 and 700.'; return null; }
     let hole;
     try { hole = new Hole(def, courseById(this.baseId), this.idx, { pinIndex: 0 }); } catch (e) { this.fail(`That layout can't be built (${e.message}). Revert to original to start again.`); return null; }
     err.textContent = '';
@@ -158,7 +163,9 @@ export class Editor {
     const p = this.parse();
     const cv = $('edCanvas');
     const g = cv.getContext('2d');
-    if (!p) { g.clearRect(0, 0, cv.width, cv.height); return; }
+    // an invalid layout keeps the last good drawing on screen, dimmed, rather than going blank
+    if (!p) { cv.style.opacity = '.35'; return; }
+    cv.style.opacity = '';
     const { hole: h, def } = p;
     const B = h.bounds;
     const bw = B.maxX - B.minX, bd = B.maxZ - B.minZ;

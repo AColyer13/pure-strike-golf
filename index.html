@@ -60,11 +60,11 @@
     <details id="menuDrawer" class="drawer">
       <summary>Round setup &amp; options</summary>
       <div class="menu-opts">
-        <div class="opt"><label>Mode</label><div id="optMode" class="segs"></div><select id="optHole" class="hidden"></select></div>
+        <div class="opt"><label>Mode</label><div id="optMode" class="segs"></div><select id="optHole" class="hidden"></select><div id="optModeDesc" class="seg-desc muted small"></div></div>
         <div class="opt"><label>Players (hot-seat)</label><div id="optPlayers" class="segs"></div><div id="optNames" class="names"></div></div>
         <div class="opt"><label>Golfer</label><div id="optProfile" class="segs"></div><div id="profileDesc" class="muted small"></div></div>
-        <div class="opt"><label>Assists</label><div id="optDiff" class="segs"></div></div>
-        <div class="opt"><label>Swing</label><div id="optControl" class="segs"></div></div>
+        <div class="opt"><label>Assists</label><div id="optDiff" class="segs"></div><div id="optDiffDesc" class="seg-desc muted small"></div></div>
+        <div class="opt"><label>Swing</label><div id="optControl" class="segs"></div><div id="optControlDesc" class="seg-desc muted small"></div></div>
         <div class="opt"><label>Units</label><div id="optUnits" class="segs"></div></div>
       </div>
     </details>
@@ -103,7 +103,7 @@
     <div class="lie-range" id="lieRange"></div><div class="sub" id="lieSlope"></div>
   </div>
   <canvas id="minimap" class="panel"></canvas>
-  <div id="caddie" class="hidden"><div class="caddie-ico">🧢</div><div id="caddieText"></div></div>
+  <div id="caddie" class="hidden"><div class="caddie-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 15c0-5 4-9 9-9s9 4 9 9zM3 17h18c0 1.5-1 2.5-2.5 2.5h-13C4 19.5 3 18.5 3 17z" fill="currentColor"/></svg></div><div id="caddieText"></div></div>
   <canvas id="meter"></canvas>
 </div>
 <div id="pinTag" class="hidden" aria-hidden="true"></div>
@@ -119,8 +119,8 @@
   </div>
   <div class="tc-right">
     <button data-act="menu" aria-label="Menu">☰<small>menu</small></button>
-    <button data-act="targetView" aria-label="Target view">👁<small>view</small></button>
-    <button data-act="skip" aria-label="Skip">⏭<small>skip</small></button>
+    <button data-act="targetView" aria-label="Target view"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M1.5 12S5.5 5 12 5s10.5 7 10.5 7-4 7-10.5 7S1.5 12 1.5 12z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/></svg><small>view</small></button>
+    <button data-act="skip" aria-label="Skip"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5l11 7-11 7zM18 5v14" fill="currentColor" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/></svg><small>skip</small></button>
     <button data-act="shapeCycle" aria-label="Shot shape: draw, straight, fade">⤳<small>shape</small></button>
     <button data-act="trajCycle" aria-label="Ball flight: low, standard, high">⤒<small>flight</small></button>
     <button data-act="aimPin" aria-label="Aim at the pin">⚑<small>pin</small></button>

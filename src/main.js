@@ -28,6 +28,11 @@ try {
   if (ui.challenge) ui.sel.courseId = ui.challenge.courseId;
   game.showcase(ui.sel.courseId);
   ui.mainMenu();
+  if (!ui.challenge && /^#c=/.test(location.hash)) {
+    // a link that is damaged, or for a hole that can't be played that way: say so instead of ignoring it
+    ui.toast('That challenge link isn’t valid, so it was ignored', 'bad');
+    window.history.replaceState?.(null, '', location.pathname + location.search);
+  }
   document.getElementById('boot').remove();
   window.game = game; // handy for debugging from the console
 } catch (e) {

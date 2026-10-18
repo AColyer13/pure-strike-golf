@@ -34,8 +34,8 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 const keyName = (k) => ({ ' ': 'Space', ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→', Escape: 'Esc' }[k] || (k.length === 1 ? k.toUpperCase() : k));
 // the touch buttons that stand in for each keyboard action (input.js dispatches the same names)
 const TOUCH_LABELS = {
-  swing: 'SWING', aimLeft: '◀', aimRight: '▶', clubUp: '▲', clubDown: '▼', aimPin: '⚑', targetView: '👁',
-  shapeLeft: 'shape', shapeRight: 'shape', trajUp: 'flight', trajDown: 'flight', skip: '⏭', replay: '👁',
+  swing: 'SWING', aimLeft: '◀', aimRight: '▶', clubUp: '▲', clubDown: '▼', aimPin: '⚑', targetView: 'view',
+  shapeLeft: 'shape', shapeRight: 'shape', trajUp: 'flight', trajDown: 'flight', skip: 'skip', replay: 'view',
   fastForward: 'SWING', pause: '☰',
 };
 // actions that share a key without clashing: they only act in different states (a held Space is
@@ -184,16 +184,27 @@ export class UI {
       <div class="cc-teach"><b>Teaches</b><ul>${course.teaches.map((t) => `<li>${t}</li>`).join('')}</ul></div>
       ${bests.length ? `<div class="cc-best">${bests.map(([m, b]) => `Best ${MODES[m].name}: ${toParStr(b.toPar)} (${b.strokes})`).join(' · ')}</div>` : ''}`;
 
-    // quick play: the signature hole, no setup (the same hole every visit, so the button is predictable)
-    const sig = SIGNATURE[course.id] ?? 0;
+    // quick play: no setup. The first visit offers the signature hole; after each quick hole the
+    // button moves on to a different one, so it isn't the same hole for ever
+    const qkey = `psg-quick-${course.id}`;
+    let sig = SIGNATURE[course.id] ?? 0;
+    try {
+      const n = parseInt(localStorage.getItem(qkey), 10);
+      if (n >= 0 && n < course.holes.length) sig = n;
+    } catch (e) { /* storage blocked: stay on the signature hole */ }
     const sh = course.holes[sig];
+    const nextQuick = () => {
+      let n;
+      do { n = Math.floor(Math.random() * course.holes.length); } while (n === sig && course.holes.length > 1);
+      try { localStorage.setItem(qkey, String(n)); } catch (e) { /* ignore */ }
+    };
     if (this.tutorial && firstRun()) {
       // never played: the primary button is the guided hole
       $('btnQuick').innerHTML = 'Start here: guided first hole ▶<small>Magnolia 12 · par 3 · about 5 minutes · explains every control</small>';
       $('btnQuick').onclick = () => this.tutorial.start();
     } else {
       $('btnQuick').innerHTML = `Play a hole now ▶<small>${sig + 1}. ${sh.name} · par ${sh.par}</small>`;
-      $('btnQuick').onclick = () => this.start({ courseId: course.id, holes: [sig], mode: 'single' });
+      $('btnQuick').onclick = () => { nextQuick(); this.start({ courseId: course.id, holes: [sig], mode: 'single' }); };
     }
     $('btnPlay').innerHTML = `Tee off ▶<small>${MODES[this.sel.mode].name}${this.sel.players > 1 ? ` · ${this.sel.players} players` : ''}</small>`;
     $('btnPlay').onclick = () => this.play();
@@ -240,10 +251,13 @@ export class UI {
     const opt = (id, val, list) => {
       const box = $(id);
       box.innerHTML = '';
+      const desc = $(id + 'Desc');
+      if (desc) desc.textContent = '';
       for (const [k, label, title] of list) {
         const b = el('button', 'seg' + (String(k) === String(val) ? ' on' : ''), label);
         b.setAttribute('aria-pressed', String(k) === String(val));
         if (title) b.title = title;
+        if (title && desc && String(k) === String(val)) desc.textContent = title;
         b.onclick = () => { this.setOpt(id, k); this.mainMenu(); };
         box.appendChild(b);
       }
@@ -332,7 +346,7 @@ export class UI {
 
   hideAll() {
     for (const id of ['menu', 'intro', 'scorecard', 'relief', 'pause', 'confirmBox', 'summary', 'shotPanel', 'help', 'settings', 'stats', 'editor']) $(id).classList.add('hidden');
-    document.body.classList.remove('sc-open');
+    document.body.classList.remove('sc-open', 'shot-open');
     this.scModal = false;
     this.paused = false;
     this.ffHint(false);
@@ -562,7 +576,7 @@ export class UI {
   ffHint(on) {
     const h = $('ffHint');
     if (!h) return;
-    if (on) h.innerHTML = this.touch ? 'Hold <b>SWING</b> to fast-forward · <b>⏭</b> to skip'
+    if (on) h.innerHTML = this.touch ? 'Hold <b>SWING</b> to fast-forward · <b>skip</b> button to skip'
       : `Hold <b>${this.key('fastForward')}</b> to fast-forward · <b>${this.key('skip')}</b> to skip`;
     h.classList.toggle('hidden', !on);
   }
@@ -571,7 +585,8 @@ export class UI {
   shotPanelShown() { return !$('shotPanel').classList.contains('hidden'); }
   showShotPanel(o) {
     const p = $('shotPanel');
-    if (!o) { p.classList.add('hidden'); return; }
+    if (!o) { p.classList.add('hidden'); document.body.classList.remove('shot-open'); return; }
+    document.body.classList.add('shot-open'); // the panel sits over the key hints, so they step aside
     const { info, sg, tips, extra, canReplay } = o;
     const rows = [];
     const ld = info.ld;
@@ -607,7 +622,7 @@ export class UI {
       ${sgHtml}
       ${tipsHtml ? `<div class="sp-tips"><div class="sp-sub">Caddie</div>${tipsHtml}</div>` : ''}
       <div class="sp-btns"><button class="btn primary sp-go">Continue</button><button class="btn sp-more">Details</button></div>
-      <div class="sp-cont">${this.touch ? 'Tap anywhere to continue' : `${this.key('swing')} / click to continue`}${canReplay ? ` · <b>${this.touch ? '👁' : this.key('replay')}</b> replay` : ''}</div>`;
+      <div class="sp-cont">${this.touch ? 'Tap anywhere to continue' : `${this.key('swing')} / click to continue`}${canReplay ? ` · <b>${this.touch ? 'view' : this.key('replay')}</b> replay` : ''}</div>`;
     p.classList.remove('hidden', 'open');
     p.onclick = () => this.game.continueAfterResult();
     for (const d of p.querySelectorAll('details.why')) d.onclick = (e) => e.stopPropagation(); // opening it must not skip the panel
@@ -771,7 +786,7 @@ export class UI {
       <div id="sumCard">${card(round.players[0], t)}</div>
       ${lesson
         ? '<div class="row wrap sum-actions"><button class="btn primary" id="sumFront">Play the front 9</button><button class="btn" id="sumAgain">Replay this hole</button><button class="btn" id="sumMenu">Main menu</button></div>'
-        : '<div class="row wrap sum-actions"><button class="btn primary" id="sumAgain">Play again</button><button class="btn" id="sumShare">Copy challenge link</button><button class="btn" id="sumMenu">Main menu</button></div>'}`;
+        : '<div class="row wrap sum-actions"><button class="btn primary" id="sumAgain">Play again</button><button class="btn" id="sumCardBtn">Scorecard</button><button class="btn" id="sumShare">Copy challenge link</button><button class="btn" id="sumMenu">Main menu</button></div>'}`;
     for (const b of s.querySelectorAll('.sum-tabs button')) {
       b.onclick = () => {
         const pl = round.players[+b.dataset.p];
@@ -811,6 +826,7 @@ export class UI {
     $('sumAgain').onclick = () => { s.classList.add('hidden'); this.game.startRound({ courseId: course.id, holes: round.holes, mode: round.mode, players, seed: course.generated ? round.seed : undefined, target: round.target }); };
     $('sumMenu').onclick = () => { s.classList.add('hidden'); this.game.quitToMenu(); };
     // after the guided hole the obvious next step is a real round on the same course
+    if ($('sumCardBtn')) $('sumCardBtn').onclick = () => { s.classList.add('hidden'); this.scorecard(course, round, true, () => s.classList.remove('hidden'), 'Back to summary'); };
     if ($('sumFront')) $('sumFront').onclick = () => { s.classList.add('hidden'); this.game.startRound({ courseId: course.id, holes: [...Array(9).keys()], mode: 'front' }); };
     if (!$('sumShare')) return;
     $('sumShare').onclick = async () => {
@@ -921,7 +937,15 @@ export class UI {
     if ($('sKeysReset')) $('sKeysReset').onclick = () => { s.keys = {}; save(); this.showSettings(true); };
     $('sClose').onclick = () => this.showSettings(false);
     // the editor is its own screen: leave the pause state behind rather than hand back to it
-    $('sEditor').onclick = () => { if (this.fromPause) { this.fromPause = false; this.togglePause(); } this.showSettings(false); this.editor.open(); };
+    $('sEditor').onclick = () => {
+      // open on the hole being played (or the one picked in the menu), not always hole 1
+      const r = this.fromPause ? this.game.round : null;
+      const cid = r ? r.course.id : this.sel.courseId;
+      const hole = r ? r.holes[r.i] : (+this.sel.hole || 1) - 1;
+      if (this.fromPause) { this.fromPause = false; this.togglePause(); }
+      this.showSettings(false);
+      this.editor.open(cid, hole);
+    };
     for (const b of box.querySelectorAll('.remap [data-act]')) {
       b.onclick = () => {
         const a = b.dataset.act;
@@ -980,12 +1004,12 @@ export class UI {
       ${trend.length ? '' : '<p class="muted small">Trends appear once you finish a 9- or 18-hole round.</p>'}
       <div class="trend ${trend.length ? '' : 'hidden'}">${cats.map(([k, n, c]) => `<div><span>${n}</span><b class="${avg(k) >= 0 ? 'good' : 'bad'}">${sgn(avg(k), 1)}</b>${spark(k, c)}</div>`).join('')}</div>
       <h3>Personal bests</h3>
-      <div class="bests">${bests.map(([c, m, b]) => `<div><span>${c.name} · ${MODES[m]?.name || m}</span><b>${toParStr(b.toPar)} (${b.strokes})</b><small>${b.date}</small></div>`).join('') || '<p class="muted">None yet.</p>'}</div>
+      <div class="bests">${bests.map(([c, m, b]) => `<div><span>${c.name} · ${MODES[m]?.name || m}</span><b>${toParStr(b.toPar)} (${b.strokes})</b><small>${dayLabel(b.date)}</small></div>`).join('') || '<p class="muted">None yet.</p>'}</div>
       <h3>Recent rounds</h3>
       <table class="hist"><tr><th>Date</th><th>Course</th><th>Mode</th><th>Score</th><th>Putts</th><th>SG</th></tr>
-      ${mine.slice(-12).reverse().map((r) => `<tr><td>${localDay(r.date)}</td><td>${r.course === 'gen' ? 'Random course' : r.course === 'custom' ? 'Custom course' : courseById(r.course)?.name || r.course}</td><td>${MODES[r.mode]?.name || r.mode}</td><td>${toParStr(r.strokes - r.par)} (${r.strokes})</td><td>${r.putts}</td><td class="${r.sgTotal >= 0 ? 'good' : 'bad'}">${sgn(r.sgTotal, 1)}</td></tr>`).join('')}</table>
+      ${mine.slice(-12).reverse().map((r) => `<tr><td class="nowrap">${dayLabel(localDay(r.date))}</td><td>${r.course === 'gen' ? 'Random course' : r.course === 'custom' ? 'Custom course' : courseById(r.course)?.name || r.course}</td><td>${MODES[r.mode]?.name || r.mode}</td><td>${toParStr(r.strokes - r.par)} (${r.strokes})</td><td>${r.putts}</td><td class="${r.sgTotal >= 0 ? 'good' : 'bad'}">${sgn(r.sgTotal, 1)}</td></tr>`).join('')}</table>
       ` : `<div class="empty-state"><b>No rounds yet</b><p class="muted">Finish a hole or a round and your scores, strokes-gained trends, personal bests and a handicap estimate appear here.</p>${$('menu').classList.contains('hidden') ? '' : '<button class="btn primary" id="stPlay">Play a hole now ▶</button>'}</div>`}
-      <div class="row wrap"><button class="btn primary" id="stClose">Close</button>${mine.length ? '<button class="btn danger" id="stClear">Clear history</button>' : ''}</div>`;
+      <div class="row wrap"><button class="btn" id="stClose">Close</button>${mine.length ? '<button class="btn danger" id="stClear">Clear history</button>' : ''}</div>`;
     $('stClose').onclick = () => this.showStats(false);
     const stPlay = $('stPlay');
     if (stPlay) stPlay.onclick = () => { this.showStats(false); $('btnQuick').click(); };
@@ -1003,22 +1027,22 @@ export class UI {
     const setup = touch
       ? `<li>Hold <b>${k('aimLeft')}</b> or <b>${k('aimRight')}</b> to turn your aim; <b>${k('aimPin')}</b> re-aims at the pin (on the green it flips between the caddie's read and the cup). Tap the mini-map, or tap <b>${k('targetView')}</b> and then the ground.</li>
         <li><b>${k('clubUp')} ${k('clubDown')}</b> change club. Carry / total distances are shown for a full swing.</li>
-        <li><b>${k('shapeLeft')}</b> cycles draw, straight and fade: the club path is set in-to-out or out-to-in with the face between them (the D-plane).</li>
+        <li><b>${k('shapeLeft')}</b> cycles draw (curves left), straight and fade (curves right) for a right-hander.</li>
         <li><b>${k('trajUp')}</b> cycles low, standard and high flight.</li>
         <li><b>Plays like</b> includes elevation and wind. The lie box shows how the lie affects distance.</li>
         <li>In flight: hold <b>${k('fastForward')}</b> to fast-forward, <b>${k('skip')}</b> skips to where it finishes. <b>${k('replay')}</b> replays the shot from a new angle.</li>
         <li>Drag one finger on the view to look around.</li>`
       : `<li><b>${k('aimLeft')} ${k('aimRight')}</b> aim, <b>${k('aimFine')}</b> for fine aim. <b>${k('aimPin')}</b> re-aims at the pin (on the green it flips between the caddie's read and the cup). Click the mini-map, or press <b>${k('targetView')}</b> and click the ground.</li>
         <li><b>${k('clubUp')} ${k('clubDown')}</b> change club. Carry / total distances are shown for a full swing.</li>
-        <li><b>${k('shapeLeft')} / ${k('shapeRight')}</b> draw or fade: the club path is set in-to-out or out-to-in with the face between them (the D-plane).</li>
+        <li><b>${k('shapeLeft')} / ${k('shapeRight')}</b> draw (curves left) or fade (curves right) for a right-hander.</li>
         <li><b>${k('trajUp')} / ${k('trajDown')}</b> high or low trajectory.</li>
         <li><b>Plays like</b> includes elevation and wind. The lie box shows how the lie affects distance.</li>
         <li><b>${k('grid')}</b> shows the green grid: colour = slope, and the dots flow downhill.</li>
         <li>In flight: hold <b>${k('fastForward')}</b> to fast-forward, <b>${k('skip')}</b> skips to where it finishes. <b>${k('replay')}</b> replays the shot from a new angle.</li>
         <li>Right-drag orbits the camera; the wheel zooms.</li>`;
     const analog = touch
-      ? `<ol><li>Put one finger on the view and drag <b>down</b> – that's the backswing length.</li><li>Drag <b>up</b> past the start point to swing. A smooth, quick push gives full power.</li><li>Drifting left or right opens/closes the face; the stroke direction sets the club path.</li></ol>`
-      : `<ol><li>Hold the left mouse button and pull <b>down</b> – that's the backswing length.</li><li>Push <b>up</b> past the start point to swing. A smooth, quick push gives full power.</li><li>Drifting left or right opens/closes the face; the stroke direction sets the club path.</li></ol>
+      ? `<ol><li>Put one finger on the view and drag <b>down</b> – that's the backswing length.</li><li>Drag <b>up</b> past the start point to swing. A smooth, quick push gives full power.</li><li>Drifting left or right opens/closes the clubface, so keep the push straight up.</li></ol>`
+      : `<ol><li>Hold the left mouse button and pull <b>down</b> – that's the backswing length.</li><li>Push <b>up</b> past the start point to swing. A smooth, quick push gives full power.</li><li>Drifting left or right opens/closes the clubface, so keep the push straight up.</li></ol>
         <p class="muted small">Gamepad: the right stick does the same – pull back, then push up.</p>`;
     h.innerHTML = `<h2>How to play</h2>
       <div class="help-cols">

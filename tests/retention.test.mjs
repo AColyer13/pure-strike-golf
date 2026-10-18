@@ -137,3 +137,14 @@ test('crafted challenge links must describe a playable round', () => {
   assert.ok(parseChallenge(`#c=augusta.drive.${par4}.5`));
   assert.equal(parseChallenge(`#c=augusta.drive.${par3}.5`), null, 'long drive on a par 3');
 });
+
+test('closest-to-the-pin falls back to the shortest par 3, and a damaged challenge link is rejected', () => {
+  for (const c of COURSES) {
+    const par3 = c.holes.filter((h) => h.par === 3);
+    const shortest = Math.min(...par3.map((h) => h.yds));
+    // hole 1 is not a par 3 on any course here, so the fallback applies
+    const i = c.holes[0].par === 3 ? 1 : 0;
+    if (c.holes[i].par !== 3) assert.equal(c.holes[holesFor('ctp', c.id, i + 1)[0]].yds, shortest, c.id);
+  }
+  assert.equal(parseChallenge('#c=garbage'), null);
+});

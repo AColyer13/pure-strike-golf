@@ -42,10 +42,12 @@ export function holesFor(mode, courseId, single = 1) {
   if (mode === 'front') return [...Array(9).keys()];
   if (mode === 'back') return [...Array(9).keys()].map((i) => i + 9);
   if (mode === 'ctp') {
-    // the chosen hole if it is a par 3, else the course's first par 3
+    // the chosen hole if it is a par 3, else the course's shortest par 3 (reachable for most players)
     const i = single - 1;
     if (course.holes[i]?.par === 3) return [i];
-    return [course.holes.findIndex((h) => h.par === 3)];
+    let best = -1;
+    course.holes.forEach((h, j) => { if (h.par === 3 && (best < 0 || h.yds < course.holes[best].yds)) best = j; });
+    return [best];
   }
   if (mode === 'drive') {
     const i = single - 1;

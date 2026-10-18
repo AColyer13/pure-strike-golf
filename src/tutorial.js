@@ -37,8 +37,8 @@ export const STEPS = [
     text: (g, k, touch) => `Your caddie picked a club whose full-swing carry covers the plays-like distance. ${touch ? `The ${k('clubUp')} and ${k('clubDown')} buttons` : `${k('clubUp')} / ${k('clubDown')}`} change it; the caddie bubble explains the choice.` },
   { id: 'aim', when: (g) => g.state === 'address', anchor: 'clubBox', title: 'Aim',
     text: (g, k, touch) => (touch
-      ? `Hold ${k('aimLeft')} or ${k('aimRight')} to turn your aim; ${k('aimPin')} aims back at the pin. You can also drag the view to look around. The ring on the ground is where this club lands with a full swing.`
-      : `${k('aimLeft')} / ${k('aimRight')} move your aim (hold ${k('aimFine')} for fine steps); ${k('aimPin')} aims back at the pin. The ring on the ground is where this club lands with a full swing.`) },
+      ? `Hold ${k('aimLeft')} or ${k('aimRight')} to turn your aim; ${k('aimPin')} aims back at the pin. You can also drag the view to look around. The ring at the end of the arc is where this club lands with a full swing.`
+      : `${k('aimLeft')} / ${k('aimRight')} move your aim (hold ${k('aimFine')} for fine steps); ${k('aimPin')} aims back at the pin. The ring at the end of the arc is where this club lands with a full swing.`) },
   { id: 'meter', when: (g) => g.state === 'address', anchor: 'meter', title: 'The three-click swing',
     text: (g, k, touch) => {
       const tap = touch ? 'Tap' : 'Press', again = touch ? 'tap' : 'press';
