@@ -220,6 +220,12 @@ export class Tutorial {
       left = m;
       top = dock.top - H - gap;
       side = r && r.top >= dock.top ? 'above' : 'none';
+    } else if (this.ui.touch && vh > vw && this.cur.finish) {
+      // the level question is tall: sit it under the HUD panels so it neither covers the shot panel's
+      // Continue button nor the swing controls
+      left = m;
+      top = Math.max(0, ...['holeCard', 'distBox', 'windBox'].map((id) => $(id)?.getBoundingClientRect().bottom || 0)) + gap;
+      side = 'none';
     } else if (r) {
       const cands = [
         ['right', r.right + gap, r.top],

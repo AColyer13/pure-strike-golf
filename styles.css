@@ -482,6 +482,13 @@ body:not(.hud-essential) .lie-line { display: none; }
 #coachMark[data-side="below"]::before { top: -8px; left: 28px; }
 #coachMark[data-side="above"]::before { bottom: -8px; left: 28px; box-shadow: 2px 2px 0 #ffe25a; }
 #coachMark[data-side="none"]::before { display: none; }
+/* landscape phone: the level question goes wide and short, three choices side by side, so it never fills the screen */
+@media (max-height: 500px) {
+  #coachMark:has(.cm-level:not(.hidden)) { width: min(600px, calc(100vw - 16px)); }
+  #coachMark .cm-level { flex-direction: row; flex-wrap: wrap; }
+  #coachMark .cm-level .cm-ask { flex: 1 0 100%; }
+  #coachMark .cm-lv { flex: 1 1 0; min-width: 0; }
+}
 .tut-focus { box-shadow: 0 0 0 3px #ffe25a, 0 0 24px 6px rgba(255, 226, 90, .55) !important; border-radius: var(--radius); }
 #meter.tut-focus { border-radius: 10px; }
 body.flyover #hud > .panel.tut-focus { opacity: 1; }
@@ -523,7 +530,7 @@ body.reduced-motion *, body.reduced-motion *::before, body.reduced-motion *::aft
      shot can reach it) stays up at address; not for putts, where the green fills the view anyway */
   body.hud-essential.in-round:not(.target-view) #hud[data-state="address"]:not([data-putt="1"]) #minimap { display: block; }
   /* the lesson's tips sit in this column on a narrow phone: the map waits until the lesson ends */
-  body.hud-essential.in-round.coaching #hud #minimap { display: none; }
+  body.in-round.coaching #hud #minimap { display: none !important; }
 }
 
 /* ---------- course editor ---------- */
