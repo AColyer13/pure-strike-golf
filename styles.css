@@ -484,6 +484,10 @@ body:not(.hud-essential) .lie-line { display: none; }
 #coachMark[data-side="none"]::before { display: none; }
 /* landscape phone: the level question goes wide and short, three choices side by side, so it never fills the screen */
 @media (max-height: 500px) {
+  #coachMark { width: min(300px, calc(100vw - 16px)); }
+  body.touch #coachMark { font-size: 12px; line-height: 1.3; padding: 8px 10px 6px; }
+  body.touch #coachMark h4 { font-size: 16px; margin: 0 0 2px; }
+  body.touch #coachMark p { margin-bottom: 6px; }
   #coachMark:has(.cm-level:not(.hidden)) { width: min(600px, calc(100vw - 16px)); }
   #coachMark .cm-level { flex-direction: row; flex-wrap: wrap; }
   #coachMark .cm-level .cm-ask { flex: 1 0 100%; }

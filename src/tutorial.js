@@ -51,7 +51,7 @@ export const STEPS = [
     text: () => 'In the water: one penalty stroke. Each option shows the tour-average strokes to hole out from that drop, so the lowest number is the smart choice.',
     done: (g) => g.state !== 'relief' },
   { id: 'result', when: (g) => g.state === 'result', anchor: 'shotPanel', title: 'What happened',
-    text: (g, k, touch) => `Launch-monitor numbers for the shot. Strokes Gained compares it with a tour pro from the same spot: negative means it cost you. The coach’s tip explains why the ball did what it did. ${touch ? 'Tap Continue' : `${k('swing')} continues`}.`,
+    text: (g, k, touch) => `Launch-monitor numbers for the shot. Strokes Gained compares it with a tour pro from the same spot: negative means it cost you. The caddie’s tip explains why the ball did what it did. ${touch ? 'Tap Continue' : `${k('swing')} continues`}.`,
     done: (g) => g.state !== 'result' },
   { id: 'green', when: (g) => g.state === 'address' && !!g.club?.putter, anchor: 'distBox', title: 'On the green',
     text: (g, k, touch) => `“Stroke it N ft” is the pace that finishes about 17 inches past the hole, the best chance of dropping. The line on the green shows the break${touch ? '.' : `; ${k('grid')} toggles the grid, whose dots flow downhill.`}` },
@@ -63,7 +63,7 @@ export const STEPS = [
   { id: 'again', when: (g) => g.state === 'address' && !g.club?.putter && g.strokes > 0, anchor: 'clubBox', title: 'Not on yet',
     text: () => 'Same routine: the caddie re-reads the distance and lie every shot. The lie percentage is how much distance the grass costs you.' },
   { id: 'holed', when: (g) => g.state === 'result' && g.resultNext === 'holed', anchor: 'shotPanel', title: 'Hole complete', finish: true,
-    text: () => `That’s golf. Your coach explains every shot, the scorecard tracks Strokes Gained by category, and the Golf Academy in the menu explains the physics. ${tutorialDone() ? 'You are ready for a full round.' : 'Pick the closest match and your first round starts at the right difficulty (change it any time in Settings).'}`,
+    text: () => `That’s golf. Your caddie explains every shot, the scorecard tracks Strokes Gained by category, and the Golf Academy in the menu explains the physics. ${tutorialDone() ? 'You are ready for a full round.' : 'Pick the closest match and your first round starts at the right difficulty (change it any time in Settings).'}`,
     done: (g) => g.state !== 'result' },
 ];
 
@@ -157,7 +157,7 @@ export class Tutorial {
     const el = document.createElement('div');
     el.id = 'coachMark';
     el.className = 'hidden';
-    el.innerHTML = '<div class="cm-step">Guided first hole</div><h4></h4><p></p><div class="cm-btns"><button class="cm-skip" type="button">Skip the lesson</button><button class="btn primary cm-next" type="button">Next</button></div>'
+    el.innerHTML = '<div class="cm-step">Your caddie · guided first hole</div><h4></h4><p></p><div class="cm-btns"><button class="cm-skip" type="button">Skip the lesson</button><button class="btn primary cm-next" type="button">Next</button></div>'
       + `<div class="cm-level hidden"><div class="cm-ask">How much golf do you play?</div>${LEVELS.map((l) => `<button class="btn cm-lv" type="button" data-lv="${l.id}">${l.label}<small>${l.hint}</small></button>`).join('')}</div>`;
     el.querySelector('.cm-skip').onclick = () => this.end();
     el.querySelector('.cm-next').onclick = () => this.advance();
@@ -206,6 +206,33 @@ export class Tutorial {
     if (!r.width || !r.height || cs.display === 'none' || cs.visibility === 'hidden') return null;
     return r;
   }
+  // The spot nearest the anchor (or screen centre) where a W x H tip covers none of the panels the
+  // player is using, or null if the screen has no such gap. The tip's own anchor may stay under it.
+  freeSpot(anchor, W, H, m) {
+    const vw = innerWidth, vh = innerHeight;
+    const shown = (e) => { const b = e?.getBoundingClientRect(); return b && b.width && b.height && getComputedStyle(e).display !== 'none' ? b : null; };
+    const hitsAnchor = (b) => anchor && b.left < anchor.right && b.right > anchor.left && b.top < anchor.bottom && b.bottom > anchor.top;
+    const tc = $('touchControls');
+    const thumbs = tc && getComputedStyle(tc).opacity > 0.5 ? [...tc.querySelectorAll('button')].map(shown).filter(Boolean) : [];
+    const panels = ['holeCard', 'distBox', 'windBox'].map((id) => shown($(id))).filter((b) => b && !hitsAnchor(b));
+    const others = ['clubBox', 'lieBox', 'shotPanel', 'minimap', ...(this.cur.anchor !== 'meter' && this.g.state === 'address' ? ['meter'] : [])]
+      .map((id) => shown($(id))).filter((b) => b && !hitsAnchor(b));
+    const cx = anchor ? (anchor.left + anchor.right) / 2 : vw / 2, cy = anchor ? (anchor.top + anchor.bottom) / 2 : vh / 2;
+    // the tip never covers the thumb buttons; it keeps off its own anchor and then the other panels as far as the screen allows
+    const pin = anchor ? [anchor] : [];
+    for (const clear of [[...thumbs, ...panels, ...others, ...pin], [...thumbs, ...panels, ...pin], [...thumbs, ...pin], thumbs]) {
+      let best = null, bd = Infinity;
+      for (let y = m; y + H <= vh - m; y += 10) {
+        for (let x = m; x + W <= vw - m; x += 10) {
+          if (clear.some((b) => x < b.right && x + W > b.left && y < b.bottom && y + H > b.top)) continue;
+          const d = (x + W / 2 - cx) ** 2 + (y + H / 2 - cy) ** 2;
+          if (d < bd) { bd = d; best = [x, y]; }
+        }
+      }
+      if (best) return best;
+    }
+    return null;
+  }
   // next to its anchor on the side with room; otherwise top centre
   place() {
     const el = this.el;
@@ -225,6 +252,10 @@ export class Tutorial {
       // Continue button nor the swing controls
       left = m;
       top = Math.max(0, ...['holeCard', 'distBox', 'windBox'].map((id) => $(id)?.getBoundingClientRect().bottom || 0)) + gap;
+      side = 'none';
+    } else if (this.ui.touch && vw > vh && vh < 500 && !this.cur.finish && (left = this.freeSpot(r, W, H, m)) !== null) {
+      // landscape phone: the HUD, meter and thumb buttons leave only a gap or two, so look for one
+      [left, top] = left;
       side = 'none';
     } else if (r) {
       const cands = [

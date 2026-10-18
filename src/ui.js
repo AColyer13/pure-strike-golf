@@ -68,6 +68,8 @@ export class UI {
     if (open('settings')) { this.showSettings(false); return true; }
     if (open('help')) { this.showHelp(false); return true; }
     if (open('stats')) { this.showStats(false); return true; }
+    // only the card opened from the pause menu: the end-of-hole card is closed by its own button
+    if (this.fromPause && open('scorecard')) { $('scNext').click(); return true; }
     return false;
   }
   // settings / how-to-play opened from the pause menu hand back to it when closed, so the game
@@ -536,7 +538,7 @@ export class UI {
       ${exHtml}
       <div class="sp-grid">${rows.map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('')}</div>
       ${sgHtml}
-      ${tipsHtml ? `<div class="sp-tips"><div class="sp-sub">Coach</div>${tipsHtml}</div>` : ''}
+      ${tipsHtml ? `<div class="sp-tips"><div class="sp-sub">Caddie</div>${tipsHtml}</div>` : ''}
       <div class="sp-btns"><button class="btn primary sp-go">Continue</button><button class="btn sp-more">Details</button></div>
       <div class="sp-cont">${this.touch ? 'Tap anywhere to continue' : `${this.key('swing')} / click to continue`}${canReplay ? ` · <b>${this.touch ? '👁' : this.key('replay')}</b> replay` : ''}</div>`;
     p.classList.remove('hidden', 'open');
@@ -676,7 +678,7 @@ export class UI {
     };
     const tabs = multi ? `<div class="segs sum-tabs">${round.players.map((pl, i) => `<button class="seg${i === 0 ? ' on' : ''}" data-p="${i}">${esc(pl.name)}</button>`).join('')}</div>` : '';
     const lesson = !!round.opts?.solo;
-    const info = [course.name, round.holes.length === 1 ? null : MODES[round.mode]?.name, PROFILES[settings.profile]?.name || settings.profile, DIFFICULTY[settings.difficulty]?.name].filter(Boolean).join(' · ');
+    const info = lesson ? `${course.name} · Guided lesson` : [course.name, round.holes.length === 1 ? null : MODES[round.mode]?.name, PROFILES[settings.profile]?.name || settings.profile, DIFFICULTY[settings.difficulty]?.name].filter(Boolean).join(' · ');
     s.innerHTML = `<h1>${round.daily ? 'Daily challenge complete' : round.holes.length === 1 ? 'Hole complete' : 'Round complete'}</h1>
       <div class="muted">${info}</div>
       ${board}
@@ -758,7 +760,8 @@ export class UI {
       <button class="btn" id="pHelp">How to play</button>
       <button class="btn danger" id="pQuit">Main menu</button>`;
     $('pResume').onclick = () => this.togglePause();
-    $('pCard').onclick = () => { this.togglePause(); this.scorecard(this.game.course, this.game.round, true, () => {}, 'Close'); };
+    // the game stays paused under the card, and closing it returns to this menu
+    $('pCard').onclick = () => { this.fromPause = true; p.classList.add('hidden'); this.scorecard(this.game.course, this.game.round, true, () => this.returnToPause(), 'Close'); };
     $('pSettings').onclick = () => { this.fromPause = true; p.classList.add('hidden'); this.showSettings(true); };
     $('pHelp').onclick = () => { this.fromPause = true; p.classList.add('hidden'); this.showHelp(true); };
     $('pQuit').onclick = () => {
@@ -939,7 +942,7 @@ export class UI {
       <div><h3>Shot setup</h3>
         <ul>${setup}</ul>
       <h3>Learn while you play</h3>
-        <p>After every shot you'll see launch-monitor numbers, <b>strokes gained</b> against a tour average, and coaching on why the ball did what it did. Open the <b>Golf Academy</b> from the menu to experiment in the ball-flight lab.</p></div>
+        <p>After every shot you'll see launch-monitor numbers, <b>strokes gained</b> against a tour average, and your caddie explaining why the ball did what it did. Open the <b>Golf Academy</b> from the menu to experiment in the ball-flight lab.</p></div>
       </div>
       <div class="help-btns">${this.tutorial && !this.game.round ? '<button class="btn" id="helpTut">Guided first hole</button>' : ''}<button class="btn primary" id="helpClose">Got it</button></div>`;
     $('helpClose').onclick = () => this.showHelp(false);
