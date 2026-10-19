@@ -101,7 +101,7 @@ export function coachShot(s, units = 'yd') {
   }
   // approach distance control
   if (s.approach && s.result === 'ok') {
-    if (s.shortYd > 8) L.push({ id: 'shortapp', pri: 6, title: 'Came up short', text: `Finished ${D(s.shortYd)} short of the pin. Most amateur approach misses are short: they choose clubs by their best shot, not their average. Pick the club whose *average carry* reaches the middle of the green.` });
+    if (s.shortYd > 8) L.push({ id: 'shortapp', pri: 6, title: 'Came up short', text: `Finished ${D(s.shortYd)} short of the pin. Most amateur approach misses are short: they choose clubs by their best shot, not their average. Pick the club whose <b>average carry</b> reaches the middle of the green.` });
     else if (s.longYd > 12 && s.totalYd - s.carryYd > 12 && s.longYd - (s.totalYd - s.carryYd) < 8) L.push({ id: 'release', pri: 5, title: 'Flew it the right distance – then it ran', text: `It carried to about pin-high but released ${D(s.totalYd - s.carryYd)} after landing at ${i0(s.descent)}°. On a raised or firm green, play for the finish, not the carry: land it short and let it feed on, or use more loft for a steeper landing.` });
     else if (s.longYd > 12) L.push({ id: 'longapp', pri: 4, title: 'Long', text: `Finished ${D(s.longYd)} past the pin. Remember the plays-like number: downhill and downwind shots fly further.` });
   }

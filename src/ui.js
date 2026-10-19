@@ -1,7 +1,7 @@
 // DOM user interface: menus, HUD, shot panel, scorecard, summaries, stats and settings.
 import { COURSES, courseById } from './courses/index.js';
-import { PROFILES } from './clubs.js';
-import { YD } from './hole.js';
+import { PROFILES, TEE_FOR_PROFILE } from './clubs.js';
+import { YD, TEE_SETS, teeYds } from './hole.js';
 import { SURFACES } from './physics.js';
 import { DEFAULT_KEYS, ACTION_LABELS, DIFFICULTY } from './config.js';
 import { MODES, SIGNATURE, dailySpec, holesFor, challengeHash, challengeScore, RESUME_KEY, resumable, restoreRound } from './round.js';
@@ -18,7 +18,7 @@ const sgn = (x, d = 2) => { const v = +x.toFixed(d); return (v >= 0 ? '+' : '') 
 // let the line clamp cut it mid-thought. The full text stays in the tooltip / on desktop.
 const caddieBrief = (text) => {
   const max = innerHeight <= 600 ? 90 : 140;
-  const parts = text.match(/[^.!?]+[.!?]+(s+|$)|[^.!?]+$/g) || [text];
+  const parts = text.match(/[^.!?]+[.!?]+(\s+|$)|[^.!?]+$/g) || [text];
   let out = parts[0].trim();
   for (let i = 1; i < parts.length && (out + ' ' + parts[i].trim()).length <= max; i++) out += ' ' + parts[i].trim();
   return out;
@@ -65,6 +65,8 @@ export class UI {
     this.sel = { courseId: 'augusta', mode: '18', hole: 1, players: 1, names: ['Player 1', 'Player 2', 'Player 3', 'Player 4'] };
     try { Object.assign(this.sel, JSON.parse(localStorage.getItem('psg-sel') || '{}')); } catch (e) { /* ignore */ }
     if (!MODES[this.sel.mode] || this.sel.mode === 'daily') this.sel.mode = '18';
+    // a saved choice of a course that isn't a menu tab (e.g. the random course) would break Tee off
+    if (!COURSES.some((c) => c.id === this.sel.courseId)) this.sel.courseId = 'augusta';
     this.toasts = $('toasts');
     $('minimap').addEventListener('pointerdown', (e) => this.minimapClick(e));
     this.initDialogs();
@@ -159,7 +161,7 @@ export class UI {
     document.body.classList.remove('in-round');
     $('menu').classList.remove('hidden');
     const history = loadHistory();
-    const course = courseById(this.sel.courseId) || COURSES[0];
+    const course = COURSES.find((c) => c.id === this.sel.courseId) || COURSES[0];
 
     // course tabs (the 3D signature hole behind the menu is the hero visual)
     const tabs = $('courseTabs');
@@ -172,14 +174,15 @@ export class UI {
       tabs.appendChild(b);
     }
     const par = course.holes.reduce((s, h) => s + h.par, 0);
-    const yds = course.holes.reduce((s, h) => s + h.yds, 0);
+    const tees = g.settings.tees || 'back';
+    const yds = course.holes.reduce((s, h) => s + teeYds(h, tees), 0);
     const units = g.settings.units;
-    const bests = ['18', 'front', 'back'].map((m) => [m, bestFor(history, course.id, m)]).filter(([, b]) => b);
+    const bests = ['18', 'front', 'back'].map((m) => [m, bestFor(history, course.id, m, tees)]).filter(([, b]) => b);
     const hero = $('courseHero');
     hero.style.setProperty('--accent', course.flag);
     hero.innerHTML = `
       <div class="cc-top"><span class="cc-flag"></span><div><div class="cc-name">${course.name}</div><div class="cc-loc">${course.location}</div></div></div>
-      <div class="cc-meta">Par ${par} · ${fmtYd(yds, units).replace(/\d+/, (n) => (+n).toLocaleString())} · Stimp ${course.stimp} · Wind ${windValue(course.wind[0], units)}–${windValue(course.wind[1], units)} ${windUnit(units)}${RATINGS[course.id] ? ` · Rating ${RATINGS[course.id][0]} / ${RATINGS[course.id][1]}` : ''}</div>
+      <div class="cc-meta">Par ${par} · ${fmtYd(yds, units).replace(/\d+/, (n) => (+n).toLocaleString())} · Stimp ${course.stimp} · Wind ${windValue(course.wind[0], units)}–${windValue(course.wind[1], units)} ${windUnit(units)}${tees !== 'back' ? ` · ${TEE_SETS[tees].name} tees` : RATINGS[course.id] ? ` · Rating ${RATINGS[course.id][0]} / ${RATINGS[course.id][1]}` : ''}</div>
       <p class="cc-blurb">${course.blurb}</p>
       <div class="cc-teach"><b>Teaches</b><ul>${course.teaches.map((t) => `<li>${t}</li>`).join('')}</ul></div>
       ${bests.length ? `<div class="cc-best">${bests.map(([m, b]) => `Best ${MODES[m].name}: ${toParStr(b.toPar)} (${b.strokes})`).join(' · ')}</div>` : ''}`;
@@ -239,10 +242,10 @@ export class UI {
     if (this.challenge) {
       const c = this.challenge, cc = courseById(c.courseId, c.seed);
       const beat = c.score != null ? this.scoreToBeat(c.mode, c.score, cc, c.holes) : null;
-      cb.innerHTML = `<div><b>Challenge received:</b> ${cc.name} · ${MODES[c.mode].name} · ${c.holes.length === 1 ? `hole ${c.holes[0] + 1}` : `${c.holes.length} holes`} – same pins and wind as your friend.${beat ? ` <b>Score to beat: ${beat}</b>` : ''}</div>
+      cb.innerHTML = `<div><b>Challenge received:</b> ${cc.name}${c.tees ? ` (${TEE_SETS[c.tees].name} tees)` : ''} · ${MODES[c.mode].name} · ${c.holes.length === 1 ? `hole ${c.holes[0] + 1}` : `${c.holes.length} holes`} – same pins and wind as your friend.${beat ? ` <b>Score to beat: ${beat}</b>` : ''}</div>
         <div class="row"><button class="btn primary" id="chAccept">Accept</button><button class="btn" id="chDismiss">Dismiss</button></div>`;
       cb.classList.remove('hidden');
-      $('chAccept').onclick = () => { const x = this.challenge; this.challenge = null; window.history.replaceState?.(null, '', location.pathname + location.search); g.showcase(x.courseId); this.start({ courseId: x.courseId, holes: x.holes, mode: x.mode, seed: x.seed, target: x.score }); };
+      $('chAccept').onclick = () => { const x = this.challenge; this.challenge = null; window.history.replaceState?.(null, '', location.pathname + location.search); g.showcase(x.courseId); this.start({ courseId: x.courseId, holes: x.holes, mode: x.mode, seed: x.seed, target: x.score, tees: x.tees }); };
       $('chDismiss').onclick = () => { this.challenge = null; window.history.replaceState?.(null, '', location.pathname + location.search); this.mainMenu(); };
     } else cb.classList.add('hidden');
 
@@ -265,15 +268,22 @@ export class UI {
     opt('optMode', this.sel.mode, ['18', 'front', 'back', 'single', 'ctp', 'drive', 'random'].map((k) => [k, MODES[k].name, MODES[k].desc]));
     opt('optPlayers', this.sel.players, [[1, '1'], [2, '2'], [3, '3'], [4, '4']]);
     opt('optProfile', s.profile, Object.entries(PROFILES).map(([k, p]) => [k, p.name, p.desc]));
+    opt('optTees', tees, Object.entries(TEE_SETS).map(([k, t]) => [k, t.name, `${fmtYd(course.holes.reduce((a, h) => a + teeYds(h, k), 0), units).replace(/\d+/, (n) => (+n).toLocaleString())} at ${course.name}${k === 'back' ? ': the full championship length' : k === 'middle' ? ': a shorter course for most club golfers' : ': the shortest, for newer players and slower swings'}`]));
     opt('optDiff', s.difficulty, [['beginner', 'Beginner', 'Big impact zone, full aim preview with wind and roll, full putt line'], ['standard', 'Standard', 'Normal zone, carry preview without wind, partial putt line'], ['pro', 'Pro', 'Small zone, no wind/putt assistance – read it yourself']]);
     opt('optControl', s.control, [['meter', '3-Click Meter', 'Click to start, set power, hit the impact zone'], ['mouse', 'Analog Swing', 'Pull the mouse back, push it through straight']]);
     opt('optUnits', s.units, [['yd', 'Yards'], ['m', 'Metres']]);
     const hs = $('optHole');
     const pickHole = ['single', 'ctp', 'drive'].includes(this.sel.mode);
     hs.classList.toggle('hidden', !pickHole);
+    // the list shows (and keeps) the hole that Tee off will really play: a saved hole that
+    // doesn't fit the mode (a par 4 for closest-to-the-pin) is replaced by the one holesFor picks
+    if (pickHole) {
+      const eff = holesFor(this.sel.mode, course.id, +this.sel.hole || 1)[0] + 1;
+      if (eff > 0 && eff !== +this.sel.hole) { this.sel.hole = eff; this.saveSel(); }
+    }
     hs.innerHTML = course.holes.map((h, i) => {
       const ok = this.sel.mode === 'ctp' ? h.par === 3 : this.sel.mode === 'drive' ? h.par >= 4 : true;
-      return ok ? `<option value="${i + 1}" ${i + 1 === +this.sel.hole ? 'selected' : ''}>${i + 1}. ${h.name} – par ${h.par}, ${fmtYd(h.yds, units)}</option>` : '';
+      return ok ? `<option value="${i + 1}" ${i + 1 === +this.sel.hole ? 'selected' : ''}>${i + 1}. ${h.name} – par ${h.par}, ${fmtYd(teeYds(h, tees), units)}</option>` : '';
     }).join('');
     hs.onchange = () => { this.sel.hole = +hs.value; this.saveSel(); };
     const names = $('optNames');
@@ -301,7 +311,12 @@ export class UI {
     const s = this.game.settings;
     if (id === 'optMode') this.sel.mode = k;
     if (id === 'optPlayers') this.sel.players = +k;
-    if (id === 'optProfile') s.profile = k;
+    if (id === 'optProfile') {
+      s.profile = k;
+      // a golfer who hits it shorter gets the matching tees, unless tees were picked by hand
+      if (!s.teesChosen && TEE_FOR_PROFILE[k]) s.tees = TEE_FOR_PROFILE[k];
+    }
+    if (id === 'optTees') { s.tees = k; s.teesChosen = true; }
     if (id === 'optDiff') s.difficulty = k;
     if (id === 'optControl') s.control = k;
     if (id === 'optUnits') s.units = k;
@@ -328,7 +343,7 @@ export class UI {
     $('menu').classList.add('hidden');
     document.body.classList.add('in-round');
     const players = opts.mode !== 'daily' && !opts.solo && this.sel.players > 1 ? this.sel.names.slice(0, this.sel.players).map((n, i) => (n || '').trim() || `Player ${i + 1}`) : null;
-    this.game.startRound({ ...opts, players });
+    this.game.startRound({ ...opts, players, tees: opts.tees ?? (opts.mode === 'daily' ? 'back' : this.game.settings.tees) });
   }
 
   resume(snap) {
@@ -411,7 +426,7 @@ export class UI {
     if (d.plays) this.firstTip('plays', '“Plays like” is the distance adjusted for wind and elevation. Pick a club for that number, not the yardage.');
     let sub = '';
     if (d.plays) sub = `Plays like <b>${d.plays}</b>`;
-    else if (d.puttEq != null) sub = `Stroke it <b>${d.puttEq.toFixed(0)} ft</b><br><small>to finish 17 in past</small>`;
+    else if (d.puttEq != null) sub = `Stroke it <b>${d.puttEq.toFixed(0)} ft</b><br><small>to finish about 17 in past the hole</small>`;
     const e = Math.round(d.elev);
     if (Math.abs(e) >= 1) sub += `<span class="elev">${e > 0 ? '▲' : '▼'} ${fmtElev(e, units)} ${e > 0 ? 'uphill' : 'downhill'}</span>`;
     const sl = d.slope, parts = [];
@@ -678,7 +693,7 @@ export class UI {
         return `<tr class="sc"><th>${multi ? esc(pl.name) : 'Score'}</th>${cells}<th>${any ? tot : ''}</th></tr>`;
       };
       return `<table class="${holes.length <= 3 ? 'few' : ''}"><tr class="num"><th>Hole</th>${nums.map((n) => `<td>${n}</td>`).join('')}<th>${holes.length < 9 ? 'Tot' : from ? 'In' : 'Out'}</th></tr>
-        <tr class="yd"><th>${metric ? 'Metres' : 'Yards'}</th>${holes.map((h) => `<td>${yd(h.yds)}</td>`).join('')}<th>${yd(holes.reduce((a, h) => a + h.yds, 0))}</th></tr>
+        <tr class="yd"><th>${metric ? 'Metres' : 'Yards'}</th>${holes.map((h) => `<td>${yd(teeYds(h, round.tees))}</td>`).join('')}<th>${yd(holes.reduce((a, h) => a + teeYds(h, round.tees), 0))}</th></tr>
         <tr class="par"><th>Par</th>${holes.map((h) => `<td>${h.par}</td>`).join('')}<th>${holes.reduce((a, h) => a + h.par, 0)}</th></tr>
         ${players.map(scoreRow).join('')}</table>`;
     };
@@ -737,10 +752,12 @@ export class UI {
       ARG: 'Around the green, get the ball on the putting surface first. From just off the fringe a putt or low chip is usually the percentage play.',
       PUTT: 'Putting cost you strokes. Focus on lag speed from long range (leave it inside 3 ft) and on reading the low side – most misses are under-read.',
     };
+    // off the tee costing strokes with no penalties and most fairways found is about length, not accuracy
+    const adviceDistance = 'You found the fairway, so accuracy is not what cost the most off the tee. Distance is: Broadie found driving explains ~28% of the scoring gap between tour pros and amateurs. A smooth, balanced swing with a centred strike gains more yards than swinging harder.';
     const hcp = multi ? null : handicapIndex(loadHistory());
     const lead = round.players.map((pl) => ({ pl, t: pl.stats.totals() })).sort((a, b) => a.t.strokes - b.t.strokes);
     const outright = lead.length > 1 && lead[0].t.strokes < lead[1].t.strokes;
-    const board = multi ? `<h3>Leaderboard</h3><div class="sc-board big">${lead.map(({ pl, t: x }, i) => `<div><span>${i === 0 && outright ? '🏆 ' : ''}${esc(pl.name)}</span><b>${toParStr(x.strokes - x.par)} <small>${x.strokes}</small></b></div>`).join('')}</div>` : '';
+    const board = multi ? `<h3>Leaderboard</h3><div class="sc-board big">${lead.map(({ pl, t: x }, i) => `<div><span>${i === 0 && outright ? '🏆 ' : ''}${esc(pl.name)}</span><b>${toParStr(x.strokes - x.par)} <small>(${x.strokes})</small></b></div>`).join('')}</div>` : '';
     const n = round.players[0].scores.length;
     // the closing tip under the strokes-gained bars: only claims what the numbers show (a category
     // with nothing recorded, like no chips on a round that never missed a green, is not a "gain")
@@ -748,7 +765,7 @@ export class UI {
       const played = cats.filter(([k]) => Math.abs(t.sg[k]) >= 0.005);
       if (!played.length) return `<div class="tip"><b>Not enough to compare</b><p>No strokes-gained data was recorded this time, so there is nothing to measure against the tour average. Play a full hole to see where you gain and lose strokes.</p></div>`;
       const worst = played.slice().sort((a, b) => t.sg[a[0]] - t.sg[b[0]])[0];
-      if (t.sg[worst[0]] < 0) return `<div class="tip"><b>Where to improve: ${worst[1]}</b><p>${advice[worst[0]]}</p></div>`;
+      if (t.sg[worst[0]] < 0) return `<div class="tip"><b>Where to improve: ${worst[1]}</b><p>${worst[0] === 'OTT' && !t.penalties && (!t.firN || t.fir / t.firN >= 0.7) ? adviceDistance : advice[worst[0]]}</p></div>`;
       const names = played.map(([, n]) => n.toLowerCase());
       const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0];
       const skipped = cats.length - played.length;
@@ -823,12 +840,14 @@ export class UI {
   summaryButtons(course, round) {
     const s = $('summary');
     const players = round.players.length > 1 ? round.players.map((p) => p.name) : null;
-    $('sumAgain').onclick = () => { s.classList.add('hidden'); this.game.startRound({ courseId: course.id, holes: round.holes, mode: round.mode, players, seed: course.generated ? round.seed : undefined, target: round.target }); };
+    $('sumAgain').onclick = () => { s.classList.add('hidden'); this.game.startRound({ courseId: course.id, holes: round.holes, mode: round.mode, players, tees: round.tees, seed: course.generated || round.daily || round.target != null ? round.seed : undefined, daily: round.daily || undefined, solo: round.opts?.solo, target: round.target }); };
     $('sumMenu').onclick = () => { s.classList.add('hidden'); this.game.quitToMenu(); };
     // after the guided hole the obvious next step is a real round on the same course
     if ($('sumCardBtn')) $('sumCardBtn').onclick = () => { s.classList.add('hidden'); this.scorecard(course, round, true, () => s.classList.remove('hidden'), 'Back to summary'); };
-    if ($('sumFront')) $('sumFront').onclick = () => { s.classList.add('hidden'); this.game.startRound({ courseId: course.id, holes: [...Array(9).keys()], mode: 'front' }); };
+    if ($('sumFront')) $('sumFront').onclick = () => { s.classList.add('hidden'); this.game.startRound({ courseId: course.id, holes: [...Array(9).keys()], mode: 'front', tees: round.tees }); };
     if (!$('sumShare')) return;
+    // the editor's course exists only on this device, so a link to it would not work for a friend
+    $('sumShare').classList.toggle('hidden', !!course.custom);
     $('sumShare').onclick = async () => {
       const url = location.origin + location.pathname + challengeHash(round);
       try {

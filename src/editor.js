@@ -38,14 +38,14 @@ export class Editor {
   // the working definition: a saved custom override if there is one, else the original
   original() { return courseById(this.baseId).holes[this.idx]; }
   current() {
-    const c = loadCustom();
+    const c = loadCustom(this.baseId);
     return c && c.base === this.baseId && c.holes[this.idx] ? c.holes[this.idx] : this.original();
   }
 
   load() {
     const r = this.root;
     const base = courseById(this.baseId);
-    const custom = loadCustom();
+    const custom = loadCustom(this.baseId);
     const edited = custom && custom.base === this.baseId ? Object.keys(custom.holes).map(Number) : [];
     r.innerHTML = `
       <div class="ed-head"><h2>Course editor</h2><button class="btn" id="edClose">Close ✕</button></div>
@@ -146,14 +146,14 @@ export class Editor {
   save() {
     const p = this.parse();
     if (!p) return false;
-    const c = loadCustom();
+    const c = loadCustom(this.baseId);
     const custom = c && c.base === this.baseId ? c : { base: this.baseId, holes: {} };
     custom.holes[this.idx] = p.def;
     saveCustom(custom);
     return true;
   }
   revert() {
-    const c = loadCustom();
+    const c = loadCustom(this.baseId);
     if (c && c.base === this.baseId) { delete c.holes[this.idx]; saveCustom(c); }
     this.load();
   }

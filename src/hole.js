@@ -12,6 +12,34 @@ import { clamp, smooth, lerp } from './util.js';
 
 export const YD = 0.9144;
 export const FT = 0.3048;
+// Tee sets. The back tee is the start of the centre line (the card yardage). The others sit
+// further along the same line and keep every other coordinate in the original frame, so
+// hazards stay where they are and only the starting point moves up.
+export const TEE_SETS = {
+  back: { name: 'Back', frac: 1 },
+  middle: { name: 'Middle', frac: 0.87 },
+  forward: { name: 'Forward', frac: 0.77 },
+};
+export const TEE_KEYS = Object.keys(TEE_SETS);
+export const cleanTees = (t) => (TEE_SETS[t] ? t : 'back');
+// yards a tee set is moved up from the back tee for this hole definition
+export function teeMoveYds(def, tees) {
+  if (!TEE_SETS[tees] || tees === 'back') return 0;
+  // a hole may set its own length for a set ({ tees: { middle: 380, forward: 330 } }); otherwise a
+  // share of the card yardage, to the nearest 5 yd, never shorter than a short par 3 needs
+  const floor = Math.min(def.yds, def.par === 3 ? 70 : 150);
+  const want = def.tees?.[tees] ?? Math.round((def.yds * TEE_SETS[tees].frac) / 5) * 5;
+  const move = Math.max(0, def.yds - Math.max(floor, want));
+  // stay on the first straight stretch, so the tee still points down the fairway
+  const pts = def.path || [[0, 0], [0, def.yds]];
+  let L = 0;
+  for (let i = 1; i < pts.length; i++) L += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+  const first = Math.hypot(pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]) * (def.yds / L);
+  return Math.min(move, first * 0.85);
+}
+// the yardage played from a tee set (what the card shows for it)
+export const teeYds = (def, tees) => Math.round(def.yds - teeMoveYds(def, tees));
+
 // width (m) of the fringe collar around the green
 const FRINGE = 1.3;
 // rough (m) between the edge of a fairway and the out-of-bounds line
@@ -117,9 +145,12 @@ export class Hole {
     this.gf.rx = -this.gf.fz; this.gf.rz = this.gf.fx; // right-hand vector of the approach
 
     // tee
-    this.tee = { x: this.path[0].x, z: this.path[0].z };
-    const f0 = this.dirAt(0);
-    this.teeDir = f0;
+    this.tees = cleanTees(opts.tees);
+    this.teeS = teeMoveYds(d, this.tees) * YD; // metres up the centre line from the back tee
+    const t0 = this.pointAt(this.teeS);
+    this.tee = { x: t0.x, z: t0.z };
+    this.teeDir = this.dirAt(this.teeS);
+    this.yards = teeYds(d, this.tees); // playing length from this tee
 
     const style = this.style;
     const seed = this.seed;

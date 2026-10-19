@@ -320,7 +320,20 @@ test('the guided hole is flagged as a lesson and survives a save', () => {
 test('lesson skill levels map to real settings', async () => {
   const { LEVELS } = await import('../src/tutorial.js');
   assert.deepEqual(LEVELS.map((l) => l.id), ['new', 'casual', 'regular']);
-  assert.deepEqual(LEVELS[0].settings, { profile: 'mid', difficulty: 'beginner' });
-  assert.deepEqual(LEVELS[1].settings, { profile: 'mid', difficulty: 'standard' });
-  assert.deepEqual(LEVELS[2].settings, { profile: 'scratch', difficulty: 'standard' });
+  assert.deepEqual(LEVELS[0].settings, { profile: 'mid', difficulty: 'beginner', tees: 'forward' });
+  assert.deepEqual(LEVELS[1].settings, { profile: 'mid', difficulty: 'standard', tees: 'middle' });
+  assert.deepEqual(LEVELS[2].settings, { profile: 'scratch', difficulty: 'standard', tees: 'back' });
+});
+
+test('rounds remember their tee set; the daily challenge always uses the back tees', () => {
+  const r = createRound({ courseId: 'augusta', holes: [0, 1], mode: 'front', seed: 5, tees: 'middle' });
+  assert.equal(r.tees, 'middle');
+  assert.equal(r.opts.tees, 'middle');
+  assert.equal(restoreRound(roundSnapshot(r)).tees, 'middle', 'a resumed round keeps its tees');
+  assert.equal(createRound({ courseId: 'augusta', holes: [0], mode: 'single', seed: 5 }).tees, 'back');
+  assert.equal(createRound({ courseId: 'augusta', holes: [0], mode: 'single', seed: 5, tees: 'bogus' }).tees, 'back');
+  assert.equal(createRound({ courseId: 'augusta', holes: [0, 1, 2], mode: 'daily', seed: 5, daily: '2026-10-18', tees: 'forward' }).tees, 'back');
+  const old = roundSnapshot(r);
+  delete old.opts.tees;
+  assert.equal(restoreRound(old).tees, 'back', 'a round saved before tee sets existed resumes from the back tees');
 });

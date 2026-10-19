@@ -76,3 +76,43 @@ test('capped green and bunker distances are exact below the cap', () => {
     }
   }
 });
+
+// Forward tees move the starting point along the same centre line. Every tee set on every hole
+// must still be a clean tee box (not in or beside water, a bunker or out of bounds), shorter than
+// the one behind it, and keep the hazards exactly where the back tees see them.
+import { TEE_KEYS, teeYds } from '../src/hole.js';
+for (const course of COURSES) {
+  test(`${course.name}: every tee set is a clean, shorter tee box`, () => {
+    for (let i = 0; i < course.holes.length; i++) {
+      const def = course.holes[i];
+      let prev = Infinity;
+      for (const tees of TEE_KEYS) {
+        const h = new Hole(def, course, i, { tees, pinIndex: 0 });
+        const where = `${course.id} #${i + 1} ${tees}`;
+        assert.equal(h.surface(h.tee.x, h.tee.z), 'tee', `${where}: tee surface`);
+        assert.equal(h.yards, teeYds(def, tees), `${where}: yardage`);
+        assert.ok(h.yards <= prev, `${where}: not longer than the tee behind`);
+        prev = h.yards;
+        assert.ok(h.yards >= Math.min(def.yds, def.par === 3 ? 70 : 150), `${where}: still long enough to play`);
+        assert.ok(Math.abs((h.length - h.teeS) / YD - h.yards) < 1, `${where}: tee to green matches the yardage`);
+        const f = h.teeDir;
+        for (let a = -19; a <= 7; a += 2) {
+          for (let l = -7; l <= 7; l += 2) {
+            const s = h.surface(h.tee.x + f.x * a - f.z * l, h.tee.z + f.z * a + f.x * l);
+            assert.ok(!['water', 'bunker', 'waste', 'ob'].includes(s), `${where}: ${s} inside the tee box (${a}, ${l})`);
+          }
+        }
+      }
+    }
+  });
+}
+
+test('tee sets keep the back tee as the start of the centre line', () => {
+  const course = COURSES[0], def = course.holes[0];
+  const back = new Hole(def, course, 0), fwd = new Hole(def, course, 0, { tees: 'forward' });
+  assert.equal(back.teeS, 0);
+  assert.ok(fwd.teeS > 0);
+  assert.equal(back.cup.x, fwd.cup.x, 'the green does not move');
+  assert.equal(back.cup.z, fwd.cup.z);
+  assert.equal(new Hole(def, course, 0, { tees: 'nonsense' }).yards, def.yds, 'unknown tees fall back to the back tees');
+});

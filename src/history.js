@@ -56,22 +56,22 @@ export function clearHistory() {
 }
 
 // Summarise a finished round (RoundStats totals + context) for storage.
-export function roundEntry({ course, mode, holes, totals, profile, difficulty, player, seed, date = new Date() }) {
+export function roundEntry({ course, mode, holes, totals, profile, difficulty, player, seed, tees, date = new Date() }) {
   return {
     date: date.toISOString(),
     course: course.id, mode, holes: holes.length, player: player || null, seed: seed ?? null,
     strokes: totals.strokes, par: totals.par, putts: totals.putts, penalties: totals.penalties,
     fir: totals.fir, firN: totals.firN, gir: totals.gir,
     sg: { ...totals.sg }, sgTotal: totals.sgTotal,
-    profile, difficulty,
+    profile, difficulty, tees: tees || 'back',
   };
 }
 
-// Best (lowest to par) completed round per course + mode.
-export function bestFor(history, courseId, mode) {
+// Best (lowest to par) completed round per course + mode + tee set (a forward-tee 80 is not a back-tee 80).
+export function bestFor(history, courseId, mode, tees = 'back') {
   let best = null;
   for (const r of history) {
-    if (r.course !== courseId || r.mode !== mode || r.player) continue;
+    if (r.course !== courseId || r.mode !== mode || r.player || (r.tees || 'back') !== tees) continue;
     const toPar = r.strokes - r.par;
     if (!best || toPar < best.toPar) best = { toPar, strokes: r.strokes, date: localDay(r.date) };
   }
@@ -86,7 +86,8 @@ export function handicapIndex(history) {
   const diffs = [];
   for (const r of history) {
     const R = RATINGS[r.course];
-    if (!R || r.player || (r.holes !== 18 && r.holes !== 9)) continue;
+    // the ratings are for the back tees, so shorter tees would flatter the index
+    if (!R || r.player || (r.tees || 'back') !== 'back' || (r.holes !== 18 && r.holes !== 9)) continue;
     const [rating, slope] = R;
     const gross = r.holes === 18 ? r.strokes : r.strokes * 2;
     diffs.push({ d: (113 / slope) * (gross - rating), w: r.holes === 18 ? 1 : 0.5 });

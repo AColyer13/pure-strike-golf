@@ -134,7 +134,8 @@ export class Game {
     try { s = JSON.parse(localStorage.getItem('psg-settings') || '{}'); } catch (e) { /* ignore */ }
     const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
     return {
-      profile: 'mid', difficulty: 'standard', control: 'meter', units: 'yd', volume: 0.7, tracer: true,
+      // a first visit starts a typical golfer on the middle tees; saved settings from before tee sets keep the back tees
+      profile: 'mid', difficulty: 'standard', tees: Object.keys(s).length ? 'back' : 'middle', control: 'meter', units: 'yd', volume: 0.7, tracer: true,
       reducedMotion: reduce, oneButton: false, captions: false, uiScale: 1, keys: {}, ffSeen: 0, hudDetail: 'essential', quality: 'auto', ...s,
     };
   }
@@ -221,7 +222,7 @@ export class Game {
     this.ui.loading(true, `Hole ${idx + 1} – ${course.holes[idx].name}`);
     setTimeout(() => {
       const S = r.setup[idx];
-      this.hole = this.world.buildHole(course, idx, { pinIndex: S.pinIndex });
+      this.hole = this.world.buildHole(course, idx, { pinIndex: S.pinIndex, tees: r.tees });
       this.windMph = S.mph;
       this.windAng = S.ang; // direction the wind blows TOWARD
       this.env = holeEnv(course, this.hole, S);
@@ -232,7 +233,7 @@ export class Game {
       const cur = r.stats.cur;
       this.resetPlayerOnHole();
       if (snap?.done) { this.endRound(); return; }
-      this.ui.holeIntro(this.hole, course, this.fmtDist(this.hole.length), this.windText(), introExtra(this.round));
+      this.ui.holeIntro(this.hole, course, this.fmtDist(this.hole.yards * YD), this.windText(), introExtra(this.round));
       if (snap?.mid) {
         // back where the player left off: same ball, strokes and hole stats, no flyover
         const m = snap.mid;
@@ -254,7 +255,7 @@ export class Game {
     this.strokes = 0;
     this.penalties = 0;
     this.ballNo = 0;
-    if (!this.challenge) this.holeStats = r.stats.startHole(h.number, h.par, this.course.holes[h.index].yds);
+    if (!this.challenge) this.holeStats = r.stats.startHole(h.number, h.par, h.yards);
     this.teeUp();
   }
   teeUp() {
@@ -426,7 +427,7 @@ export class Game {
     this.world.showGreenGrid(this.gridOn);
   }
   toggleMute() {
-    this.audio.enabled = !this.audio.enabled;
+    this.audio.setEnabled(!this.audio.enabled);
     this.ui.toast(this.audio.enabled ? 'Sound on' : 'Sound off');
   }
   peekScorecard() {
@@ -958,13 +959,13 @@ export class Game {
     this.tutorial?.end();
     if (this.challenge) { this.ui.challengeSummary(this.course, r, (m) => this.fmtDist(m)); return; }
     const history = loadHistory();
-    const prevBest = r.players.length === 1 && !this.course.generated ? bestFor(history, this.course.id, r.mode) : null;
+    const prevBest = r.players.length === 1 && !this.course.generated ? bestFor(history, this.course.id, r.mode, r.tees) : null;
     const played = r.played ?? { profile: this.settings.profile, difficulty: this.settings.difficulty };
     for (const pl of r.players) {
       if (!pl.scores.length) continue;
       saveRound(roundEntry({
         course: this.course, mode: r.mode, holes: pl.scores, totals: pl.stats.totals(), profile: played.profile,
-        difficulty: played.difficulty, player: r.players.length > 1 ? pl.name : null, seed: r.seed,
+        difficulty: played.difficulty, tees: r.tees, player: r.players.length > 1 ? pl.name : null, seed: r.seed,
       }));
     }
     if (r.daily) {
@@ -1021,7 +1022,7 @@ export class Game {
     const lk = this.lieKey();
     const lie = LIES[lk] || LIES.rough;
     this.ui.hud({
-      hole: h.number, name: h.name, par: h.par, yards: this.course.holes[h.index].yds,
+      hole: h.number, name: h.name, par: h.par, yards: h.yards,
       shot: this.challenge ? `Ball ${this.ballNo + 1}/${r.balls}` : holed ? `Holed in ${this.strokes}` : `Shot ${this.strokes + (this.state === 'flight' ? 0 : 1)}`, toPar,
       player: r.players.length > 1 ? r.player.name : null, challenge: this.challenge, mode: r.mode,
       dist: holed ? 'Holed' : feet ? `${(d / FT).toFixed(d / FT < 10 ? 1 : 0)} ft` : this.fmtDist(d),

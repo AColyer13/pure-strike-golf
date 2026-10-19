@@ -148,3 +148,55 @@ test('closest-to-the-pin falls back to the shortest par 3, and a damaged challen
   }
   assert.equal(parseChallenge('#c=garbage'), null);
 });
+
+test('challenge links reject holes the course does not have, and the private custom course', () => {
+  // the random course has nine holes: a link that asks for hole 12 or 18 describes no real round
+  assert.equal(parseChallenge('#c=gen.back.9-10-11-12-13-14-15-16-17.5'), null);
+  assert.equal(parseChallenge('#c=gen.single.11.5'), null);
+  assert.ok(parseChallenge('#c=gen.random.0-1-2-3-4-5-6-7-8.5'));
+  assert.equal(parseChallenge('#c=augusta.single.18.5'), null, 'there is no hole 19');
+  assert.equal(parseChallenge('#c=custom.single.0.5'), null, 'the editor course exists on one device only');
+});
+
+test('challenge links carry the tee set', () => {
+  const r = { course: { id: 'sawgrass' }, mode: 'single', holes: [16], seed: 123456 };
+  assert.equal(challengeHash(r), '#c=sawgrass.single.16.123456', 'back tees leave the link as it was');
+  assert.deepEqual(parseChallenge('#c=sawgrass.single.16.123456'), { courseId: 'sawgrass', mode: 'single', holes: [16], seed: 123456 });
+  assert.equal(challengeHash({ ...r, tees: 'forward' }), '#c=sawgrass.single.16.123456.f');
+  assert.deepEqual(parseChallenge('#c=sawgrass.single.16.123456.f'), { courseId: 'sawgrass', mode: 'single', holes: [16], seed: 123456, tees: 'forward' });
+  assert.deepEqual(parseChallenge('#c=sawgrass.single.16.123456.m.9'), { courseId: 'sawgrass', mode: 'single', holes: [16], seed: 123456, tees: 'middle', score: 9 });
+  assert.equal(parseChallenge('#c=sawgrass.single.16.123456.x'), null);
+});
+
+test('best scores and the handicap index only compare rounds from the same tees', () => {
+  const back = entry('augusta', 18, 80, 72), fwd = entry('augusta', 18, 70, 72, { tees: 'forward' });
+  assert.equal(back.tees, 'back');
+  assert.equal(fwd.tees, 'forward');
+  const h = [back, fwd];
+  assert.equal(bestFor(h, 'augusta', '18').toPar, 8, 'back tees by default');
+  assert.equal(bestFor(h, 'augusta', '18', 'forward').toPar, -2);
+  assert.equal(bestFor(h, 'augusta', '18', 'middle'), null);
+  // rounds saved before tee sets existed count as back tees
+  const old = { ...back };
+  delete old.tees;
+  assert.equal(bestFor([old], 'augusta', '18').toPar, 8);
+  const three = (extra) => [0, 1, 2].map(() => entry('augusta', 18, 85, 72, extra));
+  assert.notEqual(handicapIndex(three({})), null);
+  assert.equal(handicapIndex(three({ tees: 'forward' })), null, 'forward-tee rounds are not rated against the championship tees');
+});
+
+test("the course editor keeps each course's edits apart", async () => {
+  const { loadCustom, saveCustom } = await import('../src/courses/index.js');
+  store.clear();
+  assert.equal(loadCustom(), null);
+  saveCustom({ base: 'augusta', holes: { 0: { par: 4 } } });
+  saveCustom({ base: 'pebble', holes: { 2: { par: 3 } } });
+  assert.deepEqual(loadCustom('augusta'), { base: 'augusta', holes: { 0: { par: 4 } } }, 'the first course keeps its edits');
+  assert.deepEqual(loadCustom('pebble'), { base: 'pebble', holes: { 2: { par: 3 } } });
+  assert.equal(loadCustom().base, 'pebble', 'the course played as custom is the one edited last');
+  // a save from before per-course storage is read as that one course
+  store.set('psg-custom-course', JSON.stringify({ base: 'sawgrass', holes: { 1: { par: 5 } } }));
+  assert.deepEqual(loadCustom('sawgrass'), { base: 'sawgrass', holes: { 1: { par: 5 } } });
+  assert.equal(loadCustom('augusta'), null);
+  store.clear();
+});

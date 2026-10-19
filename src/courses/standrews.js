@@ -108,7 +108,7 @@ export default {
       roads: [{ gpts: true, pts: [[-40, 14], [0, 12], [40, 6]], w: 6 }],
       props: [{ type: 'hotel', s: 200, o: 52 }, { type: 'wall', g: [0, 16], len: 70 }],
       tip: 'One of the hardest par 4s in golf. The Lane bunker eats anything left, the road and wall behind the green punish long. Most pros aim right of the green and chip.' },
-    { name: 'Auld Home', par: 4, yds: 356, margin: [110, 20],
+    { name: 'Auld Home', par: 4, yds: 356, tees: { forward: 270 }, margin: [110, 20],
       fw: [[40, 110], [300, 110], [335, 50]],
       green: { w: 36, d: 32, tilt: [0, 1.6], pins: [[4, 5], [-5, -4]] },
       water: [{ k: 'creek', pts: [[55, -80], [60, 0], [62, 80]], w: 5 }],

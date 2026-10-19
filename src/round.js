@@ -2,7 +2,7 @@
 // round flows from its seed, so a seed (plus course and holes) reproduces the same
 // pins and wind – used for the daily challenge and for shareable challenge links.
 import { COURSES, courseById } from './courses/index.js';
-import { mulberry32 } from './hole.js';
+import { mulberry32, cleanTees } from './hole.js';
 import { RoundStats } from './stats.js';
 import { MPH, DEG } from './util.js';
 
@@ -57,7 +57,8 @@ export function holesFor(mode, courseId, single = 1) {
   return [(+single || 1) - 1];
 }
 
-// Challenge links: #c=<course>.<mode>.<holes>.<seed>[.<score>]
+// Challenge links: #c=<course>.<mode>.<holes>.<seed>[.<tees>][.<score>]
+// <tees> is m (middle) or f (forward); the back tees are the default and leave it out.
 // The optional score is what the sender made, as one integer: total strokes, tenths of a
 // foot (closest to the pin) or yards (long drive). Links without it still work.
 export function challengeScore(r) {
@@ -73,20 +74,24 @@ export function challengeScore(r) {
 }
 export function challengeHash(r) {
   const sc = challengeScore(r);
-  return `#c=${r.course.id}.${r.mode}.${r.holes.join('-')}.${r.seed}${sc == null ? '' : `.${sc}`}`;
+  const tees = { middle: '.m', forward: '.f' }[r.tees] || '';
+  return `#c=${r.course.id}.${r.mode}.${r.holes.join('-')}.${r.seed}${tees}${sc == null ? '' : `.${sc}`}`;
 }
 export function parseChallenge(hash) {
-  const m = /#c=([a-z]+)\.([a-z0-9]+)\.([0-9-]+)\.(\d+)(?:\.(\d{1,5}))?(?![\w.])/.exec(hash || '');
-  if (!m || !courseById(m[1], +m[4]) || !MODES[m[2]]) return null;
+  const m = /#c=([a-z]+)\.([a-z0-9]+)\.([0-9-]+)\.(\d+)(?:\.([mf]))?(?:\.(\d{1,5}))?(?![\w.])/.exec(hash || '');
+  // the editor's course is private to one device, so a link to it can't describe the same round elsewhere
+  if (!m || m[1] === 'custom' || !courseById(m[1], +m[4]) || !MODES[m[2]]) return null;
   const course = courseById(m[1], +m[4]);
-  const holes = m[3].split('-').map(Number).filter((i) => i >= 0 && i < 18);
-  if (!holes.length) return null;
+  const holes = m[3].split('-').map(Number);
+  // every hole must exist on that course (the random course has nine), else the link is damaged
+  if (!holes.length || holes.some((i) => !(i >= 0 && i < course.holes.length))) return null;
   // a crafted link must still describe a playable round: closest-to-the-pin needs a par 3,
   // long drive a par 4 or 5
   if (m[2] === 'ctp' && !holes.every((i) => course.holes[i]?.par === 3)) return null;
   if (m[2] === 'drive' && !holes.every((i) => course.holes[i]?.par >= 4)) return null;
   const c = { courseId: m[1], mode: m[2], holes, seed: +m[4] };
-  if (m[5] != null) c.score = +m[5];
+  if (m[5]) c.tees = m[5] === 'm' ? 'middle' : 'forward';
+  if (m[6] != null) c.score = +m[6];
   return c;
 }
 
@@ -108,10 +113,11 @@ export function createRound(opts) {
     setup[idx] = { pinIndex: Math.floor(rng() * 4), mph: wmin + (wmax - wmin) * Math.pow(rng(), 1.3), ang: windDir - holeHeading(course, idx) + (rng() - 0.5) * 1.4 };
   }
   const names = opts.players?.length ? opts.players : [null];
+  const tees = opts.daily ? 'back' : cleanTees(opts.tees); // the daily is one course for everyone
   const balls = MODES[opts.mode]?.balls || 0;
   return {
-    course, holes: opts.holes, i: 0, seed, mode: opts.mode, daily: opts.daily || null, setup, balls, target: opts.target ?? null,
-    opts: { courseId: opts.courseId, holes: opts.holes, mode: opts.mode, seed, players: opts.players || null, daily: opts.daily || null, solo: !!opts.solo, target: opts.target ?? null },
+    course, holes: opts.holes, i: 0, seed, mode: opts.mode, daily: opts.daily || null, tees, setup, balls, target: opts.target ?? null,
+    opts: { courseId: opts.courseId, holes: opts.holes, mode: opts.mode, seed, players: opts.players || null, daily: opts.daily || null, solo: !!opts.solo, target: opts.target ?? null, tees },
     players: names.map((name) => ({ name, scores: [], stats: new RoundStats(), attempts: [] })),
     p: 0,
     get player() { return this.players[this.p]; },

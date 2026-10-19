@@ -55,7 +55,7 @@ export class CameraDirector {
     this.flyT = 0;
     this.fov = 50;
     this.par3 = h.par === 3;
-    this.flyDur = this.par3 ? 6 : clamp(3.5 + h.length / 110, 4, 8.5);
+    this.flyDur = this.par3 ? 6 : clamp(3.5 + (h.length - h.teeS) / 110, 4, 8.5);
   }
   // returns true when finished
   flyover(dt) {
@@ -64,8 +64,8 @@ export class CameraDirector {
     if (this.par3) return this.par3Flyover(dt);
     const k = clamp(this.flyT / this.flyDur, 0, 1);
     const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
-    const s = e * h.length;
-    const p = h.pointAt(Math.max(0, s - 40));
+    const s = h.teeS + e * (h.length - h.teeS);
+    const p = h.pointAt(Math.max(h.teeS, s - 40));
     const ahead = h.pointAt(Math.min(h.length, s + 80));
     const look = { x: lerp(ahead.x, h.cup.x, e), z: lerp(ahead.z, h.cup.z, e) };
     const alt = 38 + 20 * Math.sin(k * Math.PI);

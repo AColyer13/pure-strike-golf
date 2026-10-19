@@ -2,6 +2,7 @@ import { UI } from './ui.js';
 import { Game } from './game.js';
 import { Academy } from './academy.js';
 import { parseChallenge } from './round.js';
+import { COURSES } from './courses/index.js';
 import { Editor } from './editor.js';
 import { Tutorial } from './tutorial.js';
 
@@ -24,15 +25,21 @@ try {
   const academy = new Academy();
   ui.attach(game, academy, new Editor(game), new Tutorial(game, ui));
   // a shared challenge link (#c=course.mode.holes.seed) replays the same pins and wind
-  ui.challenge = parseChallenge(location.hash);
-  if (ui.challenge) ui.sel.courseId = ui.challenge.courseId;
-  game.showcase(ui.sel.courseId);
-  ui.mainMenu();
-  if (!ui.challenge && /^#c=/.test(location.hash)) {
-    // a link that is damaged, or for a hole that can't be played that way: say so instead of ignoring it
-    ui.toast('That challenge link isn’t valid, so it was ignored', 'bad');
-    window.history.replaceState?.(null, '', location.pathname + location.search);
-  }
+  // The random course ('gen') is not a menu choice, so a link to it must not become the selected course.
+  const applyHash = () => {
+    ui.challenge = parseChallenge(location.hash);
+    if (ui.challenge && COURSES.some((c) => c.id === ui.challenge.courseId)) ui.sel.courseId = ui.challenge.courseId;
+    game.showcase(ui.sel.courseId);
+    ui.mainMenu();
+    if (!ui.challenge && /^#c=/.test(location.hash)) {
+      // a link that is damaged, or for a hole that can't be played that way: say so instead of ignoring it
+      ui.toast('That challenge link isn’t valid, so it was ignored', 'bad');
+      window.history.replaceState?.(null, '', location.pathname + location.search);
+    }
+  };
+  applyHash();
+  // a link pasted into an already-open tab only changes the hash: pick it up from the menu
+  window.addEventListener('hashchange', () => { if (game.state === 'menu' && /^#c=/.test(location.hash)) applyHash(); });
   document.getElementById('boot').remove();
   window.game = game; // handy for debugging from the console
 } catch (e) {

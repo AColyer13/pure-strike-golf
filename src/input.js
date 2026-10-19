@@ -40,13 +40,20 @@ export class Input {
   // ------------------------------------------------------------------ keyboard
   bindKeyboard() {
     addEventListener('keydown', (e) => {
-      if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA')) return;
+      // typing in a field is the field's business; on a drop-down or slider only Esc is ours, so it can still close a dialog
+      const tag = e.target?.tagName;
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') {
+        const typing = tag === 'TEXTAREA' || (tag === 'INPUT' && !/^(range|checkbox|radio|button)$/.test(e.target.type));
+        if (typing || e.key !== 'Escape') return;
+      }
       if (this.capture) { e.preventDefault(); this.capture(e); return; }
       const k = norm(e.key);
       this.keys[k] = true;
       this.g.audio.init();
       for (const a of this.actionsFor(k)) if (this.dispatch(a, e.repeat)) break;
-      if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) e.preventDefault();
+      // Tab only belongs to the game on the course; in the menu and dialogs it moves focus as usual
+      const menuFocus = this.g.state === 'menu' || this.g.ui.modalOpen();
+      if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key) && !(e.key === 'Tab' && menuFocus)) e.preventDefault();
     });
     addEventListener('keyup', (e) => {
       const k = norm(e.key);

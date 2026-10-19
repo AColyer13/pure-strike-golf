@@ -7,13 +7,13 @@ import { loadHistory } from './history.js';
 
 const $ = (id) => document.getElementById(id);
 const DONE_KEY = 'psg-tutorial-done';
-export const TUTORIAL_ROUND = { courseId: 'augusta', holes: [11], mode: 'single', seed: 27, solo: true };
+export const TUTORIAL_ROUND = { courseId: 'augusta', holes: [11], mode: 'single', seed: 27, solo: true, tees: 'back' };
 
 // asked once, on the lesson's last card: what the player's own rounds start with
 export const LEVELS = [
-  { id: 'new', label: 'New to golf', hint: 'Gentle swing meter, wind helps', settings: { profile: 'mid', difficulty: 'beginner' } },
-  { id: 'casual', label: 'Play casually', hint: 'Typical club golfer', settings: { profile: 'mid', difficulty: 'standard' } },
-  { id: 'regular', label: 'I play regularly', hint: 'Scratch golfer, standard assists', settings: { profile: 'scratch', difficulty: 'standard' } },
+  { id: 'new', label: 'New to golf', hint: 'Gentle swing meter, wind helps', settings: { profile: 'mid', difficulty: 'beginner', tees: 'forward' } },
+  { id: 'casual', label: 'Play casually', hint: 'Typical club golfer', settings: { profile: 'mid', difficulty: 'standard', tees: 'middle' } },
+  { id: 'regular', label: 'I play regularly', hint: 'Scratch golfer, standard assists', settings: { profile: 'scratch', difficulty: 'standard', tees: 'back' } },
 ];
 
 export function tutorialDone() { try { return !!localStorage.getItem(DONE_KEY); } catch (e) { return true; } }

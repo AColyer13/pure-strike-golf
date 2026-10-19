@@ -404,10 +404,16 @@ export class SoundEngine {
   }
 
   setWind(mph, gulls = false) {
+    this.lastWind = [mph, gulls];
     if (!this.windGain) return;
     const t = this.ctx.currentTime;
     this.windGain.gain.setTargetAtTime(this.enabled ? Math.min(0.25, 0.012 * mph) : 0, t, 0.5);
     this.windFilter.frequency.setTargetAtTime(250 + mph * 25, t, 0.5);
     this.birds = gulls ? 0.5 : 1;
+  }
+  // the mute key: the wind bed has its own gain, so it has to follow the switch too
+  setEnabled(on) {
+    this.enabled = on;
+    if (this.lastWind) this.setWind(...this.lastWind);
   }
 }

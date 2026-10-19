@@ -29,6 +29,9 @@ export const PROFILES = {
   senior:  { name: 'Smooth Swinger', desc: 'Slower speed, same fundamentals: ~175 yd driver carry, 7 iron ~110.', speed: 0.805, smash: 0.95, spin: 1.1, launch: 2.0 },
 };
 
+// the tee set that suits each golfer (a suggestion: the Tees row in the menu overrides it)
+export const TEE_FOR_PROFILE = { tour: 'back', scratch: 'back', mid: 'middle', senior: 'forward' };
+
 export function buildBag(profileKey) {
   const p = PROFILES[profileKey] || PROFILES.tour;
   const bag = TOUR.map(([key, name, loft, speed, smash, launch, spin, spinLoft, tourCarry]) => ({
