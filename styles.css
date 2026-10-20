@@ -20,6 +20,9 @@
   --red: #ff6159;
   --blue: #5fd4ff;
   --radius: 12px;
+  /* portrait phone: the touch buttons are 114 px tall; overlays stack above them */
+  --tc-h: 114px;
+  --tcb: calc(var(--tc-h) + 22px + env(safe-area-inset-bottom));
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -74,19 +77,29 @@ h1.logo { margin: 0; line-height: 1.1; }
 .menu-panel { width: min(560px, 100%); display: flex; flex-direction: column; gap: 14px; zoom: var(--ui-scale, 1); }
 .menu-head { text-align: left; }
 .tagline { color: #d8e8dd; font-weight: 500; text-shadow: 0 2px 8px rgba(0,0,0,.6); }
-.course-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.course-tabs { display: flex; flex-wrap: nowrap; gap: 6px; overflow-x: auto; scrollbar-width: none; scroll-snap-type: x proximity; }
+.course-tabs::-webkit-scrollbar { display: none; }
+.course-tab { flex: none; scroll-snap-align: start; white-space: nowrap; }
 .course-tab { display: flex; align-items: center; gap: 8px; font: 600 14px Barlow, sans-serif; color: var(--text); background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px 6px 10px; cursor: pointer; }
 .course-tab .cc-flag { width: 10px; height: 16px; }
 .course-tab:hover { background: rgba(255,255,255,.14); }
 .course-tab.sel { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); background: rgba(255,255,255,.12); }
-.course-hero { background: rgba(10, 22, 16, .7); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: var(--radius); padding: 14px 16px; backdrop-filter: blur(6px); }
-.course-hero .cc-name { font-size: 30px; }
+.course-hero { background: rgba(10, 22, 16, .7); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: var(--radius); padding: 10px 14px; backdrop-filter: blur(6px); }
+.course-hero .cc-name { font-size: 26px; }
+.course-hero .cc-meta { margin: 4px 0 0; }
+.cc-more > summary { cursor: pointer; list-style: none; margin-top: 6px; font: 600 12px Barlow, sans-serif; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.cc-more > summary::-webkit-details-marker { display: none; }
+.cc-more > summary::before { content: '\25B8  '; }
+.cc-more[open] > summary::before { content: '\25BE  '; }
+body.touch .cc-more > summary { min-height: 44px; display: flex; align-items: center; margin-top: 0; }
 .menu-play { display: grid; grid-template-columns: 1.3fr 1fr; gap: 10px; }
 .menu-play .btn { display: flex; flex-direction: column; align-items: flex-start; text-align: left; }
 .menu-play .btn small { font: 500 13px Barlow, sans-serif; opacity: .8; margin-top: 2px; }
 /* the second big button is a real call to action, not a ghost: solid so it reads over bright scenery */
-#btnPlay { background: linear-gradient(180deg, #2f6b46, #1f4d33); border-color: rgba(190, 240, 205, .65); }
-#btnPlay:hover { background: linear-gradient(180deg, #38794f, #265a3b); }
+.menu-play .btn:not(.primary) { background: rgba(14, 30, 21, .86); border-color: var(--line); }
+.menu-play .btn:not(.primary):hover { background: rgba(30, 56, 40, .9); }
+.resume-card.primary-cta { background: linear-gradient(180deg, rgba(79,208,122,.34), rgba(79,208,122,.16)); border: 2px solid var(--green); padding-top: 14px; padding-bottom: 14px; }
+.resume-card.primary-cta .lbl { font-size: 12px; }
 .daily-card { text-align: left; font: 500 14px Barlow, sans-serif; color: var(--text); background: linear-gradient(90deg, rgba(95,212,255,.16), rgba(95,212,255,.04)); border: 1px solid rgba(95,212,255,.4); border-radius: var(--radius); padding: 10px 14px; cursor: pointer; display: flex; flex-direction: column; gap: 3px; }
 .daily-card:hover { background: linear-gradient(90deg, rgba(95,212,255,.26), rgba(95,212,255,.08)); }
 .daily-card .lbl { font: 700 11px Barlow, sans-serif; letter-spacing: .12em; text-transform: uppercase; color: var(--blue); }
@@ -180,6 +193,7 @@ body.coaching #caddie { visibility: hidden; }
 .toast.good { border-color: var(--green); color: #c9ffd9; }
 .toast.bad { border-color: var(--red); color: #ffd2cf; }
 .toast.out { opacity: 0; transform: translateY(-8px); }
+@keyframes sheet-in { from { transform: translateY(40px); opacity: 0; } }
 @keyframes tin { from { opacity: 0; transform: translateY(8px); } }
 .banner { position: fixed; top: 26%; left: 50%; transform: translate(-50%, -50%) scale(.7); font: 800 76px 'Barlow Condensed', sans-serif; letter-spacing: .03em; opacity: 0; pointer-events: none; z-index: 31; text-shadow: 0 4px 30px rgba(0,0,0,.6), 0 2px 0 rgba(0,0,0,.4); transition: opacity .3s, transform .45s cubic-bezier(.2, 1.6, .4, 1); white-space: nowrap; }
 .banner.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
@@ -201,13 +215,13 @@ body.coaching #caddie { visibility: hidden; }
 .sp-head { font: 700 13px Barlow; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
 .sp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 10px; }
 .sp-grid div { display: flex; flex-direction: column; }
-.sp-grid span { font-size: 11px; color: var(--muted); }
+.sp-grid span { font-size: 12px; color: var(--muted); }
 .sp-grid b { font: 700 17px 'Barlow Condensed', sans-serif; }
 .sg { margin-top: 10px; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.05); display: grid; grid-template-columns: auto 1fr; gap: 0 10px; align-items: baseline; }
 .sg span { font-size: 12px; color: var(--muted); }
 .sg b { font: 800 24px 'Barlow Condensed', sans-serif; text-align: right; }
 .sg em { font-style: normal; font-size: 12px; font-weight: 600; }
-.sg small { grid-column: 1 / -1; color: var(--muted); font-size: 11px; }
+.sg small { grid-column: 1 / -1; color: var(--muted); font-size: 12px; }
 .sg.pos b { color: var(--green); }
 .sg.neg b { color: var(--red); }
 .sp-sub { font: 700 11px Barlow; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 12px 0 4px; }
@@ -225,7 +239,7 @@ body:has(.modal:not(.hidden))::after { content: ''; position: fixed; inset: 0; z
 body:has(.modal:not(.hidden)) #shotPanel { visibility: hidden; }
 
 /* ---------- modals ---------- */
-.modal { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 30; background: rgba(12, 26, 18, .95); border: 1px solid var(--line); border-radius: 16px; padding: 20px 24px; width: min(760px, 94vw); max-height: 92vh; overflow-y: auto; box-shadow: 0 30px 80px rgba(0,0,0,.5); animation: tin .25s ease-out; }
+.modal { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 30; background: rgba(12, 26, 18, .95); border: 1px solid var(--line); border-radius: 16px; padding: 20px 24px; width: min(760px, 94vw); max-height: 92vh; max-height: 92dvh; overflow-y: auto; overscroll-behavior: contain; box-shadow: 0 30px 80px rgba(0,0,0,.5); animation: tin .25s ease-out; }
 .modal:focus, #academy:focus { outline: none; }
 #settings .set-foot { position: sticky; bottom: 0; display: flex; gap: 10px; justify-content: flex-end; margin: 14px -24px -20px; padding: 12px 24px; background: rgba(12, 26, 18, .98); border-top: 1px solid var(--line); }
 #confirmBox { z-index: 31; width: min(420px, 94vw); }
@@ -269,7 +283,7 @@ td span.pickup i { position: absolute; top: -6px; right: -7px; font: 700 12px Ba
 .sc-total.over, .sum-score.over { color: #8fc6ff; }
 .sc-stats, .sum-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin: 10px 0 14px; }
 .sc-stats div, .sum-grid div { background: rgba(255,255,255,.05); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; }
-.sc-stats span, .sum-grid span { font-size: 11px; color: var(--muted); }
+.sc-stats span, .sum-grid span { font-size: 12px; color: var(--muted); }
 .sc-stats b, .sum-grid b { font: 700 22px 'Barlow Condensed', sans-serif; }
 #scNext { width: 100%; }
 #summary h1 { margin: 0; font: 800 38px 'Barlow Condensed', sans-serif; }
@@ -317,7 +331,7 @@ td span.pickup i { position: absolute; top: -6px; right: -7px; font: 700 12px Ba
 .lab-btns .btn { flex: 1; font-size: 14px; padding: 7px; }
 .lab-out { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; background: rgba(255,255,255,.04); padding: 10px 12px; border-radius: 12px; }
 .lab-out div { display: flex; flex-direction: column; }
-.lab-out span { font-size: 11px; color: var(--muted); }
+.lab-out span { font-size: 12px; color: var(--muted); }
 .lab-out b { font: 700 17px 'Barlow Condensed', sans-serif; }
 
 /* narrow portrait: the hole card and distance panel fill the top-left, so toasts sit below them */
@@ -386,42 +400,54 @@ table.hist th { color: var(--muted); font-weight: 600; }
 /* ---------- touch controls ---------- */
 #touchControls { display: none; }
 body.touch.in-round #touchControls { display: flex; position: fixed; inset: auto 0 0 0; z-index: 14; justify-content: space-between; align-items: flex-end; padding: 0 10px calc(10px + env(safe-area-inset-bottom)); pointer-events: none; }
-#touchControls > div { display: grid; gap: 8px; pointer-events: auto; }
-.tc-left { grid-template-columns: repeat(2, 58px); align-content: end; }
-.tc-right { grid-template-columns: repeat(3, 58px); align-content: end; }
-#touchControls button { width: 58px; height: 58px; border-radius: 50%; border: 1px solid rgba(255,255,255,.3); background: rgba(10,22,16,.65); color: #fff; font: 700 20px Barlow, sans-serif; touch-action: none; }
+#touchControls > div { pointer-events: auto; }
+.tc-left { display: grid; grid-template-columns: repeat(2, 48px); gap: 6px; }
+.tc-right { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px 4px; width: min(244px, calc(100vw - 134px)); }
+#touchControls button { border: 1px solid rgba(255,255,255,.26); background: rgba(10,22,16,.62); color: #fff; font: 700 18px/1 Barlow, sans-serif; padding: 0; touch-action: none; }
+.tc-left button { width: 48px; height: 48px; border-radius: 50%; }
+.tc-right button { flex: 1 1 0; min-width: 0; max-width: 48px; height: 44px; border-radius: 22px; }
 #touchControls button.down { background: rgba(244,211,31,.6); }
-#touchControls .tc-swing { grid-column: span 3; width: 190px; height: 74px; border-radius: 40px; background: linear-gradient(180deg, #ffe25a, #f0b91c); color: #1b1a0c; font-size: 18px; }
-#touchControls button small { display: block; font: 600 11px Barlow, sans-serif; line-height: 1; margin-top: 2px; color: rgba(255,255,255,.75); }
+#touchControls .tc-swing { flex: 1 0 100%; max-width: none; height: 64px; border-radius: 32px; background: linear-gradient(180deg, #ffe25a, #f0b91c); color: #1b1a0c; font-size: 17px; letter-spacing: .06em; }
+#touchControls button small { display: block; font: 600 10px/1 Barlow, sans-serif; margin-top: 3px; color: rgba(255,255,255,.75); }
+#touchControls .ico { width: 18px; height: 18px; }
+/* only the buttons that make sense now: shot options at address, skip once the ball is away */
+body:not([data-state="address"]) .tc-right :is([data-act="aimPin"], [data-act="shapeCycle"], [data-act="trajCycle"]) { display: none; }
+body[data-state="address"] .tc-right [data-act="skip"] { display: none; }
 body.touch #helpBar { display: none; }
 body.touch #clubBox kbd { display: none; }
+/* the club and its distances share one line: the arrows are right there under the thumb */
+body.touch #clubBox { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; min-width: 0; max-width: calc(100vw - 28px); padding: 6px 12px; }
+body.touch #clubBox .club-arrows { display: none; }
+body.touch #clubBox .club-row { flex: 1 0 100%; margin-top: 2px; }
+.plays { display: block; }
 /* the on-screen buttons fade with the HUD during the flyover and while the card is open */
 body.flyover #touchControls, body.sc-open #touchControls { opacity: 0; pointer-events: none; }
 /* the button groups set pointer-events back on, so they have to be switched off too */
 body.flyover #touchControls > div, body.sc-open #touchControls > div { pointer-events: none; }
 body.touch.in-round #touchControls { transition: opacity .2s; }
-body.touch.in-round #clubBox { bottom: 150px; }
-body.touch.in-round #lieBox { bottom: 246px; }
+body.touch.in-round #clubBox { bottom: calc(24px + 102px + env(safe-area-inset-bottom)); }
+body.touch.in-round #lieBox { bottom: calc(24px + 102px + 52px + env(safe-area-inset-bottom)); }
 /* keep overlays out from under the button columns: portrait stacks them above, landscape narrows them */
 @media (orientation: portrait) {
-  body.touch.in-round #intro { bottom: 232px; width: min(640px, calc(100vw - 16px)); }
-  body.touch.in-round #shotPanel { bottom: 232px; max-height: calc(100vh - 300px); }
-  body.touch.in-round #meter { bottom: 232px; width: calc(100vw - 16px); }
-  body.touch.in-round #captions, body.touch.in-round #ffHint { bottom: 240px; }
-  /* the club box sits above the meter so it clears the right-hand button column */
-  body.touch.in-round #clubBox { bottom: 310px; }
-  body.touch.in-round #lieBox { bottom: 406px; }
-  /* …and the caddie's note above the club box (and the lie box, when the full HUD shows it) */
-  body.touch.in-round #caddie { bottom: 392px; }
+  body.touch.in-round #intro { bottom: var(--tcb); width: min(640px, calc(100vw - 16px)); }
+  body.touch.in-round #shotPanel { bottom: var(--tcb); max-height: calc(100vh - var(--tcb) - 70px); }
+  body.touch.in-round #meter { bottom: var(--tcb); width: calc(100vw - 16px); }
+  body.touch.in-round #captions, body.touch.in-round #ffHint { bottom: calc(var(--tcb) + 8px); }
+  /* the club box sits on the meter, the caddie's note on the club box (and on the lie box, when the full HUD shows it) */
+  body.touch.in-round #clubBox { bottom: calc(var(--tcb) + 78px); }
+  body.touch.in-round #lieBox { bottom: calc(var(--tcb) + 122px); }
+  body.touch.in-round #caddie { bottom: calc(var(--tcb) + 122px); }
   body.touch #coachMark { font-size: 13px; padding: 10px 12px 8px; }
   body.touch #coachMark h4 { font-size: 18px; }
   body.touch #coachMark p { margin-bottom: 8px; }
-  body.touch.in-round:not(.hud-essential) #caddie { bottom: 502px; }
+  body.touch.in-round:not(.hud-essential) #caddie { bottom: calc(var(--tcb) + 226px); }
 }
 @media (orientation: landscape) {
-  body.touch.in-round #intro { width: min(640px, calc(100vw - 420px)); bottom: 24px; }
-  body.touch.in-round #shotPanel { right: 210px; width: min(400px, calc(100vw - 440px)); }
-  body.touch.in-round #meter { width: min(620px, calc(100vw - 420px)); bottom: 24px; }
+  .tc-right { width: 150px; }
+  .tc-right button { flex-basis: 44px; }
+  body.touch.in-round #intro { width: min(640px, calc(100vw - 340px)); bottom: 24px; }
+  body.touch.in-round #shotPanel { right: 172px; width: min(400px, calc(100vw - 372px)); }
+  body.touch.in-round #meter { width: min(620px, calc(100vw - 340px)); bottom: 24px; }
 }
 /* the caddie's note must not run down into the ball or under the button columns: three lines at most */
 body.touch.in-round #caddieText { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; }
@@ -432,10 +458,10 @@ body.touch.in-round #caddieText { display: -webkit-box; -webkit-box-orient: vert
   body.in-round #holeCard :is(.hc-name, .hc-par) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   body.in-round #holeCard .hc-shot { white-space: nowrap; }
   /* slim enough to stay clear of the golfer's head, which sits just below it */
-  body.in-round #distBox { top: 8px; left: 246px; min-width: 0; padding: 6px 10px; }
+  body.in-round #distBox { top: 8px; left: 246px; min-width: 0; max-width: 200px; padding: 6px 10px; }
   body.in-round #distBox .lbl { display: none; }
   body.in-round #distBox .big { font-size: 26px; line-height: 1.05; }
-  body.in-round #distBox .sub { font-size: 11px; line-height: 1.25; }
+  body.in-round #distBox .sub { font-size: 12px; line-height: 1.25; }
   body.in-round #lieBox { display: none; }
   body.in-round #windBox { display: flex; top: 8px; right: 8px; }
   body.in-round #minimap { top: 8px; right: 150px; width: 72px; height: 120px; }
@@ -472,7 +498,7 @@ body.hud-essential.in-round:not(.target-view) #hud:not([data-state="flight"]) #c
 @media (orientation: landscape) and (max-height: 500px) {
   body.hud-essential.in-round:not(.target-view) #hud:not([data-state="flight"]) #caddie { top: 78px; right: 8px; max-width: min(330px, calc(100vw - 480px)); }
 }
-.lie-line { display: flex; gap: 6px; align-items: baseline; font-size: 12px; margin-top: 3px; padding-top: 4px; border-top: 1px solid var(--line); }
+.lie-line { display: flex; flex-wrap: wrap; gap: 0 6px; align-items: baseline; font-size: 12px; margin-top: 3px; padding-top: 4px; border-top: 1px solid var(--line); }
 .lie-line b { font: 700 15px 'Barlow Condensed', sans-serif; color: var(--text); }
 .lie-line .lie-range { font-size: 12px; }
 .lie-line[data-lie="deep"] .lie-range, .lie-line[data-lie="splash"] .lie-range { color: var(--red); }
@@ -529,11 +555,35 @@ body.reduced-motion *, body.reduced-motion *::before, body.reduced-motion *::aft
   .menu-play { grid-template-columns: 1fr; }
 }
 
+/* ---------- phone dialogs: bottom sheets the thumb can reach ---------- */
+@media (max-width: 760px) and (orientation: portrait) {
+  .modal, .modal.wide, #confirmBox { left: 0; right: 0; top: auto; bottom: 0; transform: none; width: 100%; max-height: 88vh; max-height: 88dvh; border-radius: 18px 18px 0 0; border-bottom: 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); animation: sheet-in .25s ease-out; box-shadow: 0 -16px 50px rgba(0,0,0,.5); }
+  .modal::before { content: ''; display: block; width: 36px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.25); margin: -8px auto 10px; }
+  #settings .set-foot, .sum-actions { margin: 14px -16px calc(-18px - env(safe-area-inset-bottom)); padding: 12px 16px calc(14px + env(safe-area-inset-bottom)); bottom: calc(-18px - env(safe-area-inset-bottom)); }
+  #settings .set-foot .btn { flex: 1; }
+  .sg-row { grid-template-columns: 1fr 56px; grid-template-areas: "nm val" "bar bar"; row-gap: 2px; }
+  .sg-row > span { grid-area: nm; }
+  .sg-row > .bar { grid-area: bar; }
+  .sg-row > b { grid-area: val; }
+  /* nine holes plus Out and Total across a 343px card: fixed columns, tight cells */
+  #scorecard table { table-layout: fixed; font-size: 13px; }
+  #scorecard th { width: 40px; font-size: 11px; padding: 5px 1px; }
+  #scorecard td { padding: 5px 0; }
+  #scorecard td span { min-width: 0; width: 22px; }
+  #scorecard table.few { width: 100%; min-width: 0; }
+  #scorecard table.few th { width: 58px; }
+}
+@media (max-height: 500px) { .modal { max-height: 94vh; max-height: 94dvh; padding: 12px 18px; } }
+
 /* ---------- small screens ---------- */
 @media (max-width: 760px) {
-  #menu { background: rgba(6,14,9,.82); padding: 14px 16px; }
-  .logo { font-size: 34px; }
-  .menu-play { grid-template-columns: 1fr; }
+  #menu { background: rgba(6,14,9,.82); padding: max(14px, env(safe-area-inset-top)) 16px 14px; }
+  .logo { font-size: 30px; }
+  .tagline { display: none; }
+  .menu-panel { gap: 10px; }
+  .course-tabs { margin: 0 -16px; padding: 0 16px; }
+  .menu-play { grid-template-columns: 1fr; gap: 8px; }
+  .menu-play .btn.big { min-height: 56px; }
   .set-cols, .help-cols, .remap { grid-template-columns: 1fr; }
   .trend { grid-template-columns: 1fr 1fr; }
   #hud .panel { padding: 6px 9px; }
@@ -575,10 +625,9 @@ body.reduced-motion *, body.reduced-motion *::before, body.reduced-motion *::aft
   body.in-round:not(.target-view) #hud:not([data-state="flight"]) #minimap { display: none !important; }
 }
 @media (max-width: 760px) and (orientation: portrait) and (max-height: 600px) {
-  body.touch.in-round #caddie { top: 166px !important; bottom: auto !important; left: 8px; right: 8px; max-width: none; font-size: 12px; padding: 5px 10px; line-height: 1.3; }
+  body.touch.in-round #caddie { top: 188px !important; bottom: auto !important; left: 8px; right: 8px; max-width: none; font-size: 12px; padding: 5px 10px; line-height: 1.3; }
   body.touch.in-round #caddie .caddie-ico { display: none; }
   body.touch.in-round #caddieText { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }
-  body.touch.in-round #clubBox { bottom: 306px !important; }
 }
 
 /* ---------- course editor ---------- */
