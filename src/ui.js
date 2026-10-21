@@ -222,6 +222,7 @@ export class UI {
     rc.classList.toggle('hidden', !saved);
     // one primary action, by rule: resume a round, else the guided hole on a first visit, else tee off
     rc.classList.toggle('primary-cta', !!saved);
+    $('btnPlay').parentElement.classList.toggle('has-resume', !!saved);
     $('btnQuick').classList.toggle('primary', guided && !saved);
     $('btnQuick').style.order = guided && !saved ? '-1' : '';
     $('btnPlay').classList.toggle('primary', !guided && !saved);
@@ -446,11 +447,13 @@ export class UI {
     if (this.game.settings.hudDetail !== 'full') {
       // essential HUD: the lie box is hidden, so its one useful line lives here
       const lie = d.putter ? `Stimp ${d.stimp.toFixed(1)}` : [d.lieRange === '100–100%' ? '' : d.lieRange, ...parts].filter(Boolean).join(' · ');
-      sub += `<span class="lie-line" data-lie="${d.lieKey}"><b>${esc(d.lie)}</b> <span class="lie-range">${lie}</span></span>`;
+      // a clean tee shot has nothing to say about the lie
+      if (d.lieKey !== 'tee' || lie) sub += `<span class="lie-line" data-lie="${d.lieKey}"><b>${esc(d.lie)}</b> <span class="lie-range">${lie}</span></span>`;
     }
     $('dSub').innerHTML = sub;
-    $('hud').dataset.state = d.state;
-    document.body.dataset.state = d.state; // the touch buttons that make sense change with it
+    this.setState(d.state);
+    document.body.dataset.putt = d.putter ? '1' : '';
+    this.touchChips(d);
     $('hud').dataset.putt = d.putter ? '1' : '';
     const w = d.wind;
     $('windArrow').style.transform = `rotate(${w.ang}rad)`;
@@ -470,6 +473,24 @@ export class UI {
     $('lieRange').textContent = d.putter ? `Stimp ${d.stimp.toFixed(1)}` : d.lieRange;
     $('lieSlope').textContent = d.putter ? '' : parts.join(' · ') || 'Flat lie';
     $('lieBox').dataset.lie = d.lieKey;
+  }
+
+  setState(state) {
+    $('hud').dataset.state = state;
+    document.body.dataset.state = state; // the touch buttons that make sense change with it
+    if (state !== 'address') this.game.input?.toggleShotOpts(false);
+  }
+  // the shot tray's buttons say what is set, and the tray's own button shows a dot when the shot is shaped
+  touchChips(d) {
+    const c = this.chips || (this.chips = {
+      shape: document.querySelector('[data-act="shapeCycle"] small'),
+      flight: document.querySelector('[data-act="trajCycle"] small'),
+      shot: document.querySelector('.tc-shot'),
+    });
+    const sh = d.shape.toLowerCase(), fl = { Low: 'low', Standard: 'flight', High: 'high' }[d.traj] || 'flight';
+    if (c.shape && c.shape.textContent !== sh) c.shape.textContent = sh;
+    if (c.flight && c.flight.textContent !== fl) c.flight.textContent = fl;
+    c.shot?.classList.toggle('set', d.shape !== 'Straight' || d.traj !== 'Standard');
   }
 
   minimap(game) {

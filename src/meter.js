@@ -172,8 +172,8 @@ export class SwingMeter {
     }
     g.fillText(msg, x0, 11);
     // a narrow meter (phone landscape) drops the club's range rather than print over the cue;
-    // the club box shows it anyway
-    if (this.rangeLabel && g.measureText(msg).width + g.measureText(this.rangeLabel).width + 12 <= x1 - x0) { g.textAlign = 'right'; g.fillText(this.rangeLabel, x1, 11); }
+    // the club box shows it anyway, and on touch it is always there, so the meter never repeats it
+    if (this.rangeLabel && !document.body.classList.contains('touch') && g.measureText(msg).width + g.measureText(this.rangeLabel).width + 12 <= x1 - x0) { g.textAlign = 'right'; g.fillText(this.rangeLabel, x1, 11); }
   }
 }
 

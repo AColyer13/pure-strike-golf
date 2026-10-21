@@ -1120,6 +1120,8 @@ export class Game {
     const dCam = this.camera.position.distanceTo(this.ballMesh.position);
     this.ballMesh.scale.setScalar(clamp(dCam / 7, 1.3, 14));
     if (this.hole) this.world.update(dt, this.env ? this.env.wind : [0, 0, 0], this.ballMesh.visible ? this.ballMesh.position : this.cam.look);
+    // the touch buttons and cards follow the game state, even mid-swing when the HUD numbers are not refreshed
+    if (st !== this.hudState) { this.hudState = st; this.ui.setState(st); }
     this.hudTimer += dt;
     if (this.hudTimer > 0.25 && (st === 'address' || st === 'flight')) { this.hudTimer = 0; this.updateHUD(st === 'flight'); }
     this.tutorial?.update(dt);

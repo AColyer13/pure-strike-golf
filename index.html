@@ -120,9 +120,13 @@
   <div class="tc-right">
     <button data-act="menu" aria-label="Menu">☰<small>menu</small></button>
     <button data-act="targetView" aria-label="Target view"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M1.5 12S5.5 5 12 5s10.5 7 10.5 7-4 7-10.5 7S1.5 12 1.5 12z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="3.2" fill="currentColor"/></svg><small>view</small></button>
-    <button data-act="aimPin" aria-label="Aim at the pin">⚑<small>pin</small></button>
-    <button data-act="shapeCycle" aria-label="Shot shape: draw, straight, fade">⤳<small>shape</small></button>
-    <button data-act="trajCycle" aria-label="Ball flight: low, standard, high">⤒<small>flight</small></button>
+    <button data-act="shotOpts" class="tc-shot" aria-label="Shot options: aim at the pin, shape, flight" aria-expanded="false"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/><circle cx="16" cy="7" r="2.4" fill="currentColor"/><circle cx="8" cy="17" r="2.4" fill="currentColor"/></svg><small>shot</small></button>
+    <button data-act="aimPin" class="tc-pin" aria-label="Aim at the pin">⚑<small>pin</small></button>
+    <div class="tc-opts" role="group" aria-label="Shot options">
+      <button data-act="aimPin" aria-label="Aim at the pin">⚑<small>pin</small></button>
+      <button data-act="shapeCycle" aria-label="Shot shape: draw, straight, fade">⤳<small>shape</small></button>
+      <button data-act="trajCycle" aria-label="Ball flight: low, standard, high">⤒<small>flight</small></button>
+    </div>
     <button data-act="skip" aria-label="Skip"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5l11 7-11 7zM18 5v14" fill="currentColor" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/></svg><small>skip</small></button>
     <button data-act="swing" data-hold class="tc-swing" aria-label="Swing">SWING</button>
   </div>

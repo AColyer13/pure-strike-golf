@@ -411,8 +411,25 @@ body.touch.in-round #touchControls { display: flex; position: fixed; inset: auto
 #touchControls button small { display: block; font: 600 10px/1 Barlow, sans-serif; margin-top: 3px; color: rgba(255,255,255,.75); }
 #touchControls .ico { width: 18px; height: 18px; }
 /* only the buttons that make sense now: shot options at address, skip once the ball is away */
-body:not([data-state="address"]) .tc-right :is([data-act="aimPin"], [data-act="shapeCycle"], [data-act="trajCycle"]) { display: none; }
 body[data-state="address"] .tc-right [data-act="skip"] { display: none; }
+/* pin, shape and flight share one "shot" button that opens a tray over the top row; on the green only
+   the pin button matters, so it takes the shot button's place */
+.tc-right { position: relative; }
+.tc-shot, .tc-pin, .tc-opts { display: none; }
+body[data-state="address"] .tc-shot { display: block; position: relative; }
+body[data-state="address"][data-putt="1"] .tc-shot { display: none; }
+body[data-state="address"][data-putt="1"] .tc-pin { display: block; }
+.tc-shot.set::after { content: ''; position: absolute; top: 6px; right: 8px; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px rgba(10,22,16,.8); }
+.tc-opts { position: absolute; right: 0; top: 0; height: 44px; gap: 4px; z-index: 1; border-radius: 22px; background: rgba(10,22,16,.92); }
+body.tc-opts[data-state="address"]:not([data-putt="1"]) .tc-opts { display: flex; animation: tin .15s ease-out; }
+.tc-opts button { flex: 0 0 48px; }
+/* only what matters now stays up: mid-swing just the swing button and the meter; once the ball is away
+   the aim and club buttons and the club card go, and on the result the swing button too (tap anywhere continues) */
+body.touch.in-round:is([data-state="swing"], [data-state="backswing"]) :is(.tc-left, .tc-right > :not(.tc-swing)) { visibility: hidden; }
+body.touch.in-round:not([data-state="address"], [data-state="swing"], [data-state="backswing"]) .tc-left { visibility: hidden; }
+body.touch.in-round:is([data-state="result"], [data-state="replay"]) .tc-swing { visibility: hidden; }
+body.touch.in-round:is([data-state="swing"], [data-state="backswing"]) :is(#clubBox, #minimap, #caddie),
+body.touch.in-round:not([data-state="address"], [data-state="swing"], [data-state="backswing"]) #clubBox { opacity: 0; pointer-events: none; }
 body.touch #helpBar { display: none; }
 body.touch #clubBox kbd { display: none; }
 /* the club and its distances share one line: the arrows are right there under the thumb */
@@ -504,6 +521,13 @@ body.hud-essential.in-round:not(.target-view) #hud:not([data-state="flight"]) #c
 .lie-line[data-lie="deep"] .lie-range, .lie-line[data-lie="splash"] .lie-range { color: var(--red); }
 body:not(.hud-essential) .lie-line { display: none; }
 
+/* phones, either way up: the putt note and the tour-average sums wait under Details, so the cards stay small */
+@media (max-width: 760px), (max-height: 500px) {
+  body.in-round #distBox .sub small { display: none; }
+  #shotPanel:not(.open) .sg small { display: none; }
+  #shotPanel:not(.open) .sg { margin-top: 8px; padding: 6px 10px; }
+}
+
 /* ---------- guided first hole ---------- */
 #coachMark { position: fixed; z-index: 30; width: min(340px, calc(100vw - 16px)); background: rgba(255, 250, 230, .97); color: #1d2a20; border-radius: 14px; padding: 12px 14px 10px; box-shadow: 0 12px 32px rgba(0,0,0,.4), 0 0 0 2px #ffe25a; font-size: 14px; line-height: 1.4; animation: tin .25s ease-out; pointer-events: auto; }
 #coachMark .cm-step { font: 700 11px Barlow, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #6a5a10; }
@@ -584,6 +608,10 @@ body.reduced-motion *, body.reduced-motion *::before, body.reduced-motion *::aft
   .course-tabs { margin: 0 -16px; padding: 0 16px; }
   .menu-play { grid-template-columns: 1fr; gap: 8px; }
   .menu-play .btn.big { min-height: 56px; }
+  /* a round is waiting: Resume is the one call to action, the rest step back to a quiet row */
+  .menu-play.has-resume { grid-template-columns: 1fr 1fr; }
+  .menu-play.has-resume .btn.big { min-height: 44px; font-size: 16px; padding: 8px 12px; }
+  .menu-play.has-resume .btn small { display: none; }
   .set-cols, .help-cols, .remap { grid-template-columns: 1fr; }
   .trend { grid-template-columns: 1fr 1fr; }
   #hud .panel { padding: 6px 9px; }
@@ -608,11 +636,13 @@ body.reduced-motion *, body.reduced-motion *::before, body.reduced-motion *::aft
   body.in-round #holeCard :is(.hc-name, .hc-par) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   body.in-round #holeCard .hc-shot { white-space: nowrap; }
   body.in-round #windArrow { font-size: 17px; }
-  body.in-round #distBox { top: 62px; left: auto; right: 8px; min-width: 0; max-width: 150px; text-align: right; }
+  body.in-round #distBox { top: 70px; left: auto; right: 8px; min-width: 0; max-width: 150px; text-align: right; }
   body.in-round #distBox .sub { align-items: flex-end; }
   body.in-round #distBox .lie-line { justify-content: flex-end; flex-wrap: wrap; row-gap: 0; }
   body.in-round #distBox .sub { font-size: 12px; }
-  body.in-round #minimap { top: 230px; right: 8px; height: 130px; }
+  body.in-round #minimap { top: 238px; right: 8px; height: 130px; }
+  /* the caddie's note is a hint, not a paragraph: two lines */
+  body.touch.in-round #caddieText { -webkit-line-clamp: 2; line-clamp: 2; }
   /* the 3-D view can't show a far green at this width, so the map (zoomed on the green when the
      shot can reach it) stays up at address; not for putts, where the green fills the view anyway */
   body.hud-essential.in-round:not(.target-view) #hud[data-state="address"]:not([data-putt="1"]) #minimap { display: block; }
