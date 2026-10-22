@@ -37,8 +37,6 @@ import { settleShot, settleRelief, pickedUp, finishHoleScore, nextTurn, nextHole
 
 const $ = (id) => document.getElementById(id);
 
-const HELP_RUNS = 5; // runs of failed swings that get coaching, per round
-
 export class Game {
   constructor(ui) {
     this.ui = ui;
@@ -88,9 +86,7 @@ export class Game {
     this.mouseSwing.onCancel = () => {
       this.golfer.phase = 'idle';
       if (this.state === 'swing') this.state = 'address';
-      this.coachCancel();
     };
-    this.coach = { fails: 0, tempoMiss: 0, assist: false, helps: 0, maxRun: 0, mute: false };
 
     this.cam = new CameraDirector(this, this.camera);
     this.caddie = new Caddie(this);
@@ -136,7 +132,7 @@ export class Game {
     return {
       // a first visit starts a typical golfer on the middle tees; saved settings from before tee sets keep the back tees
       profile: 'mid', difficulty: 'standard', tees: Object.keys(s).length ? 'back' : 'middle', units: 'yd', volume: 0.7, tracer: true, caddyVoice: true, caddie: 'tech', tempo: DEFAULT_TEMPO, guide: 'off',
-      reducedMotion: reduce, captions: false, uiScale: 1, keys: {}, trainingWheels: true, ffSeen: 0, quality: 'auto', ...s,
+      reducedMotion: reduce, captions: false, uiScale: 1, keys: {}, ffSeen: 0, quality: 'auto', ...s,
     };
   }
   saveSettings() {
@@ -184,7 +180,6 @@ export class Game {
   // opts: { courseId, holes, mode, seed?, daily?: dateKey }
   // snap: a saved round (roundSnapshot) to carry on instead of starting afresh
   startRound(opts, snap = null) {
-    this.coach = { fails: 0, tempoMiss: 0, assist: false, helps: 0, maxRun: 0, mute: false };
     this.ui.hideAll();
     this.audio.init();
     this.audio.setVolume(this.settings.volume);
@@ -308,8 +303,8 @@ export class Game {
     setCounts(countsFor(this.club, this.suggestedPower));
     // the tempo guide: ticks on each count, and the timing bar; always on in training
     const training = !!this.tutorial || this.round?.mode === 'practice', guide = this.settings.guide;
-    this.mouseSwing.count = training || guide === 'ticks' || guide === 'bar' || this.coach.assist;
-    this.mouseSwing.bar = training || guide === 'bar' || this.coach.assist;
+    this.mouseSwing.count = training || guide === 'ticks' || guide === 'bar';
+    this.mouseSwing.bar = training || guide === 'bar';
     this.mouseSwing.draw();
     this.world.showGreenGrid(this.onGreen ? !this.gridHide : this.nearGreen() && this.gridOn);
     this.world.arc.visible = true;
@@ -545,7 +540,6 @@ export class Game {
       if (this.mouseSwing.result) Object.assign(this.mouseSwing.result, { finalFace: r.face, tempoFace: t.face }); // (what the readout shows)
     }
     if (r.practice) { this.practiceSwing(r); return; }
-    this.coach.fails = 0; // a swing that was taken ends a run of failures
     this.tempoNote = null;
     this.executeSwing(r);
     if (r.backTime == null) return;
@@ -554,62 +548,8 @@ export class Game {
     const p = CADDIES[this.settings.caddie];
     // shown in the result card, and spoken with the caddie's word on the shot (a pure swing is only mentioned there)
     this.tempoKind = kind;
-    this.coachTempo(kind);
     this.tempoNote = p ? tempoLine(p.id, kind, Math.random, this.recent) : null;
     if (!p && this.settings.caddyVoice) say({ pure: 'Smooth tempo.', quick: 'Too quick.', slow: 'Too slow.' }[kind], this.settings.volume);
-  }
-
-  // ------------------------------------------------------------------ swing coaching
-  // (training wheels: the help only counts failures in a row, and starts at most HELP_RUNS times per round)
-  // A swing that goes nowhere says why once it keeps happening: the 3rd failure in a row explains the swing, the 4th
-  // adds the Shift practice-swing hint, the 5th turns the tempo bar on, the 6th arms a free practice swing.
-  coachCancel() {
-    const m = this.mouseSwing, c = this.coach;
-    if (this.state !== 'address' || this.tutorial || m.practice || !this.settings.trainingWheels) return;
-    c.fails++; c.maxRun = Math.max(c.maxRun, c.fails);
-    if (c.fails === 3) { c.mute = c.helps >= HELP_RUNS; if (!c.mute) c.helps++; }
-    if (c.fails < 3 || c.mute) return;
-    if (c.fails <= 4) {
-      const pulled = m.maxY - m.y0 > 12;
-      let msg = !pulled ? 'Hold the button and drag down to take the club back, then push up to hit.'
-        : m.phase === 'fwd' ? 'Keep going: push up past where you started to hit the ball.'
-        : 'Pull down to take the club back, then push up past where you started.';
-      if (c.fails === 4) msg += ' Hold Shift for a free practice swing.';
-      this.ui.toast(msg, 'bad');
-    } else if (c.fails === 5) {
-      this.coachAssistOn();
-      this.ui.toast('Tempo bar on: reach the top of the backswing on count 3, then push up.');
-    } else {
-      m.armed = true; document.querySelector('.tc-prac')?.classList.add('set');
-      this.ui.toast('Your next swing is a free practice swing. Get the tempo right: top of the backswing on count 3.');
-      c.fails = 0;
-    }
-  }
-  coachTempo(kind) {
-    const c = this.coach;
-    if (kind === 'pure') { c.fails = 0; c.tempoMiss = 0; c.assist = false; return; }
-    if (!this.settings.trainingWheels) return;
-    c.fails = 0; c.tempoMiss++;
-    if (c.tempoMiss === 2) this.ui.toast(kind === 'quick' ? 'Too quick: take it back slower, top of the swing on count 3.' : 'Too slow: reach the top of the swing on count 3.', 'bad');
-    else if (c.tempoMiss >= 3 && !c.assist && this.settings.guide !== 'bar') {
-      this.coachAssistOn();
-      this.ui.toast('Tempo bar on: aim for the green mark at the top of the swing.');
-    }
-  }
-  // Training wheels come off by themselves after a full 18 holes in which the player never failed four swings in a row, or scored no worse than half a stroke over par per hole.
-  coachRoundEnd(totals, holes) {
-    const c = this.coach;
-    if (!this.settings.trainingWheels || this.tutorial || holes !== 18) return;
-    if (c.maxRun < 4 || totals.strokes - totals.par <= holes * 0.5) this.trainingWheelsOff('Nice round');
-  }
-  trainingWheelsOff(why) {
-    this.settings.trainingWheels = false; this.saveSettings();
-    this.coach.assist = false;
-    this.ui.toast(`${why}: training wheels are off. Turn them back on in Settings.`);
-  }
-  coachAssistOn() {
-    this.coach.assist = true;
-    this.mouseSwing.count = true; this.mouseSwing.bar = true;
   }
 
   // ------------------------------------------------------------------ previews
@@ -1040,7 +980,6 @@ export class Game {
         if (!old || t.strokes - t.par < old.toPar) localStorage.setItem(key, JSON.stringify({ toPar: t.strokes - t.par, strokes: t.strokes }));
       } catch (e) { /* ignore */ }
     }
-    this.coachRoundEnd(r.stats.totals(), r.scores.length);
     this.ui.summary(this.course, r, r.stats.totals(), prevBest, { ...this.settings, ...played });
   }
 
