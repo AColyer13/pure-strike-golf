@@ -596,11 +596,11 @@ export class Game {
       this.ui.toast('Tempo bar on: aim for the green mark at the top of the swing.');
     }
   }
-  // Training wheels come off by themselves after a good round in which the player never failed four swings in a row.
+  // Training wheels come off by themselves after a full 18 holes in which the player never failed four swings in a row, or scored no worse than half a stroke over par per hole.
   coachRoundEnd(totals, holes) {
     const c = this.coach;
-    if (!this.settings.trainingWheels || this.tutorial || holes < 1) return;
-    if (c.maxRun < 4 && totals.strokes - totals.par <= holes * 0.5) this.trainingWheelsOff('A good round without a run of failed swings');
+    if (!this.settings.trainingWheels || this.tutorial || holes !== 18) return;
+    if (c.maxRun < 4 || totals.strokes - totals.par <= holes * 0.5) this.trainingWheelsOff('Nice round');
   }
   trainingWheelsOff(why) {
     this.settings.trainingWheels = false; this.saveSettings();
