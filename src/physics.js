@@ -76,7 +76,6 @@ export const LIES = {
 };
 
 // ---------------------------------------------------------------- vectors
-const v3 = (x = 0, y = 0, z = 0) => [x, y, z];
 const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const mul = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
@@ -84,7 +83,6 @@ const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
 const len = (a) => Math.hypot(a[0], a[1], a[2]);
 const norm = (a) => { const l = len(a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
-export const vec = { v3, add, sub, mul, dot, cross, len, norm };
 
 
 // Rotate vector v around unit axis k by angle a (Rodrigues)

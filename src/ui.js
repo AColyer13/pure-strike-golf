@@ -1,7 +1,7 @@
 // DOM user interface: menus, HUD, shot panel, scorecard, summaries, stats and settings.
 import { COURSES, courseById } from './courses/index.js';
 import { CADDIES, CADDIE_IDS } from './caddies.js';
-import { TEMPOS, TEMPO_IDS } from './meter.js';
+import { TEMPOS, TEMPO_IDS } from './swing.js';
 import { PROFILES, TEE_FOR_PROFILE } from './clubs.js';
 import { YD, TEE_SETS, teeYds } from './hole.js';
 import { SURFACES } from './physics.js';

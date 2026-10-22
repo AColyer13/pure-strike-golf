@@ -139,7 +139,7 @@ src/clubs.js              golfer profiles and bags (tour, scratch, 15 hcp, smoot
 src/hole.js, world.js     procedural terrain, hazards, trees and rendering for each hole
 src/courses/*.js          the four course definitions + the procedural course generator
 src/golfer.js             animated golfer: keyframed swing with weight shift, late release and finish pose
-src/meter.js              analog swing (mouse, touch drag, gamepad stick) and tempo
+src/swing.js              analog swing (mouse, touch drag, gamepad stick) and tempo
 src/coach.js, stats.js    coaching tips, strokes gained, expected strokes
 src/academy.js            Golf Academy lessons and Ball Flight Lab
 src/ui.js, audio.js       menus, HUD, scorecard, stats, settings; SoundEngine (samples with synthesis fallback)

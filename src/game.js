@@ -14,7 +14,7 @@ import { BallSim, LIES, SURFACES, puttSpeedFor, BALL } from './physics.js';
 import { buildBag } from './clubs.js';
 import { YD, FT, mulberry32 } from './hole.js';
 import { scoreName } from './stats.js';
-import { MouseSwing, meterToStrike, tempoToMeterError, tempo, setTempo, setCounts, countsFor, tempoNote, DEFAULT_TEMPO } from './meter.js';
+import { MouseSwing, meterToStrike, tempoToMeterError, tempo, setTempo, setCounts, countsFor, tempoNote, DEFAULT_TEMPO } from './swing.js';
 import { say, hush } from './voice.js';
 import { CADDIES, advice, greeting, tempoLine, judgeShot, situationOf, reaction } from './caddies.js';
 import { SoundEngine } from './audio.js';
@@ -344,7 +344,6 @@ export class Game {
     const b = this.ball;
     if (!this.club) return;
     const f = dirOf(this.aim);
-    this.golfer.setOutfit(this.round?.p || 0);
     this.golfer.place({ x: b.p[0], z: b.p[2] }, f, this.hole.height(b.p[0], b.p[2]), (x, z) => this.hole.height(x, z));
     const lift = ballLiftFor(b, this.club);
     this.ballLift = lift;

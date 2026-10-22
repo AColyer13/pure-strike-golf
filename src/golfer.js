@@ -22,16 +22,10 @@ function joint(r, mat) {
   return m;
 }
 
-// hot-seat players each get their own outfit so it's obvious whose turn it is
-export const OUTFITS = [
-  { shirt: '#d8403a', trim: '#f6f1e6', pants: '#e9e4d4', cap: '#1d2a44', skin: '#d9a27c', hair: '#3b2a1e' },
-  { shirt: '#2f6fd0', trim: '#f2f2f2', pants: '#2b2f3a', cap: '#f2f2f2', skin: '#a8714f', hair: '#1a1410' },
-  { shirt: '#f2c230', trim: '#2a2a2a', pants: '#3d4a33', cap: '#2a2a2a', skin: '#e8bf9c', hair: '#b88a4a' },
-  { shirt: '#f4f4f4', trim: '#c22a52', pants: '#6b7f99', cap: '#c22a52', skin: '#7a4b32', hair: '#111' },
-];
+const OUTFIT = { shirt: '#d8403a', trim: '#f6f1e6', pants: '#e9e4d4', cap: '#1d2a44', skin: '#d9a27c', hair: '#3b2a1e' };
 
 export class Golfer {
-  constructor(opts = OUTFITS[0]) {
+  constructor(opts = OUTFIT) {
     const shirt = new THREE.MeshStandardMaterial({ color: opts.shirt, roughness: 0.8 });
     const pants = new THREE.MeshStandardMaterial({ color: opts.pants, roughness: 0.85 });
     const skin = new THREE.MeshStandardMaterial({ color: opts.skin, roughness: 0.7 });
@@ -44,8 +38,6 @@ export class Golfer {
     const eyeWhite = new THREE.MeshStandardMaterial({ color: '#f4f0ea', roughness: 0.4 });
     const pupil = new THREE.MeshStandardMaterial({ color: '#1a1512', roughness: 0.3 });
     const seam = new THREE.MeshStandardMaterial({ color: '#8d8d8d', roughness: 0.7 });
-    this.mats = { shirt, pants, skin, hair, cap, trim };
-    this.outfit = 0;
     const glove = new THREE.MeshStandardMaterial({ color: '#fafafa', roughness: 0.6 });
     this.shaftMat = new THREE.MeshStandardMaterial({ color: '#c8ccd2', metalness: 0.9, roughness: 0.25 });
     this.headMat = new THREE.MeshStandardMaterial({ color: '#50555e', metalness: 0.8, roughness: 0.3 });
@@ -214,13 +206,6 @@ export class Golfer {
     this.t = 0;
     this.idleT = 0;
     this.onImpact = null;
-  }
-
-  setOutfit(i) {
-    const o = OUTFITS[i % OUTFITS.length];
-    if (this.outfit === i) return;
-    this.outfit = i;
-    for (const k of Object.keys(this.mats)) this.mats[k].color.set(o[k]);
   }
 
   setClub(club) {

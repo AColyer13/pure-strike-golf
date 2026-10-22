@@ -79,10 +79,7 @@ function* rollSteps(hole, opts, env, p, dir, v, each) {
 // runs up and back past its start, which would otherwise read as "not far enough".
 // `launch` (default dir) starts the ball on a different line, for a putt aimed outside
 // the hole; `guess` narrows the bracket when a nearby answer is already known.
-export function puttSpeedToReach(hole, env, p, dir, d, launch = dir, guess = 0) {
-  return drain(speedSteps(hole, env, p, dir, d, launch, guess));
-}
-// the same bisection, yielding after each roll (for the time-sliced read)
+// (yields after each roll, for the time-sliced read)
 function* speedSteps(hole, env, p, dir, d, launch = dir, guess = 0) {
   const opts = covered(hole);
   // (the roll stops as soon as it gets there: only whether it does matters)
