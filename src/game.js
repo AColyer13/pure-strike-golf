@@ -15,7 +15,8 @@ import { BallSim, LIES, SURFACES, puttSpeedFor, BALL } from './physics.js';
 import { buildBag } from './clubs.js';
 import { YD, FT, mulberry32 } from './hole.js';
 import { scoreName } from './stats.js';
-import { SwingMeter, MouseSwing, meterToStrike } from './meter.js';
+import { SwingMeter, MouseSwing, meterToStrike, tempoToMeterError, BACKSWING_S, TEMPO_PURE } from './meter.js';
+import { say, hush } from './voice.js';
 import { SoundEngine } from './audio.js';
 import { coachShot, resetCoach } from './coach.js';
 import { COURSES, courseById } from './courses/index.js';
@@ -88,7 +89,8 @@ export class Game {
     this.meter.onCancel = () => { if (this.state === 'swing') this.state = 'address'; };
     this.meter.onAuto = () => this.audio.ui('set');
     this.mouseSwing.onBack = (b) => { this.golfer.phase = 'manual'; this.golfer.apply(-b); };
-    this.mouseSwing.onDone = (r) => this.executeSwing(r);
+    this.mouseSwing.onDone = (r) => this.mouseDone(r);
+    this.mouseSwing.onBeat = () => this.audio.ui('tick');
     this.mouseSwing.onCancel = () => { this.golfer.phase = 'idle'; if (this.state === 'swing') this.state = 'address'; };
 
     this.cam = new CameraDirector(this, this.camera);
@@ -135,7 +137,7 @@ export class Game {
     const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
     return {
       // a first visit starts a typical golfer on the middle tees; saved settings from before tee sets keep the back tees
-      profile: 'mid', difficulty: 'standard', tees: Object.keys(s).length ? 'back' : 'middle', control: 'meter', units: 'yd', volume: 0.7, tracer: true,
+      profile: 'mid', difficulty: 'standard', tees: Object.keys(s).length ? 'back' : 'middle', control: 'meter', units: 'yd', volume: 0.7, tracer: true, caddyVoice: true,
       reducedMotion: reduce, oneButton: false, captions: false, uiScale: 1, keys: {}, ffSeen: 0, quality: 'auto', ...s,
     };
   }
@@ -147,6 +149,8 @@ export class Game {
     const s = this.settings;
     document.documentElement.style.setProperty('--ui-scale', String(s.uiScale || 1));
     document.body.classList.toggle('reduced-motion', !!s.reducedMotion);
+    // the analog swing has no meter: the caddie says how far back to take it
+    document.body.classList.toggle('analog', s.control === 'mouse');
   }
   get diff() { return DIFFICULTY[this.settings.difficulty] || DIFFICULTY.standard; }
 
@@ -321,6 +325,9 @@ export class Game {
     this.mouseSwing.enabled = this.settings.control === 'mouse';
     this.mouseSwing.putt = !!this.club.putter;
     this.mouseSwing.result = null;
+    this.mouseSwing.target = null; this.powerReady = false;
+    this.mouseSwing.count = !!this.tutorial || this.round?.mode === 'practice'; // the 3-second count is a training aid
+    document.body.classList.toggle('analog', this.mouseSwing.enabled);
     this.mouseSwing.draw();
     this.world.showGreenGrid(this.onGreen ? !this.gridHide : this.nearGreen() && this.gridOn);
     this.world.arc.visible = true;
@@ -441,13 +448,58 @@ export class Game {
   caddieNote() {
     // a tree in the line is the one thing to say: it replaces the usual club and line advice
     const blocked = this.caddie.blockedNote();
-    this.ui.caddie([blocked || this.caddie.msg, this.caddie.lieNote(), this.ui.tipNow].filter(Boolean).join(' '));
+    this.ui.caddie([this.analogAdvice()?.text, blocked || this.caddie.msg, this.caddie.lieNote(), this.ui.tipNow].filter(Boolean).join(' '));
+  }
+
+  // Analog swing: how far back to take it, as the caddie would say it. Null until the power
+  // for this shot is worked out (or when the meter is doing the job).
+  analogAdvice() {
+    const c = this.club;
+    if (this.settings.control !== 'mouse' || this.state !== 'address' || !c || !this.powerReady || this.suggestedPower == null) return null;
+    const sp = this.suggestedPower, full = sp >= 0.97;
+    const pct = full ? 100 : Math.max(5, Math.round(sp * 20) * 5);
+    const where = c.putter ? this.fmtPutt(this.puttEqFt) : full ? '' : this.fmtDist(this.pl ? this.pl.plays : this.distToPin());
+    const head = `${c.name}${where ? `, ${where}` : ''}.`;
+    const how = full ? 'Go all out.' : `Hit this about ${pct}%.`;
+    const words = (t) => t.replace(/(\d+)%/, '$1 percent').replace(/\b(\d+) yds\b/, '$1 yards').replace(/\b(\d+(?:\.\d)?) m\b/, '$1 metres').replace(/\b(\d+) ft\b/, '$1 feet');
+    return { text: `${head} ${how}`, say: words(`${head} ${how}`), pct };
+  }
+  fmtPutt(eqFt) { return fmtFt(eqFt, this.settings.units); }
+
+  // say it once per club and number at an address, a moment after the number settles
+  sayAdvice() {
+    clearTimeout(this.adviceT);
+    const a = this.analogAdvice();
+    if (!a || !this.settings.caddyVoice) return;
+    const key = `${this.round?.i}|${this.strokes}|${this.ballNo}|${this.club.key}|${a.pct}`;
+    if (key === this.spokenKey) return;
+    this.adviceT = setTimeout(() => {
+      if (this.state !== 'address' || this.ui.paused) return;
+      this.spokenKey = key;
+      say(a.say, this.settings.volume);
+    }, 900);
+  }
+
+  // a 3-second backswing is a pure strike; each tenth of a second off costs contact and turns the face
+  mouseDone(r) {
+    if (r.backTime != null) {
+      const putt = !!this.club.putter;
+      const zone = (putt ? this.diff.puttZone : this.diff.zone) * this.lieZone();
+      const t = meterToStrike(tempoToMeterError(r.backTime, zone), zone, putt);
+      r = { ...r, face: r.face + t.face, strike: r.strike * t.strike };
+    }
+    this.executeSwing(r);
+    if (r.backTime == null) return;
+    const e = r.backTime - BACKSWING_S;
+    const msg = Math.abs(e) <= TEMPO_PURE ? 'Perfect tempo' : e < 0 ? 'Too quick' : 'Too slow';
+    if (this.settings.caddyVoice) say(Math.abs(e) <= TEMPO_PURE ? 'Smooth tempo.' : `${msg}.`, this.settings.volume);
   }
 
   // ------------------------------------------------------------------ previews
   updatePreview() {
     this.previewDirty = false;
     this.powerJob = null;
+    this.powerReady = false; // (the caddie's number for this shot is not worked out yet)
     const h = this.hole, b = this.ball, w = this.world;
     const dir = dirOf(this.aim);
     const assist = this.diff;
@@ -458,6 +510,8 @@ export class Game {
       this.suggestedPower = clamp(this.puttEqFt / this.puttRange, 0.02, 1);
       this.meter.configure({ marker: assist.marker ? this.suggestedPower : null });
       this.configureAuto();
+      this.powerReady = true; this.mouseSwing.target = this.suggestedPower;
+      this.caddieNote(); this.sayAdvice();
       if (assist.putt <= 0) { w.puttLine.visible = false; return; }
       // read: roll the marker-speed putt along the current aim
       const v = puttSpeedFor(this.puttEqFt * FT, h.greenRoll);
@@ -519,8 +573,10 @@ export class Game {
   setSuggestedPower(p) {
     // never below the shortest real swing: under it every swing is a chunk (normalizeSwing)
     this.suggestedPower = Math.max(p, MIN_SWING + 0.01);
+    this.powerReady = true; this.mouseSwing.target = this.suggestedPower;
     this.caddie.checkBlocked(this.suggestedPower);
     this.caddieNote();
+    this.sayAdvice();
     this.meter.configure({ marker: this.diff.marker && this.suggestedPower < 1 ? this.suggestedPower : null });
     this.configureAuto();
   }
@@ -535,7 +591,7 @@ export class Game {
   // the meter's "how do I start" prompt follows the control scheme and input device
   swingCue(putt) {
     const touch = document.body.classList.contains('touch');
-    if (this.settings.control === 'mouse') return touch ? 'Drag down, then up, to swing' : 'Hold LMB: pull back, push up to swing';
+    if (this.settings.control === 'mouse') return touch ? 'Drag down on a 3-count, then up' : 'Hold LMB: 3-count back, then push up';
     return `${touch ? 'Tap SWING' : `${this.ui.key('swing')} / click`} to start the ${putt ? 'stroke' : 'swing'}`;
   }
 
@@ -569,6 +625,7 @@ export class Game {
     this.caddie.analysis = null;
     this.caddie.reading = null;
     this.pendingSwing = sw;
+    clearTimeout(this.adviceT);
     this.golfer.startSwing(this.club.putter ? sw.power : clamp(sw.power, 0.35, 1.05), () => this.impact());
     if (this.settings.control === 'mouse' || this.golfer.phase === 'manual') { this.golfer.phase = 'down'; this.golfer.t = 0; }
     this.world.reticle.visible = false;
@@ -1119,7 +1176,7 @@ export class Game {
         }
         this.caddieTick = (this.caddieTick || 0) + dt;
         if (this.caddieTick > 0.5) { this.caddieTick = 0; this.caddieNote(); }
-      } else if (st === 'swing') this.meter.update(dt);
+      } else if (st === 'swing') { this.meter.update(dt); hush(); }
       else if (st === 'flight') this.updateFlight(dt);
       else if (st === 'replay') this.updateReplay(dt);
       if (['backswing', 'flight', 'result', 'address', 'swing', 'flyover', 'replay'].includes(st) && !(st === 'flight' && this.hang > 0)) this.golfer.update(dt);
@@ -1131,6 +1188,7 @@ export class Game {
       } else if (st === 'menu' || st === 'scorecard' || st === 'summary') this.cam.menu(dt);
       this.cam.apply(dt);
       if (st === 'address' && this.meter.state !== 'hidden') this.meter.draw();
+      this.mouseSwing.update();
     }
     this.updatePinTag(st === 'address' || st === 'swing' || st === 'backswing');
     // ball visibility scale with distance

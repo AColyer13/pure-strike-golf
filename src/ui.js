@@ -283,7 +283,7 @@ export class UI {
     opt('optProfile', s.profile, Object.entries(PROFILES).map(([k, p]) => [k, p.name, p.desc]));
     opt('optTees', tees, Object.entries(TEE_SETS).map(([k, t]) => [k, t.name, `${fmtYd(course.holes.reduce((a, h) => a + teeYds(h, k), 0), units).replace(/\d+/, (n) => (+n).toLocaleString())} at ${course.name}${k === 'back' ? ': the full championship length' : k === 'middle' ? ': a shorter course for most club golfers' : ': the shortest, for newer players and slower swings'}`]));
     opt('optDiff', s.difficulty, [['beginner', 'Beginner', 'Big impact zone, full aim preview with wind and roll, full putt line'], ['standard', 'Standard', 'Normal zone, carry preview without wind, partial putt line'], ['pro', 'Pro', 'Small zone, no wind/putt assistance – read it yourself']]);
-    opt('optControl', s.control, [['meter', '3-Click Meter', 'Click to start, set power, hit the impact zone'], ['mouse', 'Analog Swing', 'Pull the mouse back, push it through straight']]);
+    opt('optControl', s.control, [['meter', '3-Click Meter', 'Click to start, set power, hit the impact zone'], ['mouse', 'Analog Swing', 'No meter: your caddie says how hard to hit it. Pull back on a 3-second count, then push through']]);
     opt('optUnits', s.units === 'm' ? 'm' : 'yd', [['yd', 'Yards'], ['m', 'Metres']]);
     const hs = $('optHole');
     const pickHole = ['single', 'ctp', 'drive'].includes(this.sel.mode);
@@ -392,7 +392,7 @@ export class UI {
     // key hints inside the club box follow the player's bindings
     $('kShapeL').textContent = k('shapeLeft'); $('kShapeR').textContent = k('shapeRight');
     $('kTrajU').textContent = k('trajUp'); $('kTrajD').textContent = k('trajDown');
-    const swing = mouse ? '<b>Hold LMB</b> pull back, push up to swing' : `<b>${k('swing')}</b> swing`;
+    const swing = mouse ? '<b>Hold LMB</b> 3-count back, push up to swing' : `<b>${k('swing')}</b> swing`;
     const basics = [swing, `<b>${k('aimLeft')}${k('aimRight')}</b> aim (${k('aimFine')} fine)`, `<b>${k('clubUp')}${k('clubDown')}</b> club`];
     const st = document.body.dataset.state;
     // once the ball is away the swing hint flips to fast-forward (hold) and a skip button, and flips back at the next address
@@ -984,6 +984,7 @@ export class UI {
       <h3>Game</h3>
       <label class="set"><span>Volume</span><input type="range" id="sVol" min="0" max="1" step="0.05" value="${s.volume}"></label>
       ${chk('sTracer', 'Shot tracer', s.tracer)}
+      ${chk('sVoice', 'Caddie voice', s.caddyVoice, 'Your caddie speaks the club and how hard to hit it (analog swing).')}
       <label class="set"><span>Distances</span><select id="sUnits"><option value="yd" ${s.units !== 'm' ? 'selected' : ''}>Yards</option><option value="m" ${s.units === 'm' ? 'selected' : ''}>Metres</option></select></label>
       <label class="set"><span>Swing control</span><select id="sCtl"><option value="meter" ${s.control === 'meter' ? 'selected' : ''}>3-click meter</option><option value="mouse" ${s.control === 'mouse' ? 'selected' : ''}>Analog mouse swing</option></select></label>
       <label class="set"><span>Assists</span><select id="sDiff">${['beginner', 'standard', 'pro'].map((d) => `<option value="${d}" ${s.difficulty === d ? 'selected' : ''}>${d[0].toUpperCase() + d.slice(1)}</option>`).join('')}</select></label>
@@ -1005,6 +1006,7 @@ export class UI {
     const save = () => { g.saveSettings(); this.helpBar(); if (g.state === 'address') g.enterAddress(); };
     $('sVol').oninput = (e) => { s.volume = +e.target.value; g.audio.setVolume(s.volume); g.saveSettings(); };
     $('sTracer').onchange = (e) => { s.tracer = e.target.checked; save(); };
+    $('sVoice').onchange = (e) => { s.caddyVoice = e.target.checked; g.saveSettings(); };
     $('sUnits').onchange = (e) => { s.units = e.target.value; save(); g.updateHUD?.(true); };
     $('sCtl').onchange = (e) => { s.control = e.target.value; save(); };
     $('sDiff').onchange = (e) => { s.difficulty = e.target.value; save(); };
@@ -1120,8 +1122,8 @@ export class UI {
         <li>In flight: hold <b>${k('fastForward')}</b> to fast-forward, <b>${k('skip')}</b> skips to where it finishes. <b>${k('replay')}</b> replays the shot from a new angle.</li>
         <li>Right-drag orbits the camera; the wheel zooms.</li>`;
     const analog = touch
-      ? `<ol><li>Put one finger on the view and drag <b>down</b> – that's the backswing length.</li><li>Drag <b>up</b> past the start point to swing. A smooth, quick push gives full power.</li><li>Drifting left or right opens/closes the clubface, so keep the push straight up.</li></ol>`
-      : `<ol><li>Hold the left mouse button and pull <b>down</b> – that's the backswing length.</li><li>Push <b>up</b> past the start point to swing. A smooth, quick push gives full power.</li><li>Drifting left or right opens/closes the clubface, so keep the push straight up.</li></ol>
+      ? `<ol><li>Your caddie tells you how hard to hit it ("about 75%", or "go all out"). Put one finger on the view and drag <b>down</b> that far – the blue mark on the scale is his number.</li><li>Take it back on a <b>three-second count</b> (1… 2… 3), whatever the distance. Reaching the top right on 3 is a pure strike.</li><li>Then drag <b>up</b> past the start point, straight – drifting left or right opens/closes the clubface.</li></ol>`
+      : `<ol><li>Your caddie tells you how hard to hit it ("about 75%", or "go all out"). Hold the left mouse button and pull <b>down</b> that far – the blue mark on the scale is his number.</li><li>Take it back on a <b>three-second count</b> (1… 2… 3), whatever the distance. Reaching the top right on 3 is a pure strike; rushed or slow costs contact and turns the face.</li><li>Then push <b>up</b> past the start point, straight – drifting left or right opens/closes the clubface.</li></ol>
         <p class="muted small">Gamepad: the right stick does the same – pull back, then push up.</p>`;
     h.innerHTML = `<h2>How to play</h2>
       <div class="help-cols">

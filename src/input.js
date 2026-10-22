@@ -88,7 +88,7 @@ export class Input {
     if (st === 'swing' && a === 'swing') { g.meterClick(); return true; }
     if (st !== 'address') return false;
     if (a === 'swing') {
-      if (g.settings.control === 'mouse') g.ui.toast('Mouse swing: hold the left button, pull back, push through');
+      if (g.settings.control === 'mouse') g.ui.toast('Analog swing: hold the left button, take it back on a 3-count, push through');
       else g.meterClick();
       return true;
     }

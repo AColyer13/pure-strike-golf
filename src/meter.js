@@ -2,8 +2,9 @@
 //  SwingMeter – Mario Golf style 3-click meter: start, set power, hit the
 //               impact zone. Missing the zone early/late rotates the face.
 //  MouseSwing – Tiger Woods PGA Tour style analog swing: pull the mouse back
-//               (backswing), push it forward (downswing). Tempo = power,
-//               sideways drift = face angle, stroke direction = club path.
+//               (backswing), push it forward (downswing). Backswing depth = power,
+//               a three-second backswing = a pure strike, sideways drift = face
+//               angle, stroke direction = club path.
 
 import { clamp } from './util.js';
 
@@ -202,6 +203,19 @@ export function meterToStrike(err, zone, putt) {
   return { face, strike };
 }
 
+// The backswing takes three seconds, whatever the club or the distance ("one, two, three"):
+// depth is the power, the time is the tempo. Within TEMPO_PURE of it is a pure strike.
+export const BACKSWING_S = 3;
+export const TEMPO_PURE = 0.15;
+const FADE_MS = 1600;
+
+// a backswing time → the swing meter's early/late error for the same strike maths: ±TEMPO_PURE
+// is the middle of the impact zone, ±TEMPO_GOOD its edge (+ rushed = early = closed face)
+const TEMPO_GOOD = 0.4;
+export function tempoToMeterError(backTime, zone) {
+  return (BACKSWING_S - backTime) * (zone / TEMPO_GOOD);
+}
+
 export class MouseSwing {
   constructor(canvas) {
     this.cv = canvas;
@@ -209,9 +223,12 @@ export class MouseSwing {
     this.active = false;
     this.enabled = false;
     this.onBack = null;   // (backFraction) while pulling back
-    this.onDone = null;   // ({power, face, path, strike})
+    this.onDone = null;   // ({power, face, path, strike, backTime})
     this.onCancel = null;
+    this.onBeat = null;   // (n) as the count of the backswing passes 1, 2, 3
     this.putt = false;
+    this.target = null;   // the caddie's power, drawn on the depth scale
+    this.count = false;   // training: show the 3-second count (bar and ticks) while pulling back
   }
   resize() {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -223,6 +240,7 @@ export class MouseSwing {
     this.active = true;
     this.x0 = e.clientX; this.y0 = e.clientY;
     this.maxY = e.clientY;
+    this.startT = null; this.topT = null; this.beat = 0; this.backTime = null;
     this.phase = 'back';
     this.pts = [[e.clientX, e.clientY, performance.now()]];
     this.draw();
@@ -236,12 +254,15 @@ export class MouseSwing {
     if (this.pts.length > 400) this.pts.shift();
     const y = e.clientY;
     if (this.phase === 'back') {
-      if (y > this.maxY) { this.maxY = y; this.topX = e.clientX; }
+      if (y > this.maxY) { this.maxY = y; this.topX = e.clientX; this.topT = now; }
+      // the count starts when the hands start to move, not when the button goes down
+      if (this.startT == null && this.maxY - this.y0 > 4) this.startT = this.topT = now;
       const back = clamp((this.maxY - this.y0) / this.range, 0, this.putt ? 1 : 1.1);
       if (this.onBack) this.onBack(back);
       if (this.maxY - this.y0 > 12 && y < this.maxY - 10) {
         this.phase = 'fwd';
         this.back = back;
+        this.backTime = (this.topT - this.startT) / 1000; // (to the deepest point, not to the turn)
         this.fwdStart = [e.clientX, this.maxY, now];
       }
     } else if (this.phase === 'fwd') {
@@ -257,17 +278,27 @@ export class MouseSwing {
     const speed = dy / dt; // px/s
     const ideal = this.range * (this.putt ? 1.6 : 3.2) * Math.max(0.35, this.back);
     const ratio = speed / ideal;
-    const tempo = clamp(0.8 + 0.2 * ratio, 0.72, 1.04);
-    const power = clamp(this.back * tempo, 0.03, this.putt ? 1 : 1.1);
+    // the depth of the backswing is the power; the push through only has to be committed (a
+    // crawl or a lash costs contact) and straight
+    const power = clamp(this.back, 0.03, this.putt ? 1 : 1.1);
     const drift = x - this.x0;
     const face = clamp(drift * (this.putt ? 0.035 : 0.09), -15, 15);
     const path = clamp((Math.atan2(x - fx, dy) * 180) / Math.PI * (this.putt ? 0 : 0.45), -12, 12);
-    const strike = clamp(1 - Math.abs(drift) / 180 - Math.max(0, ratio - 1.5) * 0.1, 0.4, 1);
-    this.result = { power, face, path, strike, tempo: ratio };
+    const strike = clamp(1 - Math.abs(drift) / 180 - Math.max(0, ratio - 1.5) * 0.1 - Math.max(0, 0.6 - ratio) * 0.4, 0.4, 1);
+    this.result = { power, face, path, strike, tempo: ratio, backTime: this.backTime };
     this.fadeT = performance.now();
     this.draw();
     if (this.onDone) this.onDone(this.result);
   }
+  // each frame of the swing: the count (a tick on 1, 2, 3) and the timing bar
+  update() {
+    if (this.active && this.phase === 'back' && this.startT != null) {
+      const n = Math.min(3, Math.floor((performance.now() - this.startT) / (BACKSWING_S * 1000 / 3)));
+      if (this.count && n > this.beat) { this.beat = n; if (this.onBeat) this.onBeat(n); }
+    }
+    if (this.active || this.fading()) this.draw();
+  }
+  fading() { return !!this.result && this.result.backTime != null && performance.now() - this.fadeT < FADE_MS; }
   up() {
     if (!this.active) return;
     this.active = false;
@@ -275,13 +306,36 @@ export class MouseSwing {
     this.draw();
     if (this.onCancel) this.onCancel();
   }
+  // training aid: the bar fills as the club goes back and should reach the mark with the top of the swing
+  drawCount() {
+    const g = this.g;
+    const bx = this.x0 + 70, bw = 120, by = this.y0 + 2, secs = 4;
+    const el = this.startT == null ? 0 : ((this.phase === 'back' ? performance.now() : this.fwdStart[2]) - this.startT) / 1000;
+    const at = (s) => bx + (s / secs) * bw;
+    g.fillStyle = 'rgba(8,16,12,0.6)'; g.fillRect(bx - 3, by - 3, bw + 6, 14);
+    g.fillStyle = 'rgba(120,255,160,0.45)';
+    g.fillRect(at(BACKSWING_S - TEMPO_PURE), by, at(BACKSWING_S + TEMPO_PURE) - at(BACKSWING_S - TEMPO_PURE), 8);
+    g.fillStyle = Math.abs(el - BACKSWING_S) <= TEMPO_PURE ? '#9dffb8' : '#ffe14d';
+    g.fillRect(bx, by + 2, Math.min(el, secs) / secs * bw, 4);
+    g.fillStyle = 'rgba(255,255,255,0.8)';
+    for (let k = 1; k <= 3; k++) g.fillRect(at(k) - 0.5, by, 1, 8);
+    g.font = '700 12px Barlow, system-ui, sans-serif'; g.textAlign = 'left';
+    g.fillStyle = '#fff'; g.fillText(`${el.toFixed(1)}s`, bx, by + 24);
+  }
+  // on release the tempo shows as one colour: green on the count, orange a little off, red well off
+  drawTempo() {
+    const g = this.g, e = Math.abs(this.result.backTime - BACKSWING_S);
+    const age = (performance.now() - this.fadeT) / FADE_MS;
+    g.globalAlpha = Math.max(0, Math.min(1, (1 - age) * 2));
+    g.fillStyle = e <= TEMPO_PURE ? '#4bd66b' : e <= TEMPO_GOOD ? '#ffa62e' : '#ff4b3a';
+    roundRect(g, this.x0 + 18, this.y0 - 4, 120, 10, 5); g.fill();
+    g.globalAlpha = 1;
+  }
   draw() {
     const g = this.g;
     g.clearRect(0, 0, innerWidth, innerHeight);
     if (!this.enabled) return;
-    if (!this.active && !this.result) {
-      return;
-    }
+    if (!this.active) { if (this.fading()) this.drawTempo(); return; }
     if (this.active) {
       g.strokeStyle = 'rgba(255,255,255,0.35)';
       g.setLineDash([6, 6]);
@@ -294,6 +348,18 @@ export class MouseSwing {
       g.fillRect(this.x0 + 18, this.y0, 5, this.maxY - this.y0);
       g.strokeStyle = 'rgba(255,255,255,0.5)';
       g.strokeRect(this.x0 + 18, this.y0, 5, this.range);
+      g.font = '700 12px Barlow, system-ui, sans-serif';
+      g.textAlign = 'left';
+      // the caddie's number, and where the swing is now
+      if (this.target != null) {
+        const ty = this.y0 + clamp(this.target, 0, 1.1) * this.range;
+        g.fillStyle = '#5fd4ff';
+        g.fillRect(this.x0 + 12, ty - 1.5, 17, 3);
+        g.fillText(`${Math.round(this.target * 100)}%`, this.x0 + 32, ty + 4);
+      }
+      const deep = (this.maxY - this.y0) / this.range;
+      if (deep > 0.04) { g.fillStyle = '#fff'; g.fillText(`${Math.round(deep * 100)}%`, this.x0 - 40, this.maxY + 4); }
+      if (this.count) this.drawCount();
       // trail
       g.strokeStyle = '#ffe14d'; g.lineWidth = 3;
       g.beginPath();

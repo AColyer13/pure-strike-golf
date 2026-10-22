@@ -795,3 +795,11 @@ body.in-round[data-putt="1"] #clubBox .club-row { display: none; }
   /* the bar steps aside on a small window, but the buttons are the only on-screen way to skip, so they stay */
   body:not(.touch).in-round[data-state="flight"] #helpBar { display: flex; }
 }
+
+/* Analog swing: no meter strip; the caddie says how far back to go and the depth scale is on the swing itself */
+body.analog #meter { display: none; }
+body.analog:not(.touch).in-round #clubBox { bottom: 28px; }
+@media (orientation: portrait) {
+  body.analog.touch.in-round #clubBox { bottom: calc(var(--tcb) + 8px); }
+  body.analog.touch.in-round :is(#lieBox, #caddie) { bottom: calc(var(--tcb) + 64px); }
+}
