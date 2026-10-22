@@ -1,12 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { bundle, OUT } from '../tools/bundle.mjs';
+import { bundle, OUT, SW, stampedSw } from '../tools/bundle.mjs';
 
 const lf = (b) => b.toString('utf8').replace(/\r\n/g, '\n');
 
 test('dist/game.js is built from the current src/ and vendor/', async () => {
   assert.equal(lf(fs.readFileSync(OUT)), lf(await bundle()), 'stale bundle: run npm run bundle');
+});
+
+test('the service worker cache version matches what it caches', async () => {
+  assert.equal(lf(fs.readFileSync(SW)), lf(stampedSw(await bundle())), 'stale cache version: run npm run bundle');
 });
 
 test('index.html loads the bundle and preloads it', () => {
