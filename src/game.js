@@ -37,7 +37,7 @@ import { settleShot, settleRelief, pickedUp, finishHoleScore, nextTurn, nextHole
 
 const $ = (id) => document.getElementById(id);
 
-const HELPS_PER_ROUND = 2;
+const HELP_RUNS = 5; // runs of failed swings that get coaching, per round
 
 export class Game {
   constructor(ui) {
@@ -90,7 +90,7 @@ export class Game {
       if (this.state === 'swing') this.state = 'address';
       this.coachCancel();
     };
-    this.coach = { fails: 0, tempoMiss: 0, assist: false, helps: 0, total: 0, pracRun: 0 };
+    this.coach = { fails: 0, tempoMiss: 0, assist: false, helps: 0, maxRun: 0, mute: false };
 
     this.cam = new CameraDirector(this, this.camera);
     this.caddie = new Caddie(this);
@@ -184,7 +184,7 @@ export class Game {
   // opts: { courseId, holes, mode, seed?, daily?: dateKey }
   // snap: a saved round (roundSnapshot) to carry on instead of starting afresh
   startRound(opts, snap = null) {
-    this.coach = { fails: 0, tempoMiss: 0, assist: false, helps: 0, total: 0, pracRun: 0 };
+    this.coach = { fails: 0, tempoMiss: 0, assist: false, helps: 0, maxRun: 0, mute: false };
     this.ui.hideAll();
     this.audio.init();
     this.audio.setVolume(this.settings.volume);
@@ -524,7 +524,6 @@ export class Game {
     const kind = Math.abs(e) <= tempo.pure ? 'pure' : e < 0 ? 'quick' : 'slow';
     const p = CADDIES[this.settings.caddie];
     const line = (p ? tempoLine(p.id, kind) : { pure: 'Smooth tempo.', quick: 'Too quick.', slow: 'Too slow.' }[kind]);
-    this.coachPractice(kind);
     this.ui.toast(`Practice swing: ${line}`);
     this.practiceLine = this.settings.caddyVoice ? { line, voice: p?.voice } : null;
   }
@@ -561,28 +560,28 @@ export class Game {
   }
 
   // ------------------------------------------------------------------ swing coaching
-  // (training wheels: the escalating help is capped at two per round and only counts failures in a row)
-  // A swing that goes nowhere must say why, in the moment, and keep helping if it keeps happening:
-  // first a plain instruction, then the free practice swing, then the tempo bar, then an armed practice swing.
+  // (training wheels: the help only counts failures in a row, and starts at most HELP_RUNS times per round)
+  // A swing that goes nowhere says why once it keeps happening: the 3rd failure in a row explains the swing, the 4th
+  // adds the Shift practice-swing hint, the 5th turns the tempo bar on, the 6th arms a free practice swing.
   coachCancel() {
     const m = this.mouseSwing, c = this.coach;
     if (this.state !== 'address' || this.tutorial || m.practice || !this.settings.trainingWheels) return;
-    c.fails++; c.total++;
-    const pulled = m.maxY - m.y0 > 12;
-    let msg = !pulled ? 'Hold the button and drag down to take the club back, then push up to hit.'
-      : m.phase === 'fwd' ? 'Keep going: push up past where you started to hit the ball.'
-      : 'Pull down to take the club back, then push up past where you started.';
-    if (c.fails === 2) msg += ' Hold Shift for a free practice swing.';
-    this.ui.toast(msg, 'bad');
-    if (c.fails >= 3 && !c.assist && c.helps < HELPS_PER_ROUND) {
-      c.helps++;
+    c.fails++; c.maxRun = Math.max(c.maxRun, c.fails);
+    if (c.fails === 3) { c.mute = c.helps >= HELP_RUNS; if (!c.mute) c.helps++; }
+    if (c.fails < 3 || c.mute) return;
+    if (c.fails <= 4) {
+      const pulled = m.maxY - m.y0 > 12;
+      let msg = !pulled ? 'Hold the button and drag down to take the club back, then push up to hit.'
+        : m.phase === 'fwd' ? 'Keep going: push up past where you started to hit the ball.'
+        : 'Pull down to take the club back, then push up past where you started.';
+      if (c.fails === 4) msg += ' Hold Shift for a free practice swing.';
+      this.ui.toast(msg, 'bad');
+    } else if (c.fails === 5) {
       this.coachAssistOn();
       this.ui.toast('Tempo bar on: reach the top of the backswing on count 3, then push up.');
-    }
-    if (c.fails >= 5 && !m.armed && c.helps < HELPS_PER_ROUND) {
-      c.helps++;
+    } else {
       m.armed = true; document.querySelector('.tc-prac')?.classList.add('set');
-      this.ui.toast('Your next swing is a free practice swing. Take your time.');
+      this.ui.toast('Your next swing is a free practice swing. Get the tempo right: top of the backswing on count 3.');
       c.fails = 0;
     }
   }
@@ -592,22 +591,16 @@ export class Game {
     if (!this.settings.trainingWheels) return;
     c.fails = 0; c.tempoMiss++;
     if (c.tempoMiss === 2) this.ui.toast(kind === 'quick' ? 'Too quick: take it back slower, top of the swing on count 3.' : 'Too slow: reach the top of the swing on count 3.', 'bad');
-    else if (c.tempoMiss >= 3 && !c.assist && this.settings.guide !== 'bar' && c.helps < HELPS_PER_ROUND) {
-      c.helps++;
+    else if (c.tempoMiss >= 3 && !c.assist && this.settings.guide !== 'bar') {
       this.coachAssistOn();
       this.ui.toast('Tempo bar on: aim for the green mark at the top of the swing.');
     }
   }
-  // Training wheels come off by themselves: three smooth practice swings in a row, or a good round with few failed swings.
-  coachPractice(kind) {
-    const c = this.coach;
-    c.pracRun = kind === 'pure' ? c.pracRun + 1 : 0;
-    if (c.pracRun >= 3 && this.settings.trainingWheels) this.trainingWheelsOff('Three smooth practice swings in a row');
-  }
+  // Training wheels come off by themselves after a good round in which the player never failed four swings in a row.
   coachRoundEnd(totals, holes) {
     const c = this.coach;
     if (!this.settings.trainingWheels || this.tutorial || holes < 1) return;
-    if (c.total <= 3 && totals.strokes - totals.par <= holes * 0.5) this.trainingWheelsOff('A good round with few failed swings');
+    if (c.maxRun < 4 && totals.strokes - totals.par <= holes * 0.5) this.trainingWheelsOff('A good round without a run of failed swings');
   }
   trainingWheelsOff(why) {
     this.settings.trainingWheels = false; this.saveSettings();

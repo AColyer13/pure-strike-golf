@@ -1017,7 +1017,7 @@ export class UI {
     $('sCaddie').onchange = (e) => { s.caddie = e.target.value; g.greeted = false; g.saveSettings(); this.showSettings(true); };
     $('sGuide').onchange = (e) => { s.guide = e.target.value; g.saveSettings(); };
     $('sTempo').onchange = (e) => { s.tempo = e.target.value; g.saveSettings(); this.showSettings(true); };
-    $('sWheels').onchange = (e) => { s.trainingWheels = e.target.checked; g.coach.fails = g.coach.tempoMiss = g.coach.pracRun = 0; g.saveSettings(); };
+    $('sWheels').onchange = (e) => { s.trainingWheels = e.target.checked; g.coach.fails = g.coach.tempoMiss = 0; g.saveSettings(); };
     $('sVoice').onchange = (e) => { s.caddyVoice = e.target.checked; g.saveSettings(); };
     $('sUnits').onchange = (e) => { s.units = e.target.value; save(); g.updateHUD?.(true); };
     $('sDiff').onchange = (e) => { s.difficulty = e.target.value; save(); };
