@@ -995,6 +995,7 @@ export class UI {
       <label class="set"><span>Caddie<small>${CADDIES[s.caddie]?.blurb || 'A plain, quiet caddie'}</small></span><select id="sCaddie">${CADDIE_IDS.map((k) => `<option value="${k}" ${s.caddie === k ? 'selected' : ''}>${CADDIES[k].name}</option>`).join('')}<option value="none" ${CADDIES[s.caddie] ? '' : 'selected'}>None</option></select></label>
       <label class="set"><span>Swing tempo<small>${TEMPOS[s.tempo]?.blurb || ''} (analog swing)</small></span><select id="sTempo">${TEMPO_IDS.map((k) => `<option value="${k}" ${s.tempo === k ? 'selected' : ''}>${TEMPOS[k].name}</option>`).join('')}</select></label>
       <label class="set"><span>Tempo guide<small>Ticks on each count and a timing bar while you swing (always on in practice and the tutorial)</small></span><select id="sGuide"><option value="off" ${s.guide === 'off' ? 'selected' : ''}>Off</option><option value="ticks" ${s.guide === 'ticks' ? 'selected' : ''}>Ticks</option><option value="bar" ${s.guide === 'bar' ? 'selected' : ''}>Ticks + bar</option></select></label>
+      ${chk('sWheels', 'Training wheels', s.trainingWheels, 'Tips and extra help when swings keep failing. Turns itself off once you play well.')}
       ${chk('sVoice', 'Caddie voice', s.caddyVoice, 'Your caddie speaks: the club and how hard to hit it (analog swing), and what he thinks of your shots.')}
       <label class="set"><span>Distances</span><select id="sUnits"><option value="yd" ${s.units !== 'm' ? 'selected' : ''}>Yards</option><option value="m" ${s.units === 'm' ? 'selected' : ''}>Metres</option></select></label>
       <label class="set"><span>Assists</span><select id="sDiff">${['beginner', 'standard', 'pro'].map((d) => `<option value="${d}" ${s.difficulty === d ? 'selected' : ''}>${d[0].toUpperCase() + d.slice(1)}</option>`).join('')}</select></label>
@@ -1016,6 +1017,7 @@ export class UI {
     $('sCaddie').onchange = (e) => { s.caddie = e.target.value; g.greeted = false; g.saveSettings(); this.showSettings(true); };
     $('sGuide').onchange = (e) => { s.guide = e.target.value; g.saveSettings(); };
     $('sTempo').onchange = (e) => { s.tempo = e.target.value; g.saveSettings(); this.showSettings(true); };
+    $('sWheels').onchange = (e) => { s.trainingWheels = e.target.checked; g.coach.fails = g.coach.tempoMiss = g.coach.pracRun = 0; g.saveSettings(); };
     $('sVoice').onchange = (e) => { s.caddyVoice = e.target.checked; g.saveSettings(); };
     $('sUnits').onchange = (e) => { s.units = e.target.value; save(); g.updateHUD?.(true); };
     $('sDiff').onchange = (e) => { s.difficulty = e.target.value; save(); };
