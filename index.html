@@ -31,7 +31,7 @@
 <meta name="apple-mobile-web-app-title" content="Pure Strike">
 <link rel="modulepreload" href="dist/game.js">
 </head>
-<body>
+<body class="analog">
 <canvas id="c" role="img" aria-label="3D golf course view"></canvas>
 <canvas id="swingOverlay"></canvas>
 
@@ -61,12 +61,10 @@
       <summary>Round setup &amp; options</summary>
       <div class="menu-opts">
         <div class="opt"><label>Mode</label><div id="optMode" class="segs"></div><select id="optHole" class="hidden"></select><div id="optModeDesc" class="seg-desc muted small"></div></div>
-        <div class="opt"><label>Players (hot-seat)</label><div id="optPlayers" class="segs"></div><div id="optNames" class="names"></div></div>
         <div class="opt"><label>Golfer</label><div id="optProfile" class="segs"></div><div id="profileDesc" class="muted small"></div></div>
         <div class="opt"><label>Tees</label><div id="optTees" class="segs"></div><div id="optTeesDesc" class="seg-desc muted small"></div></div>
         <div class="opt"><label>Assists</label><div id="optDiff" class="segs"></div><div id="optDiffDesc" class="seg-desc muted small"></div></div>
         <div class="opt"><label>Distances</label><div id="optUnits" class="segs"></div></div>
-        <div class="opt"><label>Swing</label><div id="optControl" class="segs"></div><div id="optControlDesc" class="seg-desc muted small"></div></div>
         <div class="opt"><label>Tempo</label><div id="optTempo" class="segs"></div><div id="optTempoDesc" class="seg-desc muted small"></div></div>
         <div class="opt"><label>Guide</label><div id="optGuide" class="segs"></div><div id="optGuideDesc" class="seg-desc muted small"></div></div>
         <div class="opt"><label>Caddie</label><div id="optCaddie" class="segs"></div><div id="optCaddieDesc" class="seg-desc muted small"></div></div>
@@ -109,7 +107,6 @@
   </div>
   <canvas id="minimap" class="panel"></canvas>
   <div id="caddie" class="hidden"><div class="caddie-ico"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 15c0-5 4-9 9-9s9 4 9 9zM3 17h18c0 1.5-1 2.5-2.5 2.5h-13C4 19.5 3 18.5 3 17z" fill="currentColor"/></svg></div><div id="caddieText"></div></div>
-  <canvas id="meter"></canvas>
 </div>
 <div id="pinTag" class="hidden" aria-hidden="true"></div>
 <div id="helpBar" class="hidden"></div>
@@ -150,7 +147,6 @@
 <div id="summary" class="hidden modal"></div>
 <div id="settings" class="hidden modal wide"></div>
 <div id="stats" class="hidden modal wide"></div>
-<div id="editor" class="hidden modal wide"></div>
 <div id="academy" class="hidden"></div>
 <div id="loading" class="hidden"><div class="spinner"></div><div id="loadingText"></div></div>
 

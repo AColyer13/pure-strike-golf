@@ -318,7 +318,6 @@ export class Caddie {
     this.g = game;
     this.analysis = null;
     this.reading = null; // putt read in progress (see setupPutt)
-    this.lastRead = null; // { ms, cpu } of the last finished read
     this.puttLead = ''; // advice shown ahead of the putt read (e.g. why putt from the fringe)
     this.results = null; // last lay-up analysis, kept so the note can follow a club change
     this.msg = '';
@@ -697,7 +696,7 @@ export class Caddie {
     const guess = it.next().value;
     for (;;) {
       const r = it.next();
-      if (r.done) { const ms = performance.now() - t0; this.lastRead = { ms, cpu: ms }; this.applyPutt(r.value, read); return; }
+      if (r.done) { this.applyPutt(r.value, read); return; }
       if (performance.now() - t0 > SLICE_MS) break;
     }
     this.applyPutt(guess, false);
@@ -705,7 +704,7 @@ export class Caddie {
       this.msg = this.withLead('Caddie is reading the putt…');
       if (g.ui) g.caddieNote();
     }
-    this.reading = { it, read, aim: g.aim, ball: g.ball.p.slice(), t0, cpu: performance.now() - t0 };
+    this.reading = { it, read, aim: g.aim, ball: g.ball.p.slice() };
   }
 
   // a few ms of the putt read per frame; dropped if the swing starts or anything changes
@@ -719,15 +718,13 @@ export class Caddie {
       const r = R.it.next();
       if (r.done) {
         this.reading = null;
-        // wall time from address to a finished read, and the CPU time it took (shown by ?perf)
-        this.lastRead = { ms: performance.now() - R.t0, cpu: R.cpu + performance.now() - t0 };
         const userAimed = Math.abs(g.aim - R.aim) > 1e-6;
         this.applyPutt(r.value, R.read, userAimed);
         if (!userAimed) g.placeGolfer();
         g.previewDirty = true;
         return;
       }
-      if (performance.now() - t0 > READ_MS) { R.cpu += performance.now() - t0; return; }
+      if (performance.now() - t0 > READ_MS) return;
     }
   }
 
@@ -739,11 +736,7 @@ export class Caddie {
     g.puttEqFt = ps.eqFt;
     g.puttRange = ps.range;
     g.puttElevIn = ps.elevIn;
-    const R = g.puttRange;
     const u = g.settings.units;
-    // each mark sits where its printed (rounded) distance really is, not at the quarter point
-    const mark = (f) => { const ft = Math.max(1, Math.round(R * f)); return [ft / R, fmtFt(ft, u)]; };
-    g.meter.configure({ labels: [mark(0.25), mark(0.5), mark(0.75), [1, fmtFt(R, u)]], rangeLabel: `Putter range ${fmtFt(R, u)}` });
     if (!keepAim) g.aim = ps.aim;
     this.msg = this.withLead(read ? puttNote(ps, u) : '');
     if (g.ui) g.caddieNote();

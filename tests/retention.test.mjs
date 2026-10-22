@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Hole } from '../src/hole.js';
-import { courseById, COURSES } from '../src/courses/index.js';
+import { courseById } from '../src/courses/index.js';
 import { MODES, dailySpec, holesFor, challengeHash, challengeScore, parseChallenge, seedFrom } from '../src/round.js';
 import { coachShot, resetCoach } from '../src/coach.js';
 import { roundEntry, bestFor, handicapIndex, sgTrend, loadHistory } from '../src/history.js';
@@ -33,10 +33,9 @@ test('daily challenge is fixed for a date and varies across dates', () => {
 test('holesFor picks sensible holes per mode', () => {
   assert.equal(holesFor('18', 'augusta').length, 18);
   assert.deepEqual(holesFor('back', 'augusta')[0], 9);
-  for (const c of COURSES) {
-    assert.equal(c.holes[holesFor('ctp', c.id, 1)[0]].par, 3, `${c.id} ctp is a par 3`);
-    assert.ok(c.holes[holesFor('drive', c.id, 1)[0]].par >= 4, `${c.id} drive is a par 4/5`);
-  }
+  assert.deepEqual(holesFor('single', 'augusta', 5), [4]);
+  assert.equal(MODES.ctp, undefined, 'closest to the pin is gone');
+  assert.equal(MODES.drive, undefined, 'long drive is gone');
   assert.equal(holesFor('random').length, 9);
 });
 
@@ -45,13 +44,12 @@ test('challenge links round-trip', () => {
   assert.deepEqual(parseChallenge(challengeHash(r)), { courseId: 'sawgrass', mode: 'single', holes: [16], seed: 123456 });
   const g = { course: { id: 'gen' }, mode: 'random', holes: [0, 1, 2, 3, 4, 5, 6, 7, 8], seed: 99 };
   assert.equal(parseChallenge(challengeHash(g)).courseId, 'gen');
-  // a finished round puts its score in the link: strokes, tenths of a foot or yards
-  const played = { course: { id: 'sawgrass' }, mode: 'front', holes: [0, 1], seed: 77, balls: 0, players: [{ scores: [{ strokes: 4 }, { strokes: 5 }], attempts: [] }] };
+  // a finished round puts its score in the link: total strokes
+  const played = { course: { id: 'sawgrass' }, mode: 'front', holes: [0, 1], seed: 77, players: [{ scores: [{ strokes: 4 }, { strokes: 5 }] }] };
   assert.equal(challengeHash(played), '#c=sawgrass.front.0-1.77.9');
   assert.deepEqual(parseChallenge(challengeHash(played)), { courseId: 'sawgrass', mode: 'front', holes: [0, 1], seed: 77, score: 9 });
-  assert.equal(challengeScore({ mode: 'ctp', balls: 3, holes: [0], players: [{ scores: [], attempts: [null, 12.34, 20] }] }), 123);
-  assert.equal(challengeScore({ mode: 'drive', balls: 3, holes: [0], players: [{ scores: [], attempts: [240.4, null, 262.6] }] }), 263);
-  assert.equal(challengeScore({ mode: 'front', balls: 0, holes: [0, 1], players: [{ scores: [{ strokes: 4 }], attempts: [] }] }), null);
+  assert.equal(challengeScore({ mode: 'front', holes: [0, 1], players: [{ scores: [{ strokes: 4 }] }] }), null);
+  assert.equal(parseChallenge('#c=augusta.ctp.2.5'), null, 'a link to a removed mode is ignored');
   assert.equal(parseChallenge('#c=sawgrass.front.0-1.77.x'), null);
   assert.equal(parseChallenge('#c=nowhere.18.1.5'), null);
   assert.equal(parseChallenge('#c=augusta.bogus.1.5'), null);
@@ -129,33 +127,12 @@ test('damaged saved history never breaks loading: junk entries are dropped, gaps
   store.delete('psg-history');
 });
 
-test('crafted challenge links must describe a playable round', () => {
-  const par3 = courseById('augusta').holes.findIndex((h) => h.par === 3);
-  const par4 = courseById('augusta').holes.findIndex((h) => h.par === 4);
-  assert.ok(parseChallenge(`#c=augusta.ctp.${par3}.5`));
-  assert.equal(parseChallenge(`#c=augusta.ctp.${par4}.5`), null, 'closest to the pin on a par 4');
-  assert.ok(parseChallenge(`#c=augusta.drive.${par4}.5`));
-  assert.equal(parseChallenge(`#c=augusta.drive.${par3}.5`), null, 'long drive on a par 3');
-});
-
-test('closest-to-the-pin falls back to the shortest par 3, and a damaged challenge link is rejected', () => {
-  for (const c of COURSES) {
-    const par3 = c.holes.filter((h) => h.par === 3);
-    const shortest = Math.min(...par3.map((h) => h.yds));
-    // hole 1 is not a par 3 on any course here, so the fallback applies
-    const i = c.holes[0].par === 3 ? 1 : 0;
-    if (c.holes[i].par !== 3) assert.equal(c.holes[holesFor('ctp', c.id, i + 1)[0]].yds, shortest, c.id);
-  }
-  assert.equal(parseChallenge('#c=garbage'), null);
-});
-
-test('challenge links reject holes the course does not have, and the private custom course', () => {
+test('challenge links reject holes the course does not have', () => {
   // the random course has nine holes: a link that asks for hole 12 or 18 describes no real round
   assert.equal(parseChallenge('#c=gen.back.9-10-11-12-13-14-15-16-17.5'), null);
   assert.equal(parseChallenge('#c=gen.single.11.5'), null);
   assert.ok(parseChallenge('#c=gen.random.0-1-2-3-4-5-6-7-8.5'));
   assert.equal(parseChallenge('#c=augusta.single.18.5'), null, 'there is no hole 19');
-  assert.equal(parseChallenge('#c=custom.single.0.5'), null, 'the editor course exists on one device only');
 });
 
 test('challenge links carry the tee set', () => {
@@ -183,20 +160,4 @@ test('best scores and the handicap index only compare rounds from the same tees'
   const three = (extra) => [0, 1, 2].map(() => entry('augusta', 18, 85, 72, extra));
   assert.notEqual(handicapIndex(three({})), null);
   assert.equal(handicapIndex(three({ tees: 'forward' })), null, 'forward-tee rounds are not rated against the championship tees');
-});
-
-test("the course editor keeps each course's edits apart", async () => {
-  const { loadCustom, saveCustom } = await import('../src/courses/index.js');
-  store.clear();
-  assert.equal(loadCustom(), null);
-  saveCustom({ base: 'augusta', holes: { 0: { par: 4 } } });
-  saveCustom({ base: 'pebble', holes: { 2: { par: 3 } } });
-  assert.deepEqual(loadCustom('augusta'), { base: 'augusta', holes: { 0: { par: 4 } } }, 'the first course keeps its edits');
-  assert.deepEqual(loadCustom('pebble'), { base: 'pebble', holes: { 2: { par: 3 } } });
-  assert.equal(loadCustom().base, 'pebble', 'the course played as custom is the one edited last');
-  // a save from before per-course storage is read as that one course
-  store.set('psg-custom-course', JSON.stringify({ base: 'sawgrass', holes: { 1: { par: 5 } } }));
-  assert.deepEqual(loadCustom('sawgrass'), { base: 'sawgrass', holes: { 1: { par: 5 } } });
-  assert.equal(loadCustom('augusta'), null);
-  store.clear();
 });

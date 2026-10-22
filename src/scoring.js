@@ -7,7 +7,6 @@ import { findEntry } from './rules.js';
 const beforeOf = (S) => ({ surface: S.isTee ? 'tee' : S.surface, yards: S.yards, isTee: S.isTee });
 
 // Settle a stroke once the ball has stopped. `strokes` already counts this stroke.
-// stats may be null (challenge modes keep no Strokes Gained).
 // Returns { result, next: 'holed'|'next'|'water', ball, after, penalty, strokes, sg, entry }.
 export function settleShot({ hole, shotStart: S, sim, info, stats, strokes }) {
   const before = beforeOf(S);
@@ -66,11 +65,9 @@ export function finishHoleScore(round, hole, strokes, { pickedUp = false } = {})
   return score;
 }
 
-// Who plays next after a hole: 'player' (hot seat, same hole), 'hole' or 'end'.
+// What follows a hole: 'hole' or 'end'.
 export function nextTurn(round) {
   const r = round;
-  if (r.p < r.players.length - 1) { r.p++; return 'player'; }
-  r.p = 0;
   return r.i >= r.holes.length - 1 ? 'end' : 'hole';
 }
 export function nextHole(round) { round.i++; return round.holes[round.i]; }

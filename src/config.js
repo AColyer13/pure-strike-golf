@@ -1,14 +1,14 @@
 // Gameplay tuning tables shared by the game, caddie and UI.
 
-// meterTime: seconds for a full meter sweep; zone: half-width of the sweet spot (fraction);
-// puttZone: the same on the putter (the caddie's read and the marker take the guesswork
+// zone: half-width of the sweet spot (fraction);
+// puttZone: the same on the putter (the caddie's read takes the guesswork
 // out of a putt, so the stroke itself has to be the test: see the make rates in the notes)
 // wind/roll: whether the landing preview includes wind / bounce-and-roll
-// putt: fraction of the putt line drawn; marker: show the suggested-power marker
+// putt: fraction of the putt line drawn
 export const DIFFICULTY = {
-  beginner: { name: 'Beginner', meterTime: 1.35, zone: 0.055, puttZone: 0.035, wind: true, roll: true, putt: 1.0, marker: true },
-  standard: { name: 'Standard', meterTime: 1.05, zone: 0.036, puttZone: 0.018, wind: false, roll: false, putt: 0.35, marker: true },
-  pro: { name: 'Pro', meterTime: 0.85, zone: 0.024, puttZone: 0.014, wind: false, roll: false, putt: 0, marker: false },
+  beginner: { name: 'Beginner', zone: 0.055, puttZone: 0.035, wind: true, roll: true, putt: 1.0 },
+  standard: { name: 'Standard', zone: 0.036, puttZone: 0.018, wind: false, roll: false, putt: 0.35 },
+  pro: { name: 'Pro', zone: 0.024, puttZone: 0.014, wind: false, roll: false, putt: 0 },
 };
 
 // Intended shot shapes: club path and face relative to the target (degrees, + = right)

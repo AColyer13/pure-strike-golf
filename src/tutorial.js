@@ -1,5 +1,5 @@
 // Guided first hole: a short par 3 (Magnolia 12, calm wind, beginner assists)
-// with coach marks that point at the HUD, the swing meter and the shot panel as
+// with coach marks that point at the HUD, the swing and the shot panel as
 // each becomes relevant. Steps are polled from the game loop, so they follow
 // whatever the player actually does: a ball in the water gets the relief step,
 // a missed green gets the "not on yet" step, a holed putt ends the lesson.
@@ -11,7 +11,7 @@ export const TUTORIAL_ROUND = { courseId: 'augusta', holes: [11], mode: 'single'
 
 // asked once, on the lesson's last card: what the player's own rounds start with
 export const LEVELS = [
-  { id: 'new', label: 'New to golf', hint: 'Gentle swing meter, wind helps', settings: { profile: 'mid', difficulty: 'beginner', tees: 'forward' } },
+  { id: 'new', label: 'New to golf', hint: 'Big assists, wind helps', settings: { profile: 'mid', difficulty: 'beginner', tees: 'forward' } },
   { id: 'casual', label: 'Play casually', hint: 'Typical club golfer', settings: { profile: 'mid', difficulty: 'standard', tees: 'middle' } },
   { id: 'regular', label: 'I play regularly', hint: 'Scratch golfer, standard assists', settings: { profile: 'scratch', difficulty: 'standard', tees: 'back' } },
 ];
@@ -39,13 +39,10 @@ export const STEPS = [
     text: (g, k, touch) => (touch
       ? `Hold ${k('aimLeft')} or ${k('aimRight')} to turn your aim; ${k('aimPin')} aims back at the pin. You can also drag sideways on the view to aim, or up and down to look around. The ring at the end of the arc is where this club lands with a full swing.`
       : `${k('aimLeft')} / ${k('aimRight')} move your aim (hold ${k('aimFine')} for fine steps); ${k('aimPin')} aims back at the pin. The ring at the end of the arc is where this club lands with a full swing.`) },
-  { id: 'meter', when: (g) => g.state === 'address', anchor: 'meter', title: 'The three-click swing',
-    text: (g, k, touch) => {
-      const tap = touch ? 'Tap' : 'Press', again = touch ? 'tap' : 'press';
-      return g.settings.oneButton
-        ? `One-button swing: ${tap.toLowerCase()} ${k('swing')} to start. Power is set for you at the caddie’s marker; ${again} ${k('swing')} again as the cursor comes back into the green impact zone. Go on, hit it.`
-        : `${tap} ${k('swing')} to start the meter. ${tap} again to set power: the blue marker is the caddie’s suggestion. Then ${again} a third time as the cursor comes back into the green impact zone. Early closes the face (pull), late opens it (push). Go on, hit it.`;
-    },
+  { id: 'swing', when: (g) => g.state === 'address', anchor: 'clubBox', title: 'The swing',
+    text: (g, k, touch) => (touch
+      ? 'Your caddie says how hard to hit it (“about 75%”). Put one finger on the view, take it back on a three-count (1… 2… 3) by dragging down that far, then flick up. Go on, hit it.'
+      : 'Your caddie says how hard to hit it (“about 75%”). Hold the left mouse button, take it back on a three-count (1… 2… 3) by pulling down that far, then push up. Go on, hit it.'),
     done: (g) => g.state !== 'address' },
   { id: 'relief', when: (g) => g.state === 'relief', anchor: 'relief', title: 'Penalty area',
     text: () => 'In the water: one penalty stroke. Each option shows the tour-average strokes to hole out from that drop, so the lowest number is the smart choice.',
@@ -55,10 +52,8 @@ export const STEPS = [
     done: (g) => g.state !== 'result' },
   { id: 'green', when: (g) => g.state === 'address' && !!g.club?.putter, anchor: 'distBox', title: 'On the green',
     text: (g, k, touch) => `“Stroke it N ft” is the pace that finishes about 17 inches past the hole, the best chance of dropping. The line on the green shows the break${touch ? '.' : `; ${k('grid')} toggles the grid, whose dots flow downhill.`}` },
-  { id: 'putt', when: (g) => g.state === 'address' && !!g.club?.putter, anchor: 'meter', title: 'Putting',
-    text: (g, k, touch) => (g.settings.difficulty === 'pro'
-      ? `Same three ${touch ? 'taps' : 'clicks'}. The labels are the distance each power rolls: hit the marker, and aim up the slope by the break you read.`
-      : `Same three ${touch ? 'taps' : 'clicks'}. The labels are the distance each power rolls. Your caddie has already aimed for the break, so just hit the marker and swing straight.`),
+  { id: 'putt', when: (g) => g.state === 'address' && !!g.club?.putter, anchor: 'clubBox', title: 'Putting',
+    text: () => 'Same swing, shorter: the caddie gives the length in feet. Your caddie has already aimed for the break, so just match the pace and push straight.',
     done: (g) => g.state !== 'address' },
   { id: 'again', when: (g) => g.state === 'address' && !g.club?.putter && g.strokes > 0, anchor: 'clubBox', title: 'Not on yet',
     text: () => 'Same routine: the caddie re-reads the distance and lie every shot. The lie percentage is how much distance the grass costs you.' },
@@ -78,9 +73,9 @@ export class Tutorial {
 
   start() {
     const g = this.g, s = g.settings;
-    // beginner assists and the meter for the lesson; the player's own settings come back at the end
-    this.saved = { difficulty: s.difficulty, control: s.control };
-    s.difficulty = 'beginner'; s.control = 'meter';
+    // beginner assists for the lesson; the player's own settings come back at the end
+    this.saved = { difficulty: s.difficulty };
+    s.difficulty = 'beginner';
     this.seen = new Set(); this.cur = null;
     g.tutorial = this;
     this.ensureEl();
@@ -215,7 +210,7 @@ export class Tutorial {
     const tc = $('touchControls');
     const thumbs = tc && getComputedStyle(tc).opacity > 0.5 ? [...tc.querySelectorAll('button')].map(shown).filter(Boolean) : [];
     const panels = ['holeCard', 'distBox', 'windBox'].map((id) => shown($(id))).filter((b) => b && !hitsAnchor(b));
-    const others = ['clubBox', 'lieBox', 'shotPanel', 'minimap', ...(this.cur.anchor !== 'meter' && this.g.state === 'address' ? ['meter'] : [])]
+    const others = ['clubBox', 'lieBox', 'shotPanel', 'minimap']
       .map((id) => shown($(id))).filter((b) => b && !hitsAnchor(b));
     const cx = anchor ? (anchor.left + anchor.right) / 2 : vw / 2, cy = anchor ? (anchor.top + anchor.bottom) / 2 : vh / 2;
     // the tip never covers the thumb buttons; it keeps off its own anchor and then the other panels as far as the screen allows
@@ -254,7 +249,7 @@ export class Tutorial {
       top = Math.max(0, ...['holeCard', 'distBox', 'windBox'].map((id) => $(id)?.getBoundingClientRect().bottom || 0)) + gap;
       side = 'none';
     } else if (this.ui.touch && vw > vh && vh < 500 && !this.cur.finish && (left = this.freeSpot(r, W, H, m)) !== null) {
-      // landscape phone: the HUD, meter and thumb buttons leave only a gap or two, so look for one
+      // landscape phone: the HUD and thumb buttons leave only a gap or two, so look for one
       [left, top] = left;
       side = 'none';
     } else if (r) {
@@ -264,14 +259,11 @@ export class Tutorial {
         ['below', r.left, r.bottom + gap],
         ['above', r.left, r.top - H - gap],
       ];
-      // keep clear of the swing meter (and the hint printed on it) unless the tip is about the meter
-      const mt = this.cur.anchor !== 'meter' && this.g.state === 'address' ? $('meter').getBoundingClientRect() : null;
-      const hitsMeter = (x, y) => mt && mt.height && x < mt.right && x + W > mt.left && y < mt.bottom && y + H > mt.top;
       // ...and of the distance, wind and hole panels the player reads while the tip is up (unless the tip points at one)
       const hud = ['distBox', 'windBox', 'holeCard'].map((id) => $(id)?.getBoundingClientRect())
         .filter((b) => b && b.height && !(b.left < r.right && b.right > r.left && b.top < r.bottom && b.bottom > r.top));
       const hitsHud = (x, y) => hud.some((b) => x < b.right && x + W > b.left && y < b.bottom && y + H > b.top);
-      const fits = cands.find(([, x, y]) => x >= m && y >= m && x + W <= vw - m && y + H <= vh - m && !hitsMeter(x, y) && !hitsHud(x, y));
+      const fits = cands.find(([, x, y]) => x >= m && y >= m && x + W <= vw - m && y + H <= vh - m && !hitsHud(x, y));
       if (fits) [side, left, top] = fits;
       else { side = r.top > vh / 2 ? 'above' : 'below'; left = r.left; top = side === 'above' ? r.top - H - gap : r.bottom + gap; }
     } else { left = (vw - W) / 2; top = 14; }

@@ -9,13 +9,12 @@
 import * as THREE from 'three';
 import { World } from './world.js';
 import { PostPipeline } from './post.js';
-import { PerfHud, perfWanted } from './perf.js';
 import { Golfer } from './golfer.js';
 import { BallSim, LIES, SURFACES, puttSpeedFor, BALL } from './physics.js';
 import { buildBag } from './clubs.js';
 import { YD, FT, mulberry32 } from './hole.js';
 import { scoreName } from './stats.js';
-import { SwingMeter, MouseSwing, meterToStrike, tempoToMeterError, tempo, setTempo, setCounts, countsFor, tempoNote, DEFAULT_TEMPO } from './meter.js';
+import { MouseSwing, meterToStrike, tempoToMeterError, tempo, setTempo, setCounts, countsFor, tempoNote, DEFAULT_TEMPO } from './meter.js';
 import { say, hush } from './voice.js';
 import { CADDIES, advice, greeting, tempoLine, judgeShot, situationOf, reaction } from './caddies.js';
 import { SoundEngine } from './audio.js';
@@ -29,7 +28,7 @@ import { Input } from './input.js';
 import { reliefOptions } from './rules.js';
 import { fmtWind, fmtFt, fmtElev } from './units.js';
 import { loadHistory, saveRound, roundEntry, bestFor } from './history.js';
-import { SIGNATURE, createRound, holeEnv, introExtra, RESUME_KEY, resumable, roundSnapshot, restoreRound } from './round.js';
+import { SIGNATURE, createRound, holeEnv, RESUME_KEY, resumable, roundSnapshot, restoreRound } from './round.js';
 import {
   STEP, distToPin, teeBall, groundBall, ballLiftFor, lieKeyFor, slopeAt, lieZoneFor, shotSeedFor, windRelOf,
   computeBagDistances, normalizeSwing, shotStartOf, launchShot, forecastShot, shotInfoFor,
@@ -64,9 +63,6 @@ export class Game {
     this.scene.add(this.tee);
     this.ballShadow = new THREE.Mesh(new THREE.CircleGeometry(0.03, 16).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false }));
     this.scene.add(this.ballShadow);
-    // faint tracers of earlier attempts (closest-to-pin / long drive)
-    this.ghosts = new THREE.Group();
-    this.scene.add(this.ghosts);
 
     this.settings = this.loadSettings();
     this.post = new PostPipeline(this.renderer, this.scene, this.camera);
@@ -82,13 +78,8 @@ export class Game {
     };
     this.post.setQuality(this.settings.quality);
     this.audio = new SoundEngine();
-    this.meter = new SwingMeter($('meter'));
     this.mouseSwing = new MouseSwing($('swingOverlay'));
     this.mouseSwing.resize();
-    this.meter.cueFn = (putt) => this.swingCue(putt);
-    this.meter.onDone = (r) => this.meterDone(r);
-    this.meter.onCancel = () => { if (this.state === 'swing') this.state = 'address'; };
-    this.meter.onAuto = () => this.audio.ui('set');
     this.mouseSwing.onBack = (b) => { this.golfer.phase = 'manual'; this.golfer.apply(-b); };
     this.mouseSwing.onDone = (r) => this.mouseDone(r);
     this.mouseSwing.onBeat = () => this.audio.ui('tick');
@@ -106,7 +97,6 @@ export class Game {
     // three.js rebuilds everything when they come back, so pause until then
     canvas.addEventListener('webglcontextlost', () => this.graphicsLost());
     canvas.addEventListener('webglcontextrestored', () => this.graphicsRestored());
-    if (perfWanted(location.search)) this.perf = new PerfHud(this);
     requestAnimationFrame((t) => this.loop(t));
     addEventListener('resize', () => this.resize());
   }
@@ -138,8 +128,8 @@ export class Game {
     const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
     return {
       // a first visit starts a typical golfer on the middle tees; saved settings from before tee sets keep the back tees
-      profile: 'mid', difficulty: 'standard', tees: Object.keys(s).length ? 'back' : 'middle', control: 'mouse', units: 'yd', volume: 0.7, tracer: true, caddyVoice: true, caddie: 'tech', tempo: DEFAULT_TEMPO, guide: 'off',
-      reducedMotion: reduce, oneButton: false, captions: false, uiScale: 1, keys: {}, ffSeen: 0, quality: 'auto', ...s,
+      profile: 'mid', difficulty: 'standard', tees: Object.keys(s).length ? 'back' : 'middle', units: 'yd', volume: 0.7, tracer: true, caddyVoice: true, caddie: 'tech', tempo: DEFAULT_TEMPO, guide: 'off',
+      reducedMotion: reduce, captions: false, uiScale: 1, keys: {}, ffSeen: 0, quality: 'auto', ...s,
     };
   }
   saveSettings() {
@@ -150,8 +140,6 @@ export class Game {
     const s = this.settings;
     document.documentElement.style.setProperty('--ui-scale', String(s.uiScale || 1));
     document.body.classList.toggle('reduced-motion', !!s.reducedMotion);
-    // the analog swing has no meter: the caddie says how far back to take it
-    document.body.classList.toggle('analog', s.control === 'mouse');
   }
   get diff() { return DIFFICULTY[this.settings.difficulty] || DIFFICULTY.standard; }
 
@@ -163,7 +151,6 @@ export class Game {
     this.post.resize(innerWidth, innerHeight);
     // (portrait screens widen the field of view: see CameraDirector.fitFov)
     this.world.fx.setViewport(this.renderer.getDrawingBufferSize(new THREE.Vector2()).y, this.cam ? this.cam.fitFov(50) : this.camera.fov);
-    this.meter.resize(); this.meter.draw();
     this.mouseSwing.resize();
   }
 
@@ -184,7 +171,6 @@ export class Game {
     this.golfer.root.visible = false;
     this.ballMesh.visible = false; this.tee.visible = false; this.ballShadow.visible = false;
     this.world.reticle.visible = false; this.world.arc.visible = false; this.world.tracer.visible = false;
-    this.clearGhosts();
   }
 
   // ------------------------------------------------------------------ round
@@ -206,12 +192,8 @@ export class Game {
     this.world.setCourse(course);
     computeBagDistances(this.bag, course);
     this.ui.showHUD(true);
-    this.meter.resize();
-    this.clearGhosts();
     this.loadHole(snap);
   }
-
-  get challenge() { return this.round && this.round.balls > 0; }
 
   loadHole(snap = null) {
     const r = this.round;
@@ -231,12 +213,12 @@ export class Game {
       const cur = r.stats.cur;
       this.resetPlayerOnHole();
       if (snap?.done) { this.endRound(); return; }
-      this.ui.holeIntro(this.hole, course, this.fmtDist(this.hole.yards * YD), this.windText(), introExtra(this.round));
+      this.ui.holeIntro(this.hole, course, this.fmtDist(this.hole.yards * YD), this.windText());
       if (snap?.mid) {
         // back where the player left off: same ball, strokes and hole stats, no flyover
         const m = snap.mid;
         this.strokes = m.strokes; this.penalties = m.penalties; this.ballNo = m.ballNo;
-        if (cur && !this.challenge) { r.stats.cur = cur; this.holeStats = cur; }
+        if (cur) { r.stats.cur = cur; this.holeStats = cur; }
         this.ball = { ...this.ball, p: m.ball.p.slice(), isTee: m.ball.isTee };
         this.startFlyover();
         this.endFlyover();
@@ -253,7 +235,7 @@ export class Game {
     this.strokes = 0;
     this.penalties = 0;
     this.ballNo = 0;
-    if (!this.challenge) this.holeStats = r.stats.startHole(h.number, h.par, h.yards);
+    this.holeStats = r.stats.startHole(h.number, h.par, h.yards);
     this.teeUp();
   }
   teeUp() {
@@ -267,7 +249,6 @@ export class Game {
   startFlyover() {
     this.state = 'flyover';
     document.body.classList.add('flyover');
-    this.meter.hide();
     this.world.reticle.visible = false;
     this.world.arc.visible = false;
     this.world.showGreenGrid(false);
@@ -301,13 +282,6 @@ export class Game {
     this.userClub = false;
     this.club = null;
     this.caddie.chooseClub();
-    if (this.challenge && this.round.mode === 'drive') {
-      // long drive: always the driver, aimed down the centre line
-      this.setClub(0);
-      this.caddie.analysis = null;
-      this.caddie.msg = 'Long drive: biggest one in the fairway or first cut wins.';
-      this.caddie.aimForClub(this.club);
-    }
     this.placeGolfer();
     this.previewDirty = true;
   }
@@ -319,12 +293,7 @@ export class Game {
     this.cam.resetOrbit();
     this.cam.targetView = false;
     document.body.classList.remove('target-view');
-    const d = this.diff;
-    this.meter.configure({ fullTime: d.meterTime * (this.club.putter ? 1.25 : 1), zone: this.club.putter ? d.puttZone : d.zone, marker: null, autoPower: null });
-    this.meter.show();
-    this.meter.state = 'ready';
-    this.meter.power = null;
-    this.mouseSwing.enabled = this.settings.control === 'mouse';
+    this.mouseSwing.enabled = true;
     this.mouseSwing.putt = !!this.club.putter;
     this.mouseSwing.result = null;
     this.mouseSwing.target = null; this.powerReady = false; this.adviceErr = 0;
@@ -334,7 +303,6 @@ export class Game {
     const training = !!this.tutorial || this.round?.mode === 'practice', guide = this.settings.guide;
     this.mouseSwing.count = training || guide === 'ticks' || guide === 'bar';
     this.mouseSwing.bar = training || guide === 'bar';
-    document.body.classList.toggle('analog', this.mouseSwing.enabled);
     this.mouseSwing.draw();
     this.world.showGreenGrid(this.onGreen ? !this.gridHide : this.nearGreen() && this.gridOn);
     this.world.arc.visible = true;
@@ -367,7 +335,6 @@ export class Game {
     this.placeGolfer();
     this.hole.pinIn = !this.club.putter;
     if (this.club.putter) this.caddie.setupPutt();
-    this.meter.configure({ putt: !!this.club.putter, fullTime: this.diff.meterTime * (this.club.putter ? 1.25 : 1), zone: this.club.putter ? this.diff.puttZone : this.diff.zone });
     this.mouseSwing.putt = !!this.club.putter;
     this.world.reticle.visible = !this.club.putter && this.state !== 'flyover';
     this.world.puttLine.visible = false;
@@ -459,10 +426,10 @@ export class Game {
   }
 
   // Analog swing: how far back to take it, as the caddie would say it. Null until the power
-  // for this shot is worked out (or when the meter is doing the job).
+  // for this shot is worked out.
   analogAdvice() {
     const c = this.club;
-    if (this.settings.control !== 'mouse' || this.state !== 'address' || !c || !this.powerReady || this.suggestedPower == null) return null;
+    if (this.state !== 'address' || !c || !this.powerReady || this.suggestedPower == null) return null;
     const sp = this.suggestedPower, full = sp >= 0.97;
     const pct = full ? 100 : Math.max(5, Math.round(sp * 20) * 5);
     const where = c.putter ? this.fmtPutt(this.puttEqFt) : full ? '' : this.fmtDist(this.pl ? this.pl.plays : this.distToPin());
@@ -597,8 +564,6 @@ export class Game {
       w.reticle.visible = false;
       w.arc.visible = false;
       this.suggestedPower = clamp(this.puttEqFt / this.puttRange, 0.02, 1);
-      this.meter.configure({ marker: assist.marker ? this.suggestedPower : null });
-      this.configureAuto();
       this.powerReady = true; this.syncTarget();
       this.caddieNote(); this.sayAdvice();
       if (assist.putt <= 0) { w.puttLine.visible = false; return; }
@@ -645,10 +610,9 @@ export class Game {
     // suggested power: what carries the plays-like distance to the pin (full swing if out of range)
     const need = this.pl ? this.pl.plays : this.distToPin();
     const flatCarry = this.club.carry || this.previewCarry || need;
-    this.meter.configure({ labels: null, rangeLabel: `${this.club.name} · carry ${this.fmtDist(this.club.carry)}` });
     // the caddie's number takes a dozen full sims (~10 ms, more on a phone), so it is worked
     // out a few milliseconds a frame from the next one (stepPower) rather than in this one
-    if (need < flatCarry * 1.12 && !(this.challenge && this.round.mode === 'drive')) this.powerJob = this.caddie.powerSteps(need);
+    if (need < flatCarry * 1.12) this.powerJob = this.caddie.powerSteps(need);
     else this.setSuggestedPower(1);
   }
   stepPower(budget = SLICE_MS) {
@@ -666,48 +630,14 @@ export class Game {
     this.caddie.checkBlocked(this.suggestedPower);
     this.caddieNote();
     this.sayAdvice();
-    this.meter.configure({ marker: this.diff.marker && this.suggestedPower < 1 ? this.suggestedPower : null });
-    this.configureAuto();
-  }
-  // one-button swing: the meter sets power itself at the caddie's number
-  configureAuto() {
-    this.meter.configure({ autoPower: this.settings.oneButton ? clamp(this.suggestedPower ?? 1, 0.02, 1) : null });
   }
 
   // ------------------------------------------------------------------ swing
   get addressSettling() { return performance.now() - (this.addressAt || 0) < 350; }
 
-  // the meter's "how do I start" prompt follows the control scheme and input device
-  swingCue(putt) {
-    const touch = document.body.classList.contains('touch');
-    if (this.settings.control === 'mouse') return touch ? 'Drag down on a 3-count, then up' : 'Hold LMB: 3-count back, then push up';
-    return `${touch ? 'Tap SWING' : `${this.ui.key('swing')} / click`} to start the ${putt ? 'stroke' : 'swing'}`;
-  }
-
-  meterClick() {
-    if (this.state !== 'address' && this.state !== 'swing') return;
-    if (this.settings.control === 'mouse') return;
-    // the press that skipped the flyover or dismissed the last result must not also start a swing
-    if (this.state === 'address' && this.addressSettling) return;
-    if (this.state === 'address') {
-      if (this.previewDirty) this.updatePreview();
-      if (this.powerJob) this.stepPower(Infinity); // the marker (and a one-button swing's power) must be final
-      this.state = 'swing';
-      this.audio.ui('tick');
-      this.caddie.analysis = null;
-    }
-    const r = this.meter.click();
-    if (r === 'power') this.audio.ui('set');
-  }
-
-  meterDone(r) {
-    const putt = !!this.club.putter;
-    const { face, strike } = meterToStrike(r.error, r.zone * this.lieZone(), putt);
-    this.executeSwing({ power: r.power, face, path: 0, strike });
-  }
   lieZone() { return lieZoneFor(this.ball, this.hole, this.club, this.aim); }
 
-  // every input path (meter, mouse swing, gamepad stick) ends up here
+  // every input path (mouse swing, touch drag, gamepad stick) ends up here
   executeSwing(sw) {
     sw = normalizeSwing(sw, !!this.club.putter);
     this.state = 'backswing';
@@ -716,7 +646,7 @@ export class Game {
     this.pendingSwing = sw;
     clearTimeout(this.adviceT);
     this.golfer.startSwing(this.club.putter ? sw.power : clamp(sw.power, 0.35, 1.05), () => this.impact());
-    if (this.settings.control === 'mouse' || this.golfer.phase === 'manual') { this.golfer.phase = 'down'; this.golfer.t = 0; }
+    this.golfer.phase = 'down'; this.golfer.t = 0;
     this.world.reticle.visible = false;
     this.world.arc.visible = false;
     this.world.puttLine.visible = false;
@@ -750,7 +680,6 @@ export class Game {
     this.rec = [start.slice()];
     this.recN = 0;
     this.world.tracer.visible = this.settings.tracer && !putt;
-    this.meter.hide();
     this.ballShadow.visible = !putt;
     this.cam.startFlight(this.shotStart, this.forecast);
     this.ui.showShotPanel(null);
@@ -914,7 +843,6 @@ export class Game {
     this.lastInfo = info;
     this.lastSg = null;
     this.state = 'result';
-    if (this.challenge) { this.challengeResult(info); return; }
     const putt = info.putt;
     const r = settleShot({ hole: this.hole, shotStart: S, sim, info, stats: this.round.stats, strokes: this.strokes });
     if (r.next === 'water') {
@@ -947,8 +875,8 @@ export class Game {
     this.nextShot();
   }
 
-  showResult(info, sg, extra) {
-    this.ui.showShotPanel({ info, sg, fmt: (m) => this.fmtDist(m), tips: coachShot(info, this.settings.units), extra, canReplay: !!this.rec?.length });
+  showResult(info, sg) {
+    this.ui.showShotPanel({ info, sg, fmt: (m) => this.fmtDist(m), tips: coachShot(info, this.settings.units), canReplay: !!this.rec?.length });
     if (info.result === 'water') this.ui.banner('Penalty area', 'bad');
     else if (info.result === 'ob') this.ui.banner('Out of bounds', 'bad');
     this.updateHUD(true);
@@ -956,7 +884,6 @@ export class Game {
 
   continueAfterResult() {
     if (this.state !== 'result') return;
-    if (this.resultNext === 'attempt') { this.nextAttempt(); return; }
     if (this.resultNext === 'water') {
       this.state = 'relief';
       this.ui.showShotPanel(null);
@@ -1010,75 +937,15 @@ export class Game {
     const rec = this.rec;
     this.positionBall(rec[rec.length - 1]);
     if (this.world.tracer.visible) this.world.setTracer(rec);
-    this.showResult(this.lastInfo, this.lastSg, this.lastExtra);
-  }
-
-  // ------------------------------------------------------------------ challenge modes
-  // Closest to the pin / long drive: a fixed number of balls from the tee, best one counts.
-  challengeResult(info) {
-    const r = this.round, mode = r.mode;
-    let value = null, label;
-    if (mode === 'ctp') {
-      if (info.result === 'ok' || info.result === 'holed') value = info.result === 'holed' ? 0 : info.pinFt;
-      label = value == null ? (info.result === 'water' ? 'Wet – no score' : 'Out of bounds – no score') : value === 0 ? 'HOLE IN ONE!' : `${value < 10 ? value.toFixed(1) : value.toFixed(0)} ft from the pin`;
-    } else {
-      const ok = info.result === 'ok' && ['fairway', 'cut', 'fringe', 'green'].includes(info.after);
-      if (ok) value = info.totalYd;
-      label = ok ? `${this.fmtDist(info.totalYd * YD)} – in play` : `${this.fmtDist(info.totalYd * YD)} – ${info.result === 'ok' ? SURFACES[info.after]?.name || 'missed' : 'penalty'}, doesn't count`;
-    }
-    r.player.attempts.push(value);
-    const vals = r.player.attempts.filter((v) => v != null);
-    const best = vals.length ? (mode === 'ctp' ? Math.min(...vals) : Math.max(...vals)) : null;
-    const isBest = value != null && value === best;
-    this.lastExtra = { title: `Ball ${this.ballNo + 1} of ${r.balls}`, label, best: best == null ? '—' : mode === 'ctp' ? `${best.toFixed(1)} ft` : this.fmtDist(best * YD), isBest };
-    if (value === 0) { this.ui.banner('Hole in one!', 'great'); this.sfx('crowd', '[crowd goes wild]', 1, 5); }
-    else if (isBest && vals.length > 1) { this.ui.banner('New best', 'good'); this.sfx('crowd', '[applause]', 0.5, 2); }
-    else if (value == null) this.sfx('groan', '[crowd groans]');
-    this.addGhost(this.sim.trail.concat([this.sim.p]));
-    this.resultNext = 'attempt';
-    this.showResult(info, null, this.lastExtra);
-  }
-  nextAttempt() {
-    const r = this.round;
-    this.ui.showShotPanel(null);
-    this.ballNo++;
-    if (this.ballNo < r.balls) {
-      this.strokes = 0;
-      this.teeUp();
-      this.prepareAddress();
-      this.enterAddress();
-      this.cam.snapAddress();
-      return;
-    }
-    // this player's balls are done
-    if (r.p < r.players.length - 1) { r.p++; this.nextPlayerSameHole(); return; }
-    this.endRound();
-  }
-
-  addGhost(points) {
-    if (points.length < 2) return;
-    const geo = new THREE.BufferGeometry().setFromPoints(points.map((p) => new THREE.Vector3(p[0], p[1], p[2])));
-    const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.28, depthWrite: false }));
-    this.ghosts.add(line);
-  }
-  clearGhosts() {
-    for (const c of [...this.ghosts.children]) { c.geometry.dispose(); c.material.dispose(); this.ghosts.remove(c); }
+    this.showResult(this.lastInfo, this.lastSg);
   }
 
   // ------------------------------------------------------------------ hole / round end
   finishHole(pickedUp = false) {
     const r = this.round, h = this.hole, strokes = this.strokes;
-    const who = r.player.name;
     finishHoleScore(r, h, strokes, { pickedUp });
     this.ui.showShotPanel(null);
     const turn = nextTurn(r);
-    // hot seat: everyone plays the hole (same pin and wind) before moving on
-    if (turn === 'player') {
-      const d = strokes - h.par;
-      this.ui.toast(`${who}: ${strokes} (${scoreName(strokes, h.par)})`, d < 0 ? 'good' : '');
-      this.nextPlayerSameHole();
-      return;
-    }
     this.state = 'scorecard';
     this.cam.orbitGreen();
     const last = turn === 'end';
@@ -1089,43 +956,31 @@ export class Game {
     }, last ? 'Finish round' : 'Next hole');
   }
 
-  nextPlayerSameHole() {
-    const r = this.round;
-    this.clearGhosts();
-    this.resetPlayerOnHole();
-    this.prepareAddress();
-    this.enterAddress();
-    this.cam.snapAddress();
-    this.ui.banner(`${r.player.name} to play`, 'good');
-  }
-
   endRound() {
     const r = this.round;
     if (!this.tutorial && resumable(r.opts)) this.clearProgress();
     this.state = 'summary';
     this.cam.orbitGreen();
-    this.meter.hide();
     this.tutorial?.end();
-    if (this.challenge) { this.ui.challengeSummary(this.course, r, (m) => this.fmtDist(m)); return; }
     const history = loadHistory();
-    const prevBest = r.players.length === 1 && !this.course.generated ? bestFor(history, this.course.id, r.mode, r.tees) : null;
+    const prevBest = !this.course.generated ? bestFor(history, this.course.id, r.mode, r.tees) : null;
     const played = r.played ?? { profile: this.settings.profile, difficulty: this.settings.difficulty };
-    for (const pl of r.players) {
-      if (!pl.scores.length) continue;
+    const pl = r.player;
+    if (pl.scores.length) {
       saveRound(roundEntry({
         course: this.course, mode: r.mode, holes: pl.scores, totals: pl.stats.totals(), profile: played.profile,
-        difficulty: played.difficulty, tees: r.tees, player: r.players.length > 1 ? pl.name : null, seed: r.seed,
+        difficulty: played.difficulty, tees: r.tees, seed: r.seed,
       }));
     }
     if (r.daily) {
       try {
         const key = `psg-daily-${r.daily}`;
-        const t = r.players[0].stats.totals();
+        const t = r.player.stats.totals();
         const old = JSON.parse(localStorage.getItem(key) || 'null');
         if (!old || t.strokes - t.par < old.toPar) localStorage.setItem(key, JSON.stringify({ toPar: t.strokes - t.par, strokes: t.strokes }));
       } catch (e) { /* ignore */ }
     }
-    this.ui.summary(this.course, r, r.players[0].stats.totals(), prevBest, { ...this.settings, ...played });
+    this.ui.summary(this.course, r, r.player.stats.totals(), prevBest, { ...this.settings, ...played });
   }
 
   // the round so far, for "Resume round" on the menu (not the guided first hole)
@@ -1138,7 +993,6 @@ export class Game {
   quitToMenu() {
     this.ui.showHUD(false);
     document.body.classList.remove('flyover');
-    this.meter.hide();
     this.mouseSwing.enabled = false; this.mouseSwing.draw();
     this.round = null;
     this.tutorial?.end();
@@ -1163,9 +1017,9 @@ export class Game {
     const resting = this.state === 'result' || this.state === 'replay';
     const holed = resting && this.resultNext === 'holed';
     // a hole counts toward the running score the moment it drops, not only once the scorecard is shown
-    const toPar = r.scores.reduce((s, x) => s + x.strokes - x.par, 0) + (holed && !this.challenge ? this.strokes - h.par : 0);
+    const toPar = r.scores.reduce((s, x) => s + x.strokes - x.par, 0) + (holed ? this.strokes - h.par : 0);
     const flying = this.state === 'flight' && this.sim;
-    const fromSim = flying || (resting && this.sim && (this.challenge || this.resultNext === 'water'));
+    const fromSim = flying || (resting && this.sim && this.resultNext === 'water');
     const b = fromSim ? { p: this.sim.p, surface: this.lastInfo?.after || this.ball.surface } : this.ball;
     const d = holed ? 0 : distToPin(h, b);
     const feet = this.club.putter || (resting ? b.surface === 'green' : this.onGreen);
@@ -1173,15 +1027,14 @@ export class Game {
     const lie = LIES[lk] || LIES.rough;
     this.ui.hud({
       hole: h.number, name: h.name, par: h.par, yards: h.yards,
-      shot: this.challenge ? `Ball ${this.ballNo + 1}/${r.balls}` : holed ? `Holed in ${this.strokes}` : `Shot ${this.strokes + (this.state === 'flight' ? 0 : 1)}`, toPar,
-      player: r.players.length > 1 ? r.player.name : null, challenge: this.challenge, mode: r.mode,
+      shot: holed ? `Holed in ${this.strokes}` : `Shot ${this.strokes + (this.state === 'flight' ? 0 : 1)}`, toPar,
       dist: holed ? 'Holed' : flying ? this.flightDist() : feet ? (this.settings.units === 'm' ? fmtFt(d / FT, 'm') : `${(d / FT).toFixed(d / FT < 10 ? 1 : 0)} ft`) : this.fmtDist(d),
-      plays: this.pl && !this.club.putter && !resting && !(this.challenge && r.mode === 'drive') ? this.fmtDist(this.pl.plays) : null,
+      plays: this.pl && !this.club.putter && !resting ? this.fmtDist(this.pl.plays) : null,
       elev: holed ? 0 : (h.height(h.cup.x, h.cup.z) - (b.p[1] - BALL.radius)) / FT,
       puttEq: this.club.putter && !resting ? this.puttEqFt : null,
       nearGreen: this.nearGreen(),
       wind: this.windRel(), windMph: this.windMph,
-      tempoNote: this.settings.control === 'mouse' ? tempoNote(this.club) : '', tempoAlt: tempo.counts !== 3,
+      tempoNote: tempoNote(this.club), tempoAlt: tempo.counts !== 3,
       club: this.club, clubCarry: this.club.putter ? `${fmtFt(this.puttRange, this.settings.units)} range` : `Carry ${this.fmtDist(this.club.carry)} · Total ${this.fmtDist(this.club.total)}`,
       lie: b.isTee ? SURFACES.tee.name : b.surface === 'tee' ? 'Tee box · fairway lie' : SURFACES[b.surface]?.name || b.surface,
       lieKey: lk, lieRange: lk === 'splash' ? 'Explosion shot' : `${lie.dist[0]}–${lie.dist[1]}%`, slope: resting ? { up: 0, side: 0 } : this.slope(),
@@ -1196,7 +1049,6 @@ export class Game {
     requestAnimationFrame((tt) => this.loop(tt));
     if (this.gfxLost) { this.last = t; return; }
     this.post.sample(t - this.last);
-    this.perf?.frame(t - this.last);
     const dt = Math.min(0.05, (t - this.last) / 1000);
     this.last = t;
     this.frame(dt);
@@ -1293,7 +1145,7 @@ export class Game {
         }
         this.caddieTick = (this.caddieTick || 0) + dt;
         if (this.caddieTick > 0.5) { this.caddieTick = 0; this.caddieNote(); }
-      } else if (st === 'swing') { this.meter.update(dt); hush(); }
+      } else if (st === 'swing') hush();
       else if (st === 'flight') this.updateFlight(dt);
       else if (st === 'replay') this.updateReplay(dt);
       if (['backswing', 'flight', 'result', 'address', 'swing', 'flyover', 'replay'].includes(st) && !(st === 'flight' && this.hang > 0)) this.golfer.update(dt);
@@ -1305,7 +1157,6 @@ export class Game {
         this.cam.fov = 50;
       } else if (st === 'menu' || st === 'scorecard' || st === 'summary') this.cam.menu(dt);
       this.cam.apply(dt);
-      if (st === 'address' && this.meter.state !== 'hidden') this.meter.draw();
       this.mouseSwing.update();
     }
     this.updatePinTag(st === 'address' || st === 'swing' || st === 'backswing');

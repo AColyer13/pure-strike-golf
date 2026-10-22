@@ -28,20 +28,14 @@ Then open http://localhost:8321.
 
 The game is an installable PWA. After the first load it works offline. The service worker is network-first, so a reload always picks up new code when you're online. Add `?nosw` to the URL to skip the service worker while developing.
 
-To test a phone or tablet, open the game with `?perf` (for example https://acolyer13.github.io/pure-strike-golf/?perf). A small readout shows the frame rate, graphics tier, resolution and how long the caddie's last putt read took. Tap it to copy a summary of the session (average and slow frames, hitches, putt reads, device and audio state) to paste into a bug report.
-
 ## Ways to play
 
-- **Start here: guided first hole.** On a fresh install the big button runs a five-minute lesson on Magnolia National's 12th (beginner assists, calm wind): coach marks explain the distance and wind panels, the club, aiming, the three-click meter, the shot panel and putting as each comes up. Later it lives under How to play.
+- **Start here: guided first hole.** On a fresh install the big button runs a five-minute lesson on Magnolia National's 12th (beginner assists, calm wind): coach marks explain the distance and wind panels, the club, aiming, the swing, the shot panel and putting as each comes up. Later it lives under How to play.
 - **Play a hole now.** Jumps straight onto the course's signature hole.
 - **Full 18, front 9, back 9 or a single hole.**
 - **Daily challenge.** Three holes, with the same pins and wind for everyone that day. Your best score for the day is kept.
-- **Closest to the pin.** Five balls on a par 3. Earlier balls stay on screen as ghost traces.
-- **Long drive.** Five drives; only drives that finish in the fairway or first cut count.
 - **Random holes.** A procedurally generated 9-hole, par-36 course. The same seed always makes the same holes.
-- **Hot-seat.** Up to 4 players share one device. Each player gets their own outfit and scorecard row, plus a leaderboard at the end.
 - **Challenge links.** After a round, *Copy challenge link* gives a URL with the course, holes, pins and wind. The link also carries your score. A friend who opens it plays the same conditions, sees your score to beat on the banner, and gets a win/lose line on their summary. Older links without a score still work.
-- **Course editor.** Edit any hole's definition as JSON with a live plan-view preview, then play-test it. Your edits are saved to a separate "custom" course, so the built-in courses never change.
 
 **Stats** (menu) shows:
 - A World Handicap System index, worked out from your rounds.
@@ -72,7 +66,7 @@ All keys can be changed in **Settings → Controls**.
 | Esc | Pause menu |
 | Right-drag, mouse wheel | Orbit, zoom |
 
-**Analog swing** (setup → Swing → Analog) is console-golf style. Drag down for the backswing, then push up for the downswing.
+**The swing** is console-golf style. Drag down for the backswing, then push up for the downswing.
 - Length of the backswing sets power.
 - Tempo sets strike quality.
 - Sideways drift opens or closes the face.
@@ -87,7 +81,6 @@ All keys can be changed in **Settings → Controls**.
 ## Accessibility
 
 Settings → Accessibility has these options:
-- **One-button swing.** Power is set for you at the caddie's suggested level, so you only start the swing and time the accuracy click.
 - **Reduced motion.** No flyovers, slow-motion, camera shake or camera punches. Also turns on automatically if your OS asks for reduced motion.
 - **Captions** for crowd reactions and other sound cues.
 - **Interface size** from 80% to 150%.
@@ -101,7 +94,7 @@ Settings → Accessibility has these options:
 - **D-plane launch.** Start direction comes mostly from the face (~75% for irons, ~85% for driver). Curve comes from face-to-path. Strike quality changes smash factor.
 - **Turf interaction.** Restitution, friction and a Penner-style "crater" model decide bounce, check and release. Shallow long irons run out; steep wedges stop or spin back. Links turf is firmer than Magnolia National's.
 - **Lies.** Tee, fairway, cuts of rough, deep rough, pine straw, bunkers, waste areas and cart paths each change speed, spin and launch. Mario Golf's "lie %" is shown in the HUD. Sloping lies aim the face left or right.
-- **Putting.** Green speed is set as a real Stimpmeter reading. Break comes from the actual terrain slope. The meter marker teaches Dave Pelz's "17 inches past" speed.
+- **Putting.** Green speed is set as a real Stimpmeter reading. Break comes from the actual terrain slope. The caddie's pace teaches Dave Pelz's "17 inches past" speed.
 - **Caddie.** Plays-like distance accounts for elevation and wind. The power marker aims for where the ball *finishes*, not where it lands. The expected-strokes analysis compares clubs from the tee.
 - **Stats.** After every shot you see Strokes Gained against the professional-tour baseline (Mark Broadie's method), plus a launch-monitor readout and coaching tips. The round summary shows where you lost strokes.
 - **Rules.** Penalty areas offer stroke-and-distance, back-on-the-line and lateral relief. Each option shows its expected score. Out of bounds is stroke and distance.
@@ -111,11 +104,11 @@ Settings → Accessibility has these options:
 - **Feel.** A flushed full swing hangs for a beat with a zoom punch; big drives and tree hits jolt the camera; swings leave divots, sand plumes, pitch marks and splashes; shots dying at the hole or going in from off the green play out in slow motion; a dead-centre strike at full power flashes PURE.
 - **Golf Academy.** A Ball Flight Lab with sliders for face, path, strike, wind and air density, plus ten short lessons: D-plane, smash factor, wind, altitude, lies, landing angle, putting, strokes gained and strategy.
 
-Difficulty levels (Beginner, Standard, Pro) change meter speed, the size of the sweet spot and how much the caddie previews.
+Difficulty levels (Beginner, Standard, Pro) change the size of the sweet spot and how much the caddie previews.
 
 ## Research that shaped the design
 
-- **Mario Golf: Toadstool Tour (GameCube).** Three-click power meter, lie percentage, green grid, approachable arcade feel. Sources: GameFAQs guide, StrategyWiki controls.
+- **Mario Golf: Toadstool Tour (GameCube).** Lie percentage, green grid, approachable arcade feel. Sources: GameFAQs guide, StrategyWiki controls.
 - **Mario Golf: Super Rush (Switch).** Readable HUD, shot shaping with spin, fast pace of play. Sources: Nintendo site, Game8 controls guide, Wikipedia.
 - **Tiger Woods PGA Tour (PSP).** Analog swing, broadcast-style cameras and presentation. Source: [GameSpot review](https://www.gamespot.com/reviews/tiger-woods-pga-tour-review/1900-6121049/).
 - **Real golf data.** TrackMan PGA Tour averages; Golf Monthly club-distance tables; Broadie's *Every Shot Counts* for strokes gained; Pelz's putting research; the World Handicap System rules. The four courses are original designs inspired by famous layouts, with invented names; their character comes from public course-design guides.
@@ -128,7 +121,7 @@ sw.js, manifest.json      offline / installable PWA
 vendor/three/             three.js 0.169 (MIT); copied by tools/vendor.mjs and bundled into dist/game.js
 dist/game.js              the whole game (src/ plus three.js) as one minified file, built by tools/bundle.mjs; index.html loads only this
 fonts/                    Barlow / Barlow Condensed (OFL), self-hosted so the game has no runtime CDN dependency
-src/main.js               boot: wires UI, game, academy and editor together
+src/main.js               boot: wires UI, game and academy together
 src/game.js               game loop and round flow (state machine)
 src/camera.js             flyover, address, flight, landing and reverse-angle cameras
 src/input.js              keyboard (rebindable), mouse, touch and gamepad -> named actions
@@ -136,7 +129,6 @@ src/caddie.js, rules.js   club advice and expected strokes; penalty relief
 src/round.js              modes, seeds, daily challenge, challenge links, round setup
 src/tutorial.js           guided first hole: coach-mark steps polled from the game loop
 src/post.js               post-processing tiers (bloom, GTAO) and the auto quality probe
-src/perf.js               the ?perf readout for device testing
 src/fx.js                 impact effects: pooled particles (turf, sand, spray, dust) and decals (divots, pitch marks)
 src/foliage.js            tree crowns as alpha-tested leaf cards: painted leaf textures, leaf-shaped shadows, wind sway
 src/shot.js, scoring.js   pure shot pipeline (launch, forecast, result) and scoring
@@ -147,15 +139,13 @@ src/clubs.js              golfer profiles and bags (tour, scratch, 15 hcp, smoot
 src/hole.js, world.js     procedural terrain, hazards, trees and rendering for each hole
 src/courses/*.js          the four course definitions + the procedural course generator
 src/golfer.js             animated golfer: keyframed swing with weight shift, late release and finish pose
-src/meter.js              3-click meter, one-button and analog mouse swing
+src/meter.js              analog swing (mouse, touch drag, gamepad stick) and tempo
 src/coach.js, stats.js    coaching tips, strokes gained, expected strokes
 src/academy.js            Golf Academy lessons and Ball Flight Lab
-src/editor.js             course editor
 src/ui.js, audio.js       menus, HUD, scorecard, stats, settings; SoundEngine (samples with synthesis fallback)
 audio/manifest.json       optional sample slots (strikes, landings, cup, crowd); empty slots stay synthesized
 tests/                    node:test suites (physics, hole geometry, rounds/history)
 tools/                    dev server and physics calibration scripts
-legacy/                   the earlier arcade mini-golf prototype
 ```
 
 ## Development

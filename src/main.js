@@ -3,7 +3,6 @@ import { Game } from './game.js';
 import { Academy } from './academy.js';
 import { parseChallenge } from './round.js';
 import { COURSES } from './courses/index.js';
-import { Editor } from './editor.js';
 import { Tutorial } from './tutorial.js';
 
 const ui = new UI();
@@ -23,7 +22,7 @@ try {
 }
 try {
   const academy = new Academy();
-  ui.attach(game, academy, new Editor(game), new Tutorial(game, ui));
+  ui.attach(game, academy, new Tutorial(game, ui));
   // a shared challenge link (#c=course.mode.holes.seed) replays the same pins and wind
   // The random course ('gen') is not a menu choice, so a link to it must not become the selected course.
   const applyHash = () => {

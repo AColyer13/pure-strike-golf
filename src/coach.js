@@ -56,9 +56,9 @@ export function coachShot(s, units = 'yd') {
     // a clean strike with little power is a choice, not a mishit
     const partial = !s.duffed && (s.strikeQ ?? 0) >= 0.97;
     L.push({ id: 'duff', pri: 9, limit: 3, title: s.duffed ? 'Chunked it' : partial ? 'Partial swing' : 'Mishit', text: s.duffed
-      ? 'The power click came far too early, so the club was still decelerating at the ball – a heavy, fat strike. Let the meter run to the club\'s full-swing band before you set the power; a three-quarter swing is still 70–80% on the bar.'
+      ? 'The downswing came far too early or too short, so the club was still decelerating at the ball – a heavy, fat strike. Keep the three-count backswing and push through smoothly; a three-quarter swing is still 70–80%.'
       : partial ? `Clean contact, but you set the power low: ${i0(s.carryFrac * 100)}% of the club's normal carry. For a short shot like this take a shorter club or a wedge and swing it fully rather than slowing down.`
-      : `Only ${i0(s.carryFrac * 100)}% of the club's normal carry. A strike that far off the sweet spot loses most of its ball speed – slow the tempo and hit the accuracy click inside the zone before chasing distance.` });
+      : `Only ${i0(s.carryFrac * 100)}% of the club's normal carry. A strike that far off the sweet spot loses most of its ball speed – keep the three-count tempo and push through straight before chasing distance.` });
     return pick(L);
   }
   // penalty outcomes

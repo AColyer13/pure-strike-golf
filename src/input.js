@@ -85,7 +85,6 @@ export class Input {
     if (st === 'result' && (a === 'replay' || a === 'targetView')) { g.startReplay(); return true; }
     if (st === 'replay' && (a === 'swing' || a === 'skip' || a === 'replay' || a === 'targetView')) { g.endReplay(); return true; }
     if (st === 'flight' && a === 'skip') { g.skipFlight(); return true; }
-    if (st === 'swing' && a === 'swing') { g.meterClick(); return true; }
     if (st !== 'address') return false;
     if (a === 'practice') {
       const m = g.mouseSwing; m.armed = !m.armed;
@@ -94,8 +93,7 @@ export class Input {
       return true;
     }
     if (a === 'swing') {
-      if (g.settings.control === 'mouse') g.ui.toast(g.ui.touch ? 'Analog swing: drag down on the view on a 3-count, then flick up' : 'Analog swing: hold the left button, take it back on a 3-count, push through');
-      else g.meterClick();
+      g.ui.toast(g.ui.touch ? 'Analog swing: drag down on the view on a 3-count, then flick up' : 'Analog swing: hold the left button, take it back on a 3-count, push through');
       return true;
     }
     return this.dispatchAddress(a);
@@ -163,11 +161,10 @@ export class Input {
     if (g.state === 'result') { g.continueAfterResult(); return; }
     if (g.state === 'replay') { g.endReplay(); return; }
     if (g.cam.targetView && g.state === 'address') { this.aimAtScreen(x, y); return; }
-    if (g.settings.control === 'mouse' && g.state === 'address' && e) {
+    if (g.state === 'address' && e) {
       if (!g.addressSettling && g.mouseSwing.down(e)) { g.state = 'swing'; g.caddie.analysis = null; }
       return;
     }
-    if (g.state === 'address' || g.state === 'swing') g.meterClick();
   }
 
   aimAtScreen(x, y) {
@@ -187,7 +184,7 @@ export class Input {
     const g = this.g;
     this.showTouch(true);
     // analog swing: a finger drag on the view is the swing itself, not an orbit
-    if (g.settings.control === 'mouse' && g.state === 'address' && !g.cam.targetView && !g.ui.paused && !g.ui.modalOpen()) {
+    if (g.state === 'address' && !g.cam.targetView && !g.ui.paused && !g.ui.modalOpen()) {
       if (!g.addressSettling && g.mouseSwing.down(e)) { g.state = 'swing'; g.caddie.analysis = null; }
       return;
     }
@@ -337,7 +334,7 @@ export class Input {
     for (const [a, v] of Object.entries(now)) {
       if (v && !this.pad.prev[a]) {
         this.g.audio.init();
-        if (a === 'swing' && this.g.state === 'address' && this.g.settings.control === 'mouse') continue;
+        if (a === 'swing' && this.g.state === 'address') continue;
         this.dispatch(a);
       }
       if (!v && this.pad.prev[a] && a === 'scorecard') this.g.closeScorecardPeek();

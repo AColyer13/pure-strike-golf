@@ -12,8 +12,6 @@ export const MODES = {
   back: { name: 'Back 9' },
   single: { name: 'Single hole' },
   daily: { name: 'Daily challenge', desc: 'Three holes, same pins and wind for everyone today.' },
-  ctp: { name: 'Closest to the pin', desc: 'Five balls at a par 3. Best distance counts.', balls: 5 },
-  drive: { name: 'Long drive', desc: 'Five drives. Longest in the fairway (or first cut) counts.', balls: 5 },
   random: { name: 'Random holes', desc: 'Procedurally generated holes – a new course every time.' },
 };
 
@@ -36,41 +34,19 @@ export function dailySpec(date = new Date()) {
 }
 
 export function holesFor(mode, courseId, single = 1) {
-  const course = courseById(courseId);
   if (mode === '18') return [...Array(18).keys()];
   if (mode === 'random') return [...Array(9).keys()];
   if (mode === 'front') return [...Array(9).keys()];
   if (mode === 'back') return [...Array(9).keys()].map((i) => i + 9);
-  if (mode === 'ctp') {
-    // the chosen hole if it is a par 3, else the course's shortest par 3 (reachable for most players)
-    const i = single - 1;
-    if (course.holes[i]?.par === 3) return [i];
-    let best = -1;
-    course.holes.forEach((h, j) => { if (h.par === 3 && (best < 0 || h.yds < course.holes[best].yds)) best = j; });
-    return [best];
-  }
-  if (mode === 'drive') {
-    const i = single - 1;
-    if (course.holes[i]?.par >= 4) return [i];
-    return [course.holes.findIndex((h) => h.par === 5)];
-  }
   return [(+single || 1) - 1];
 }
 
 // Challenge links: #c=<course>.<mode>.<holes>.<seed>[.<tees>][.<score>]
 // <tees> is m (middle) or f (forward); the back tees are the default and leave it out.
-// The optional score is what the sender made, as one integer: total strokes, tenths of a
-// foot (closest to the pin) or yards (long drive). Links without it still work.
+// The optional score is the sender's total strokes. Links without it still work.
 export function challengeScore(r) {
-  const vals = [];
-  for (const pl of r.players || []) {
-    if (r.balls) {
-      const a = pl.attempts.filter((v) => v != null);
-      if (a.length) vals.push(r.mode === 'ctp' ? Math.round(Math.min(...a) * 10) : Math.round(Math.max(...a)));
-    } else if (pl.scores.length === r.holes.length) vals.push(pl.scores.reduce((t, x) => t + x.strokes, 0));
-  }
-  if (!vals.length) return null;
-  return r.mode === 'drive' ? Math.max(...vals) : Math.min(...vals);
+  const pl = r.players?.[0];
+  return pl?.scores && pl.scores.length === r.holes.length ? pl.scores.reduce((t, x) => t + x.strokes, 0) : null;
 }
 export function challengeHash(r) {
   const sc = challengeScore(r);
@@ -79,16 +55,11 @@ export function challengeHash(r) {
 }
 export function parseChallenge(hash) {
   const m = /#c=([a-z]+)\.([a-z0-9]+)\.([0-9-]+)\.(\d+)(?:\.([mf]))?(?:\.(\d{1,5}))?(?![\w.])/.exec(hash || '');
-  // the editor's course is private to one device, so a link to it can't describe the same round elsewhere
-  if (!m || m[1] === 'custom' || !courseById(m[1], +m[4]) || !MODES[m[2]]) return null;
+  if (!m || !courseById(m[1], +m[4]) || !MODES[m[2]]) return null;
   const course = courseById(m[1], +m[4]);
   const holes = m[3].split('-').map(Number);
   // every hole must exist on that course (the random course has nine), else the link is damaged
   if (!holes.length || holes.some((i) => !(i >= 0 && i < course.holes.length))) return null;
-  // a crafted link must still describe a playable round: closest-to-the-pin needs a par 3,
-  // long drive a par 4 or 5
-  if (m[2] === 'ctp' && !holes.every((i) => course.holes[i]?.par === 3)) return null;
-  if (m[2] === 'drive' && !holes.every((i) => course.holes[i]?.par >= 4)) return null;
   const c = { courseId: m[1], mode: m[2], holes, seed: +m[4] };
   if (m[5]) c.tees = m[5] === 'm' ? 'middle' : 'forward';
   if (m[6] != null) c.score = +m[6];
@@ -100,7 +71,7 @@ export const SIGNATURE = { augusta: 11, standrews: 17, pebble: 6, sawgrass: 16 }
 
 // A round: course, hole list, per-hole pins and wind (all drawn from the seed up
 // front so a seed always reproduces the same round) and one entry per player.
-// opts: { courseId, holes, mode, seed?, players?: [names], daily?: dateKey }
+// opts: { courseId, holes, mode, seed?, daily?: dateKey }
 export function createRound(opts) {
   const seed = opts.seed ?? ((Math.random() * 2 ** 32) >>> 0);
   const course = courseById(opts.courseId, seed);
@@ -112,15 +83,12 @@ export function createRound(opts) {
     // the wind blows from one quarter all round, so it swings round as the holes change direction
     setup[idx] = { pinIndex: Math.floor(rng() * 4), mph: wmin + (wmax - wmin) * Math.pow(rng(), 1.3), ang: windDir - holeHeading(course, idx) + (rng() - 0.5) * 1.4 };
   }
-  const names = opts.players?.length ? opts.players : [null];
   const tees = opts.daily ? 'back' : cleanTees(opts.tees); // the daily is one course for everyone
-  const balls = MODES[opts.mode]?.balls || 0;
   return {
-    course, holes: opts.holes, i: 0, seed, mode: opts.mode, daily: opts.daily || null, tees, setup, balls, target: opts.target ?? null,
-    opts: { courseId: opts.courseId, holes: opts.holes, mode: opts.mode, seed, players: opts.players || null, daily: opts.daily || null, solo: !!opts.solo, target: opts.target ?? null, tees },
-    players: names.map((name) => ({ name, scores: [], stats: new RoundStats(), attempts: [] })),
-    p: 0,
-    get player() { return this.players[this.p]; },
+    course, holes: opts.holes, i: 0, seed, mode: opts.mode, daily: opts.daily || null, tees, setup, target: opts.target ?? null,
+    opts: { courseId: opts.courseId, holes: opts.holes, mode: opts.mode, seed, daily: opts.daily || null, solo: !!opts.solo, target: opts.target ?? null, tees },
+    players: [{ name: null, scores: [], stats: new RoundStats() }],
+    get player() { return this.players[0]; },
     get scores() { return this.player.scores; },
     get stats() { return this.player.stats; },
   };
@@ -131,15 +99,14 @@ export function createRound(opts) {
 // place on the current hole ({ ball: { p, isTee }, strokes, penalties, ballNo }), null
 // before they have teed off; `done` marks a round whose last hole is finished.
 export const RESUME_KEY = 'psg-resume';
-// only rounds of several holes are saved: a quick single hole or a closest-to-the-pin
-// session never replaces an unfinished 18
-export const resumable = (opts) => opts.holes.length > 1 && !MODES[opts.mode]?.balls;
+// only rounds of several holes are saved: a quick single hole never replaces an unfinished 18
+export const resumable = (opts) => opts.holes.length > 1;
 
 export function roundSnapshot(round, { mid = null, done = false, i = round.i } = {}) {
   const r = round;
   return {
-    v: 1, t: Date.now(), opts: r.opts, i, p: r.p, mid, done,
-    players: r.players.map((pl) => ({ scores: pl.scores, attempts: pl.attempts, stats: { holes: pl.stats.holes, cur: mid ? pl.stats.cur || null : null } })),
+    v: 1, t: Date.now(), opts: r.opts, i, mid, done,
+    players: r.players.map((pl) => ({ scores: pl.scores, stats: { holes: pl.stats.holes, cur: mid ? pl.stats.cur || null : null } })),
   };
 }
 
@@ -151,16 +118,14 @@ export function restoreRound(snap) {
   let r;
   try { r = createRound(s.opts); } catch (e) { return null; }
   if (!r.course || s.players.length !== r.players.length) return null;
-  if (!(s.i >= 0 && s.i < r.holes.length) || !(s.p >= 0 && s.p < r.players.length)) return null;
+  if (!(s.i >= 0 && s.i < r.holes.length)) return null;
   r.players.forEach((pl, k) => {
     const d = s.players[k];
     pl.scores = Array.isArray(d.scores) ? d.scores : [];
-    pl.attempts = Array.isArray(d.attempts) ? d.attempts : [];
     pl.stats.holes = Array.isArray(d.stats?.holes) ? d.stats.holes : [];
     pl.stats.cur = d.stats?.cur || null;
   });
   r.i = s.i;
-  r.p = s.p;
   return r;
 }
 
@@ -180,12 +145,4 @@ export function holeHeading(course, idx) {
 // Physics environment for a hole from its round setup (wind blows TOWARD setup.ang)
 export function holeEnv(course, hole, setup) {
   return { rho: course.rho, wind: [Math.sin(setup.ang) * setup.mph * MPH, 0, -Math.cos(setup.ang) * setup.mph * MPH], firmness: course.firmness, stimp: hole.stimp };
-}
-
-// extra line on the hole intro card
-export function introExtra(round) {
-  const r = round;
-  if (r.balls) return `${MODES[r.mode].name}: ${MODES[r.mode].desc}`;
-  if (r.players.length > 1) return `${r.player.name} to play`;
-  return '';
 }

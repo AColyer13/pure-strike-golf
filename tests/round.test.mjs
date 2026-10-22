@@ -204,7 +204,7 @@ test('out of bounds: stroke and distance, ball back where it was played from', (
   assert.equal(r.ball.isTee, true, 'back on the tee');
   assert.equal(stats.cur.penalties, 1);
   assert.equal(stats.cur.shots[0].penalty, 1);
-  // challenge modes keep no stats: the same call must not throw
+  // no stats: the same call must not throw
   const r2 = settleShot({ hole, shotStart: S, sim, info: { result: 'ob' }, stats: null, strokes: 1 });
   assert.equal(r2.strokes, 2);
   assert.equal(r2.sg, null);
@@ -264,23 +264,8 @@ test('fairways and greens in regulation', () => {
   assert.equal(round.scores.length, 3);
 });
 
-test('hot seat: every player plays the hole before the round moves on', () => {
-  const round = createRound({ courseId: 'standrews', holes: [0, 1], mode: 'front', seed: 3, players: ['Ann', 'Bo'] });
-  assert.equal(round.players.length, 2);
-  assert.equal(round.player.name, 'Ann');
-  assert.equal(nextTurn(round), 'player');
-  assert.equal(round.player.name, 'Bo');
-  assert.equal(nextTurn(round), 'hole');
-  assert.equal(round.p, 0);
-  nextHole(round);
-  assert.equal(round.i, 1);
-  nextTurn(round);
-  assert.equal(nextTurn(round), 'end');
-  assert.equal(round.p, 0);
-});
-
 test('a saved round comes back with the same pins, wind, scores and place on the hole', () => {
-  const round = createRound({ courseId: 'gen', holes: [0, 1, 2], mode: 'random', seed: 77, players: ['Ann', 'Bo'] });
+  const round = createRound({ courseId: 'gen', holes: [0, 1, 2], mode: 'random', seed: 77 });
   round.player.stats.startHole(1, 4, 400);
   finishHoleScore(round, { number: 1, par: 4 }, 5);
   nextTurn(round);
@@ -292,8 +277,6 @@ test('a saved round comes back with the same pins, wind, scores and place on the
   const back = restoreRound(snap);
   assert.equal(back.course.name, round.course.name, 'generated course rebuilt from its seed');
   assert.deepEqual(back.setup, round.setup, 'same pins and wind');
-  assert.equal(back.p, 1);
-  assert.equal(back.player.name, 'Bo');
   assert.deepEqual(back.players[0].scores, [{ number: 1, par: 4, strokes: 5, pickedUp: false }]);
   assert.equal(back.players[0].stats.totals().strokes, 5);
   assert.equal(back.player.stats.cur.shots.length, 1, 'the hole in progress keeps its shots');
@@ -303,12 +286,10 @@ test('a saved round comes back with the same pins, wind, scores and place on the
 test('only multi-hole rounds are saved, and a bad save is ignored', () => {
   assert.equal(resumable({ holes: [0, 1, 2], mode: 'daily' }), true);
   assert.equal(resumable({ holes: [11], mode: 'single' }), false);
-  assert.equal(resumable({ holes: [11, 11], mode: 'ctp' }), false);
   assert.equal(restoreRound(null), null);
-  assert.equal(restoreRound({ v: 1, opts: { courseId: 'nowhere', holes: [0, 1], mode: '18', seed: 1 }, i: 0, p: 0, players: [{}] }), null);
+  assert.equal(restoreRound({ v: 1, opts: { courseId: 'nowhere', holes: [0, 1], mode: '18', seed: 1 }, i: 0, players: [{}] }), null);
   const snap = roundSnapshot(createRound({ courseId: 'augusta', holes: [0, 1], mode: 'front', seed: 2 }));
   assert.equal(restoreRound({ ...snap, i: 5 }), null, 'hole index out of range');
-  assert.equal(restoreRound({ ...snap, players: [] }), null, 'player count changed');
 });
 
 test('the guided hole is flagged as a lesson and survives a save', () => {
