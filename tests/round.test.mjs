@@ -288,8 +288,8 @@ test('only multi-hole rounds are saved, and a bad save is ignored', () => {
   assert.equal(resumable({ holes: [11], mode: 'single' }), false);
   assert.equal(restoreRound(null), null);
   assert.equal(restoreRound({ v: 2, opts: { courseId: 'nowhere', holes: [0, 1], mode: '18', seed: 1 }, i: 0 }), null);
-  assert.equal(restoreRound({ ...snap, v: 1 }), null, 'a round saved by the old per-player format is dropped');
   const snap = roundSnapshot(createRound({ courseId: 'augusta', holes: [0, 1], mode: 'front', seed: 2 }));
+  assert.equal(restoreRound({ ...snap, v: 1 }), null, 'a round saved by the old per-player format is dropped');
   assert.equal(restoreRound({ ...snap, i: 5 }), null, 'hole index out of range');
 });
 
