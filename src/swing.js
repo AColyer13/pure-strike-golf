@@ -93,6 +93,7 @@ export class MouseSwing {
     this.target = null;   // the caddie's power, drawn on the depth scale
     this.practice = false; // Shift held on the press: a practice swing, timed and shown but not struck
     this.bar = false;     // the timing bar while pulling back (the tempo guide, or training)
+    this.pro = false;     // Pro: no blue mark for the caddie's number, no timing bar
     this.count = false;   // training: show the 3-second count (bar and ticks) while pulling back
   }
   resize() {
@@ -178,18 +179,36 @@ export class MouseSwing {
   // training aid: the bar fills as the club goes back and should reach the mark with the top of the swing
   drawCount() {
     const g = this.g;
-    const bx = this.x0 + 70, bw = 120, by = this.y0 + 2, secs = tempo.back * 1.7;
+    const bx = this.x0 + 70, bw = 130, bh = 10, by = this.y0 + 1, secs = tempo.back * 1.7;
     const el = this.startT == null ? 0 : ((this.phase === 'back' ? performance.now() : this.turnAt) - this.startT) / 1000;
     const at = (s) => bx + (s / secs) * bw; // (s in seconds)
-    g.fillStyle = 'rgba(8,16,12,0.6)'; g.fillRect(bx - 3, by - 3, bw + 6, 14);
-    g.fillStyle = 'rgba(120,255,160,0.45)';
-    g.fillRect(at(tempo.back - tempo.pure), by, at(tempo.back + tempo.pure) - at(tempo.back - tempo.pure), 8);
-    g.fillStyle = Math.abs(el - tempo.back) <= tempo.pure ? '#9dffb8' : '#ffe14d';
-    g.fillRect(bx, by + 2, Math.min(el, secs) / secs * bw, 4);
-    g.fillStyle = 'rgba(255,255,255,0.8)';
-    for (let k = 1; k <= tempo.counts; k++) g.fillRect(at(k * tempo.count) - 0.5, by, 1, 8);
+    const inZone = Math.abs(el - tempo.back) <= tempo.pure;
+    g.save();
+    // the track, with a soft shadow
+    g.shadowColor = 'rgba(0,0,0,0.45)'; g.shadowBlur = 6;
+    g.fillStyle = 'rgba(10,20,15,0.72)'; roundRect(g, bx - 3, by - 3, bw + 6, bh + 6, 8); g.fill();
+    g.shadowBlur = 0;
+    g.strokeStyle = 'rgba(255,255,255,0.22)'; g.lineWidth = 1; roundRect(g, bx - 3, by - 3, bw + 6, bh + 6, 8); g.stroke();
+    // the mark to hit: a glowing green window
+    const z0 = at(tempo.back - tempo.pure), z1 = at(tempo.back + tempo.pure);
+    g.shadowColor = 'rgba(120,255,160,0.7)'; g.shadowBlur = inZone ? 10 : 4;
+    g.fillStyle = 'rgba(120,255,160,0.38)'; roundRect(g, z0, by, z1 - z0, bh, 4); g.fill();
+    g.shadowBlur = 0;
+    // the fill, in a gradient: amber on the way, green once it is in the window
+    const w = Math.max(0, Math.min(el, secs) / secs * bw);
+    if (w > 1) {
+      const gr = g.createLinearGradient(bx, 0, bx + bw, 0);
+      if (inZone) { gr.addColorStop(0, '#5dd67f'); gr.addColorStop(1, '#b6ffca'); } else { gr.addColorStop(0, '#ffb02e'); gr.addColorStop(1, '#ffe566'); }
+      g.fillStyle = gr; roundRect(g, bx, by + 2, w, bh - 4, 3); g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.35)'; roundRect(g, bx + 1, by + 2.5, Math.max(0, w - 2), 1.5, 1); g.fill();
+    }
+    // the counts, as small notches under the track
+    g.fillStyle = 'rgba(255,255,255,0.75)';
+    for (let k = 1; k <= tempo.counts; k++) g.fillRect(at(k * tempo.count) - 0.75, by + bh + 1, 1.5, 3);
     g.font = '700 12px Barlow, system-ui, sans-serif'; g.textAlign = 'left';
-    g.fillStyle = '#fff'; g.fillText(`${(el / tempo.count).toFixed(1)}`, bx, by + 24);
+    g.shadowColor = 'rgba(0,0,0,0.8)'; g.shadowBlur = 3;
+    g.fillStyle = inZone ? '#b6ffca' : '#fff'; g.fillText(`${(el / tempo.count).toFixed(1)}`, bx, by + bh + 17);
+    g.restore();
   }
   // on release the swing is spelled out, part by part, so a shot can be understood: the long bar
   // is the backswing, the short one under it the push through; then a line naming each part's
@@ -249,7 +268,7 @@ export class MouseSwing {
       g.font = '700 12px Barlow, system-ui, sans-serif';
       g.textAlign = 'left';
       // the caddie's number, and where the swing is now
-      if (this.target != null) {
+      if (this.target != null && !this.pro) {
         const ty = this.y0 + clamp(this.target, 0, 1.1) * this.range;
         g.fillStyle = '#5fd4ff';
         g.fillRect(this.x0 + 12, ty - 1.5, 17, 3);

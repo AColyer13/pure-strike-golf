@@ -131,7 +131,7 @@ export class Game {
     const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
     return {
       // a first visit starts a typical golfer on the middle tees; saved settings from before tee sets keep the back tees
-      profile: 'mid', difficulty: 'standard', tees: Object.keys(s).length ? 'back' : 'middle', units: 'yd', volume: 0.7, tracer: true, caddyVoice: true, caddie: 'tech', tempo: DEFAULT_TEMPO, guide: 'off',
+      profile: 'mid', difficulty: 'standard', tees: Object.keys(s).length ? 'back' : 'middle', units: 'yd', volume: 0.7, tracer: true, caddyVoice: true, caddie: 'tech', tempo: DEFAULT_TEMPO, guide: 'beginner',
       reducedMotion: reduce, captions: false, uiScale: 1, keys: {}, ffSeen: 0, quality: 'auto', ...s,
     };
   }
@@ -301,10 +301,12 @@ export class Game {
     this.mouseSwing.target = null; this.powerReady = false; this.adviceErr = 0;
     setTempo(this.settings.tempo);
     setCounts(countsFor(this.club, this.suggestedPower));
-    // the tempo guide: ticks on each count, and the timing bar; always on in training
-    const training = !!this.tutorial || this.round?.mode === 'practice', guide = this.settings.guide;
-    this.mouseSwing.count = training || guide === 'ticks' || guide === 'bar';
-    this.mouseSwing.bar = training || guide === 'bar';
+    // Beginner shows the timing bar and the caddie's blue mark; Pro shows neither (just the caddie's spoken
+    // percentage); training is always Beginner
+    const training = !!this.tutorial || this.round?.mode === 'practice', pro = this.settings.guide === 'pro' && !training;
+    this.mouseSwing.count = !pro;
+    this.mouseSwing.bar = !pro;
+    this.mouseSwing.pro = pro;
     this.mouseSwing.draw();
     this.world.showGreenGrid(this.onGreen ? !this.gridHide : this.nearGreen() && this.gridOn);
     this.world.arc.visible = true;
