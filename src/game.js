@@ -174,7 +174,7 @@ export class Game {
   }
 
   // ------------------------------------------------------------------ round
-  // opts: { courseId, holes, mode, seed?, players?: [names], daily?: dateKey }
+  // opts: { courseId, holes, mode, seed?, daily?: dateKey }
   // snap: a saved round (roundSnapshot) to carry on instead of starting afresh
   startRound(opts, snap = null) {
     this.ui.hideAll();
@@ -965,22 +965,21 @@ export class Game {
     const history = loadHistory();
     const prevBest = !this.course.generated ? bestFor(history, this.course.id, r.mode, r.tees) : null;
     const played = r.played ?? { profile: this.settings.profile, difficulty: this.settings.difficulty };
-    const pl = r.player;
-    if (pl.scores.length) {
+    if (r.scores.length) {
       saveRound(roundEntry({
-        course: this.course, mode: r.mode, holes: pl.scores, totals: pl.stats.totals(), profile: played.profile,
+        course: this.course, mode: r.mode, holes: r.scores, totals: r.stats.totals(), profile: played.profile,
         difficulty: played.difficulty, tees: r.tees, seed: r.seed,
       }));
     }
     if (r.daily) {
       try {
         const key = `psg-daily-${r.daily}`;
-        const t = r.player.stats.totals();
+        const t = r.stats.totals();
         const old = JSON.parse(localStorage.getItem(key) || 'null');
         if (!old || t.strokes - t.par < old.toPar) localStorage.setItem(key, JSON.stringify({ toPar: t.strokes - t.par, strokes: t.strokes }));
       } catch (e) { /* ignore */ }
     }
-    this.ui.summary(this.course, r, r.player.stats.totals(), prevBest, { ...this.settings, ...played });
+    this.ui.summary(this.course, r, r.stats.totals(), prevBest, { ...this.settings, ...played });
   }
 
   // the round so far, for "Resume round" on the menu (not the guided first hole)

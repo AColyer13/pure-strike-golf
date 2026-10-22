@@ -231,8 +231,8 @@ export class UI {
     $('btnQuick').style.order = guided && !saved ? '-1' : '';
     $('btnPlay').classList.toggle('primary', !guided && !saved);
     if (saved) {
-      const { snap, round: r } = saved, pl = r.players[0];
-      const thru = pl.scores.length, toPar = pl.scores.reduce((t, x) => t + x.strokes - x.par, 0);
+      const { snap, round: r } = saved;
+      const thru = r.scores.length, toPar = r.scores.reduce((t, x) => t + x.strokes - x.par, 0);
       const hn = r.holes[r.i], hname = r.course.holes[hn]?.name;
       const where = snap.done ? `All ${r.holes.length} holes played – see the summary` : `Hole ${hn + 1}${hname ? `, ${hname}` : ''} · ${thru ? `${toParStr(toPar)} through ${thru}` : 'ready to tee off'}`;
       rc.innerHTML = `<div class="lbl">Resume round</div>
@@ -778,9 +778,9 @@ export class UI {
       if (!idx.length) return '';
       const holes = idx.map((i) => course.holes[i]);
       const nums = idx.map((i) => i + 1);
-      const scoreRow = (pl) => {
+      const scoreRow = (r) => {
         const byNum = {};
-        for (const x of pl.scores) byNum[x.number] = x;
+        for (const x of r.scores) byNum[x.number] = x;
         let tot = 0, any = false;
         const cells = holes.map((h, i) => {
           const rec = byNum[nums[i]], sc = rec?.strokes;
@@ -793,11 +793,11 @@ export class UI {
       return `<table class="${holes.length <= 3 ? 'few' : ''}"><tr class="num"><th>Hole</th>${nums.map((n) => `<td>${n}</td>`).join('')}<th>${holes.length < 9 ? 'Tot' : from ? 'In' : 'Out'}</th></tr>
         <tr class="yd"><th>${metric ? 'Metres' : 'Yards'}</th>${holes.map((h) => `<td>${yd(teeYds(h, round.tees))}</td>`).join('')}<th>${yd(holes.reduce((a, h) => a + teeYds(h, round.tees), 0))}</th></tr>
         <tr class="par"><th>Par</th>${holes.map((h) => `<td>${h.par}</td>`).join('')}<th>${holes.reduce((a, h) => a + h.par, 0)}</th></tr>
-        ${scoreRow(round.player)}</table>`;
+        ${scoreRow(round)}</table>`;
     };
-    const t = round.player.stats.totals();
+    const t = round.stats.totals();
     const toPar = t.strokes - t.par;
-    const n = round.player.scores.length;
+    const n = round.scores.length;
     const totals = `<div class="sc-total ${toPar < 0 ? 'under' : toPar > 0 ? 'over' : ''}">${n ? toParStr(toPar) : '–'}<small>${t.strokes || ''}</small></div>`;
     s.innerHTML = `<div class="sc-head"><div><h2>${course.name}</h2><div class="muted">${course.location}</div></div>${totals}</div>
       ${half(0)}${half(9)}
@@ -846,7 +846,7 @@ export class UI {
     // off the tee costing strokes with no penalties and most fairways found is about length, not accuracy
     const adviceDistance = 'You found the fairway, so accuracy is not what cost the most off the tee. Distance is: Broadie found driving explains ~28% of the scoring gap between tour pros and amateurs. A smooth, balanced swing with a centred strike gains more yards than swinging harder.';
     const hcp = handicapIndex(loadHistory());
-    const n = round.player.scores.length;
+    const n = round.scores.length;
     // the closing tip under the strokes-gained bars: only claims what the numbers show (a category
     // with nothing recorded, like no chips on a round that never missed a green, is not a "gain")
     const sgTip = (t) => {

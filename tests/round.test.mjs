@@ -266,20 +266,20 @@ test('fairways and greens in regulation', () => {
 
 test('a saved round comes back with the same pins, wind, scores and place on the hole', () => {
   const round = createRound({ courseId: 'gen', holes: [0, 1, 2], mode: 'random', seed: 77 });
-  round.player.stats.startHole(1, 4, 400);
+  round.stats.startHole(1, 4, 400);
   finishHoleScore(round, { number: 1, par: 4 }, 5);
   nextTurn(round);
-  round.player.stats.startHole(1, 4, 400);
-  round.player.stats.recordShot({ surface: 'tee', yards: 400, isTee: true }, { surface: 'fairway', yards: 150 }, false);
+  round.stats.startHole(1, 4, 400);
+  round.stats.recordShot({ surface: 'tee', yards: 400, isTee: true }, { surface: 'fairway', yards: 150 }, false);
   const mid = { ball: { p: [1, 2, -150], isTee: false }, strokes: 1, penalties: 0, ballNo: 0 };
   // through JSON, as it is stored
   const snap = JSON.parse(JSON.stringify(roundSnapshot(round, { mid })));
   const back = restoreRound(snap);
   assert.equal(back.course.name, round.course.name, 'generated course rebuilt from its seed');
   assert.deepEqual(back.setup, round.setup, 'same pins and wind');
-  assert.deepEqual(back.players[0].scores, [{ number: 1, par: 4, strokes: 5, pickedUp: false }]);
-  assert.equal(back.players[0].stats.totals().strokes, 5);
-  assert.equal(back.player.stats.cur.shots.length, 1, 'the hole in progress keeps its shots');
+  assert.deepEqual(back.scores, [{ number: 1, par: 4, strokes: 5, pickedUp: false }]);
+  assert.equal(back.stats.totals().strokes, 5);
+  assert.equal(back.stats.cur.shots.length, 1, 'the hole in progress keeps its shots');
   assert.deepEqual(snap.mid, mid);
 });
 
@@ -287,7 +287,8 @@ test('only multi-hole rounds are saved, and a bad save is ignored', () => {
   assert.equal(resumable({ holes: [0, 1, 2], mode: 'daily' }), true);
   assert.equal(resumable({ holes: [11], mode: 'single' }), false);
   assert.equal(restoreRound(null), null);
-  assert.equal(restoreRound({ v: 1, opts: { courseId: 'nowhere', holes: [0, 1], mode: '18', seed: 1 }, i: 0, players: [{}] }), null);
+  assert.equal(restoreRound({ v: 2, opts: { courseId: 'nowhere', holes: [0, 1], mode: '18', seed: 1 }, i: 0 }), null);
+  assert.equal(restoreRound({ ...snap, v: 1 }), null, 'a round saved by the old per-player format is dropped');
   const snap = roundSnapshot(createRound({ courseId: 'augusta', holes: [0, 1], mode: 'front', seed: 2 }));
   assert.equal(restoreRound({ ...snap, i: 5 }), null, 'hole index out of range');
 });

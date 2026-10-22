@@ -1,4 +1,4 @@
-// Round setup: which holes, seeds, players and game mode. Everything random in a
+// Round setup: which holes, seeds and game mode. Everything random in a
 // round flows from its seed, so a seed (plus course and holes) reproduces the same
 // pins and wind – used for the daily challenge and for shareable challenge links.
 import { COURSES, courseById } from './courses/index.js';
@@ -45,8 +45,7 @@ export function holesFor(mode, courseId, single = 1) {
 // <tees> is m (middle) or f (forward); the back tees are the default and leave it out.
 // The optional score is the sender's total strokes. Links without it still work.
 export function challengeScore(r) {
-  const pl = r.players?.[0];
-  return pl?.scores && pl.scores.length === r.holes.length ? pl.scores.reduce((t, x) => t + x.strokes, 0) : null;
+  return r.scores && r.scores.length === r.holes.length ? r.scores.reduce((t, x) => t + x.strokes, 0) : null;
 }
 export function challengeHash(r) {
   const sc = challengeScore(r);
@@ -87,16 +86,14 @@ export function createRound(opts) {
   return {
     course, holes: opts.holes, i: 0, seed, mode: opts.mode, daily: opts.daily || null, tees, setup, target: opts.target ?? null,
     opts: { courseId: opts.courseId, holes: opts.holes, mode: opts.mode, seed, daily: opts.daily || null, solo: !!opts.solo, target: opts.target ?? null, tees },
-    players: [{ name: null, scores: [], stats: new RoundStats() }],
-    get player() { return this.players[0]; },
-    get scores() { return this.player.scores; },
-    get stats() { return this.player.stats; },
+    scores: [],
+    stats: new RoundStats(),
   };
 }
 
 // A round in progress as plain JSON, so a closed tab, a phone that drops the page in
-// the background or lost graphics don't cost the round. `mid` is the current player's
-// place on the current hole ({ ball: { p, isTee }, strokes, penalties, ballNo }), null
+// the background or lost graphics don't cost the round. `mid` is the place on the
+// current hole ({ ball: { p, isTee }, strokes, penalties, ballNo }), null
 // before they have teed off; `done` marks a round whose last hole is finished.
 export const RESUME_KEY = 'psg-resume';
 // only rounds of several holes are saved: a quick single hole never replaces an unfinished 18
@@ -105,8 +102,8 @@ export const resumable = (opts) => opts.holes.length > 1;
 export function roundSnapshot(round, { mid = null, done = false, i = round.i } = {}) {
   const r = round;
   return {
-    v: 1, t: Date.now(), opts: r.opts, i, mid, done,
-    players: r.players.map((pl) => ({ scores: pl.scores, stats: { holes: pl.stats.holes, cur: mid ? pl.stats.cur || null : null } })),
+    v: 2, t: Date.now(), opts: r.opts, i, mid, done,
+    scores: r.scores, stats: { holes: r.stats.holes, cur: mid ? r.stats.cur || null : null },
   };
 }
 
@@ -114,17 +111,14 @@ export function roundSnapshot(round, { mid = null, done = false, i = round.i } =
 // if it is unreadable or its course no longer exists.
 export function restoreRound(snap) {
   const s = snap;
-  if (!s || s.v !== 1 || !s.opts || !Array.isArray(s.players)) return null;
+  if (!s || s.v !== 2 || !s.opts) return null;
   let r;
   try { r = createRound(s.opts); } catch (e) { return null; }
-  if (!r.course || s.players.length !== r.players.length) return null;
+  if (!r.course) return null;
   if (!(s.i >= 0 && s.i < r.holes.length)) return null;
-  r.players.forEach((pl, k) => {
-    const d = s.players[k];
-    pl.scores = Array.isArray(d.scores) ? d.scores : [];
-    pl.stats.holes = Array.isArray(d.stats?.holes) ? d.stats.holes : [];
-    pl.stats.cur = d.stats?.cur || null;
-  });
+  r.scores = Array.isArray(s.scores) ? s.scores : [];
+  r.stats.holes = Array.isArray(s.stats?.holes) ? s.stats.holes : [];
+  r.stats.cur = s.stats?.cur || null;
   r.i = s.i;
   return r;
 }

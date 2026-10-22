@@ -45,10 +45,10 @@ test('challenge links round-trip', () => {
   const g = { course: { id: 'gen' }, mode: 'random', holes: [0, 1, 2, 3, 4, 5, 6, 7, 8], seed: 99 };
   assert.equal(parseChallenge(challengeHash(g)).courseId, 'gen');
   // a finished round puts its score in the link: total strokes
-  const played = { course: { id: 'sawgrass' }, mode: 'front', holes: [0, 1], seed: 77, players: [{ scores: [{ strokes: 4 }, { strokes: 5 }] }] };
+  const played = { course: { id: 'sawgrass' }, mode: 'front', holes: [0, 1], seed: 77, scores: [{ strokes: 4 }, { strokes: 5 }] };
   assert.equal(challengeHash(played), '#c=sawgrass.front.0-1.77.9');
   assert.deepEqual(parseChallenge(challengeHash(played)), { courseId: 'sawgrass', mode: 'front', holes: [0, 1], seed: 77, score: 9 });
-  assert.equal(challengeScore({ mode: 'front', holes: [0, 1], players: [{ scores: [{ strokes: 4 }] }] }), null);
+  assert.equal(challengeScore({ mode: 'front', holes: [0, 1], scores: [{ strokes: 4 }] }), null);
   assert.equal(parseChallenge('#c=augusta.ctp.2.5'), null, 'a link to a removed mode is ignored');
   assert.equal(parseChallenge('#c=sawgrass.front.0-1.77.x'), null);
   assert.equal(parseChallenge('#c=nowhere.18.1.5'), null);
