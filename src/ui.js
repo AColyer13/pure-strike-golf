@@ -6,9 +6,8 @@ import { PROFILES, TEE_FOR_PROFILE } from './clubs.js';
 import { YD, TEE_SETS, teeYds } from './hole.js';
 import { SURFACES } from './physics.js';
 import { DEFAULT_KEYS, ACTION_LABELS, DIFFICULTY } from './config.js';
-import { MODES, SIGNATURE, dailySpec, holesFor, challengeHash, challengeScore, RESUME_KEY, resumable, restoreRound } from './round.js';
+import { MODES, dailySpec, holesFor, challengeHash, challengeScore, RESUME_KEY, resumable, restoreRound } from './round.js';
 import { loadHistory, bestFor, handicapIndex, sgTrend, clearHistory, localDay, RATINGS } from './history.js';
-import { firstRun } from './tutorial.js';
 import { QUALITY } from './post.js';
 import { fmtYd, fmtFt, fmtElev, windUnit, windValue, localizeText } from './units.js';
 import { clamp } from './util.js';
@@ -199,41 +198,18 @@ export class UI {
     const more = hero.querySelector('.cc-more');
     more.ontoggle = () => { this.sel.about = more.open; this.saveSel(); };
 
-    // quick play: no setup. The first visit offers the signature hole; after each quick hole the
-    // button moves on to a different one, so it isn't the same hole for ever
-    const qkey = `psg-quick-${course.id}`;
-    let sig = SIGNATURE[course.id] ?? 0;
-    try {
-      const n = parseInt(localStorage.getItem(qkey), 10);
-      if (n >= 0 && n < course.holes.length) sig = n;
-    } catch (e) { /* storage blocked: stay on the signature hole */ }
-    const sh = course.holes[sig];
-    const nextQuick = () => {
-      let n;
-      do { n = Math.floor(Math.random() * course.holes.length); } while (n === sig && course.holes.length > 1);
-      try { localStorage.setItem(qkey, String(n)); } catch (e) { /* ignore */ }
-    };
-    const guided = !!(this.tutorial && firstRun());
-    if (guided) {
-      // never played: the primary button is the guided hole
-      $('btnQuick').innerHTML = 'Start here: guided first hole ▶<small>Magnolia 12 · par 3 · about 5 minutes · explains every control</small>';
-      $('btnQuick').onclick = () => this.tutorial.start();
-    } else {
-      $('btnQuick').innerHTML = `Play a hole now ▶<small>${sig + 1}. ${sh.name} · par ${sh.par}</small>`;
-      $('btnQuick').onclick = () => { nextQuick(); this.start({ courseId: course.id, holes: [sig], mode: 'single' }); };
-    }
+    // Tee off is always the yellow primary button on the left; the guided tour sits to its right, plain, on every visit
+    $('btnQuick').innerHTML = 'Guided tour ▶<small>Magnolia 12 · par 3 · about 5 minutes · explains every control</small>';
+    $('btnQuick').onclick = () => this.tutorial?.start();
     $('btnPlay').innerHTML = `Tee off ▶<small>${MODES[this.sel.mode].name}</small>`;
     $('btnPlay').onclick = () => this.play();
 
     // an unfinished round (closed tab, phone dropped the page, quit mid-round)
     const saved = this.savedRound(), rc = $('resumeCard');
     rc.classList.toggle('hidden', !saved);
-    // one primary action, by rule: resume a round, else the guided hole on a first visit, else tee off
-    rc.classList.toggle('primary-cta', !!saved);
+        rc.classList.toggle('primary-cta', !!saved);
     $('btnPlay').parentElement.classList.toggle('has-resume', !!saved);
-    $('btnQuick').classList.toggle('primary', guided && !saved);
-    $('btnQuick').style.order = guided && !saved ? '-1' : '';
-    $('btnPlay').classList.toggle('primary', !guided && !saved);
+    $('btnPlay').classList.add('primary');
     if (saved) {
       const { snap, round: r } = saved;
       const thru = r.scores.length, toPar = r.scores.reduce((t, x) => t + x.strokes - x.par, 0);
