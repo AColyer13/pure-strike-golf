@@ -217,7 +217,7 @@ export class Game {
       if (snap?.mid) {
         // back where the player left off: same ball, strokes and hole stats, no flyover
         const m = snap.mid;
-        this.strokes = m.strokes; this.penalties = m.penalties; this.ballNo = m.ballNo;
+        this.strokes = m.strokes; this.penalties = m.penalties;
         if (cur) { r.stats.cur = cur; this.holeStats = cur; }
         this.ball = { ...this.ball, p: m.ball.p.slice(), isTee: m.ball.isTee };
         this.startFlyover();
@@ -234,7 +234,6 @@ export class Game {
     const r = this.round, h = this.hole;
     this.strokes = 0;
     this.penalties = 0;
-    this.ballNo = 0;
     this.holeStats = r.stats.startHole(h.number, h.par, h.yards);
     this.teeUp();
   }
@@ -289,7 +288,7 @@ export class Game {
   enterAddress() {
     this.state = 'address';
     this.addressAt = performance.now();
-    this.saveProgress({ mid: { ball: { p: this.ball.p.slice(), isTee: !!this.ball.isTee }, strokes: this.strokes, penalties: this.penalties, ballNo: this.ballNo } });
+    this.saveProgress({ mid: { ball: { p: this.ball.p.slice(), isTee: !!this.ball.isTee }, strokes: this.strokes, penalties: this.penalties } });
     this.cam.resetOrbit();
     this.cam.targetView = false;
     document.body.classList.remove('target-view');
@@ -446,7 +445,7 @@ export class Game {
     const tip = this.caddie.blockedNote() || (/^(Aim|Favour|Greenside|Heavy lie)/.test(m) ? m : '')
       || (c.putter && this.puttRead && Math.abs(this.puttRead.brk) > 0.05 ? `Breaks ${this.puttRead.brk > 0 ? 'right to left' : 'left to right'}.` : '');
     // the first club of a shot gets the full word; changing club just gets the new number
-    const shotKey = `${this.round?.i}|${this.strokes}|${this.ballNo}`;
+    const shotKey = `${this.round?.i}|${this.strokes}`;
     if (this.fullShot !== shotKey) { this.fullShot = shotKey; this.fullClub = c.key; }
     const lie = this.lieKey();
     const color = this.strokes === 0 && !c.putter ? 'tee' : lie === 'bunker' ? 'bunker' : ['rough', 'deep', 'straw'].includes(lie) && !c.putter ? 'rough'
@@ -455,7 +454,7 @@ export class Game {
       short: c.key !== this.fullClub, color,
       club: c.name, dist: where, pct, full, putt: !!c.putter,
       wind: this.pl ? this.pl.windAdj / YD : 0, elev: this.pl ? this.pl.elevAdj / YD : 0, tip,
-      seed: `${this.round?.i}|${this.strokes}|${this.ballNo}|${c.key}`, greet: !this.greeted,
+      seed: `${this.round?.i}|${this.strokes}|${c.key}`, greet: !this.greeted,
     });
     return { ...out, text: out.text + cnt, say: words(out.say + cnt) };
   }
@@ -473,7 +472,7 @@ export class Game {
     clearTimeout(this.adviceT);
     const a = this.analogAdvice();
     if (!a || !this.settings.caddyVoice) return;
-    const key = `${this.settings.caddie}|${this.round?.i}|${this.strokes}|${this.ballNo}|${this.club.key}|${a.pct}`;
+    const key = `${this.settings.caddie}|${this.round?.i}|${this.strokes}|${this.club.key}|${a.pct}`;
     if (key === this.spokenKey) return;
     this.adviceT = setTimeout(() => {
       if (this.state !== 'address' || this.ui.paused) return;
@@ -653,7 +652,7 @@ export class Game {
     this.ui.caddie('');
   }
 
-  shotSeed() { return shotSeedFor(this.round, this.strokes, this.ballNo); }
+  shotSeed() { return shotSeedFor(this.round, this.strokes); }
 
   impact() {
     const sw = this.pendingSwing;

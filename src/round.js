@@ -93,7 +93,7 @@ export function createRound(opts) {
 
 // A round in progress as plain JSON, so a closed tab, a phone that drops the page in
 // the background or lost graphics don't cost the round. `mid` is the place on the
-// current hole ({ ball: { p, isTee }, strokes, penalties, ballNo }), null
+// current hole ({ ball: { p, isTee }, strokes, penalties }), null
 // before they have teed off; `done` marks a round whose last hole is finished.
 export const RESUME_KEY = 'psg-resume';
 // only rounds of several holes are saved: a quick single hole never replaces an unfinished 18

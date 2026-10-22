@@ -57,10 +57,11 @@ export function lieZoneFor(ball, hole, club, aim) {
   return k * clamp(1 - (Math.abs(sl.side) + Math.abs(sl.up) * 0.5) * 0.025, 0.6, 1);
 }
 
-// Shot seed: the same round seed, hole, stroke and ball always give the same
-// random lie/strike variation – so a shared challenge is fair to everyone.
-export function shotSeedFor(round, strokesBefore, ballNo) {
-  return seedFrom(`${round.seed}:${round.holes[round.i]}:${strokesBefore}:${ballNo}`);
+// Shot seed: the same round seed, hole and stroke always give the same
+// random lie/strike variation – so a shared challenge is fair to everyone. (The trailing :0 is
+// the retired ball number, kept so existing challenge links replay the same shots.)
+export function shotSeedFor(round, strokesBefore) {
+  return seedFrom(`${round.seed}:${round.holes[round.i]}:${strokesBefore}:0`);
 }
 
 // wind relative to the aim line: along + = helping (downwind), side + = left-to-right

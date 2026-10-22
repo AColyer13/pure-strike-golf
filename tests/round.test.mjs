@@ -68,7 +68,7 @@ function playHole(courseId, holeIndex, seed, policy, { profile = 'tour' } = {}) 
     const sw = normalizeSwing(pick.swing, !!pick.club.putter);
     const lie = lieKeyFor(ball, hole, pick.club);
     const S = shotStartOf({ hole, ball, club: pick.club, aim: pick.aim, pl: null, strokes, lie, duffed: sw.duffed });
-    const seed2 = shotSeedFor(round, strokes, 0);
+    const seed2 = shotSeedFor(round, strokes);
     const shot = launchShot({ hole, env, ball, club: pick.club, swing: sw, aim: pick.aim, shape: 'straight', traj: 0, puttRange: pick.puttRange, ballLift: ballLiftFor(ball, pick.club), seed: seed2 });
     const { landV } = runToRest(shot.sim);
     strokes++;
@@ -271,7 +271,7 @@ test('a saved round comes back with the same pins, wind, scores and place on the
   nextTurn(round);
   round.stats.startHole(1, 4, 400);
   round.stats.recordShot({ surface: 'tee', yards: 400, isTee: true }, { surface: 'fairway', yards: 150 }, false);
-  const mid = { ball: { p: [1, 2, -150], isTee: false }, strokes: 1, penalties: 0, ballNo: 0 };
+  const mid = { ball: { p: [1, 2, -150], isTee: false }, strokes: 1, penalties: 0 };
   // through JSON, as it is stored
   const snap = JSON.parse(JSON.stringify(roundSnapshot(round, { mid })));
   const back = restoreRound(snap);
