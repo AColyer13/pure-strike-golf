@@ -28,7 +28,7 @@ export class SwingMeter {
   }
   resize() {
     const dpr = Math.min(2, window.devicePixelRatio || 1);
-    const w = this.cv.clientWidth || 560, h = this.cv.clientHeight || 70;
+    const w = this.cv.clientWidth || 560, h = this.cv.clientHeight || 72;
     this.cv.width = w * dpr; this.cv.height = h * dpr;
     this.g.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.w = w; this.h = h;
@@ -97,19 +97,22 @@ export class SwingMeter {
     const g = this.g, w = this.w, h = this.h;
     g.clearRect(0, 0, w, h);
     if (this.state === 'hidden') return;
-    const y = 26, bh = 26; // (the cue text sits in the 18 px above the frame, clear of it)
+    const y = 25, bh = 18; // (the cue text sits in the 18 px above the frame, clear of it)
     const x0 = this.x(-0.12), x1 = this.x(this.putt ? 1.0 : 1.1);
     // frame
     g.fillStyle = 'rgba(8,16,12,0.72)';
-    roundRect(g, x0 - 8, y - 8, x1 - x0 + 16, bh + 16, 12); g.fill();
+    const fh = bh + 14 + (this.labels ? 17 : 0); // a slim pill; taller only when foot marks sit under the bar
+    roundRect(g, x0 - 9, y - 7, x1 - x0 + 18, fh, Math.min(fh / 2, 16)); g.fill();
     // track
     const grd = g.createLinearGradient(this.x(0), 0, this.x(1), 0);
     grd.addColorStop(0, '#2c4a3a'); grd.addColorStop(1, '#3b5d48');
     g.fillStyle = grd;
-    roundRect(g, x0, y, x1 - x0, bh, 6); g.fill();
+    roundRect(g, x0, y, x1 - x0, bh, bh / 2); g.fill();
     if (!this.putt) {
+      g.save(); roundRect(g, x0, y, x1 - x0, bh, bh / 2); g.clip(); // the overswing zone follows the pill's rounded end
       g.fillStyle = '#6b2a2a';
       g.fillRect(this.x(1.0), y, x1 - this.x(1.0), bh);
+      g.restore();
     }
     // power fill
     const pv = this.state === 'power' ? this.v : this.power;
@@ -120,17 +123,17 @@ export class SwingMeter {
       g.fillRect(this.x(0), y + 3, this.x(pv) - this.x(0), bh - 6);
     }
     // ticks
-    g.fillStyle = 'rgba(255,255,255,0.55)';
+    g.fillStyle = 'rgba(255,255,255,0.72)';
     g.font = '600 10px Barlow, system-ui, sans-serif';
     g.textAlign = 'center';
     for (let i = 1; i <= 10; i++) {
       const xx = this.x(i / 10);
-      g.fillRect(xx - 0.5, y + (i % 5 ? bh - 7 : bh - 12), 1, i % 5 ? 7 : 12);
+      g.fillRect(xx - 0.5, y + (i % 5 ? bh - 5 : bh - 8), 1, i % 5 ? 5 : 8);
     }
     if (this.labels) {
       for (const [v, txt] of this.labels) {
         const hw = g.measureText(txt).width / 2; // keep each foot mark inside the frame
-        g.fillText(txt, clamp(this.x(v), x0 + hw, x1 - hw), y + bh + 13);
+        g.fillText(txt, clamp(this.x(v), x0 + hw, x1 - hw), y + bh + 17);
       }
     }
     // impact zone
@@ -157,7 +160,7 @@ export class SwingMeter {
       const cx = this.x(cv);
       g.fillStyle = '#ffffff';
       g.shadowColor = 'rgba(0,0,0,0.6)'; g.shadowBlur = 4;
-      g.beginPath(); g.moveTo(cx, y + bh + 4); g.lineTo(cx - 7, y + bh + 13); g.lineTo(cx + 7, y + bh + 13); g.closePath(); g.fill();
+      g.beginPath(); g.moveTo(cx, y + bh + 2); g.lineTo(cx - 5, y + bh + 8); g.lineTo(cx + 5, y + bh + 8); g.closePath(); g.fill();
       g.fillRect(cx - 1.5, y - 2, 3, bh + 4);
       g.shadowBlur = 0;
     }

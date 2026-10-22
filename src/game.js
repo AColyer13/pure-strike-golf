@@ -25,7 +25,7 @@ import { Caddie, canPutt, SLICE_MS } from './caddie.js';
 import { CameraDirector } from './camera.js';
 import { Input } from './input.js';
 import { reliefOptions } from './rules.js';
-import { fmtWind } from './units.js';
+import { fmtWind, fmtFt } from './units.js';
 import { loadHistory, saveRound, roundEntry, bestFor } from './history.js';
 import { SIGNATURE, createRound, holeEnv, introExtra, RESUME_KEY, resumable, roundSnapshot, restoreRound } from './round.js';
 import {
@@ -1025,13 +1025,13 @@ export class Game {
       hole: h.number, name: h.name, par: h.par, yards: h.yards,
       shot: this.challenge ? `Ball ${this.ballNo + 1}/${r.balls}` : holed ? `Holed in ${this.strokes}` : `Shot ${this.strokes + (this.state === 'flight' ? 0 : 1)}`, toPar,
       player: r.players.length > 1 ? r.player.name : null, challenge: this.challenge, mode: r.mode,
-      dist: holed ? 'Holed' : feet ? `${(d / FT).toFixed(d / FT < 10 ? 1 : 0)} ft` : this.fmtDist(d),
+      dist: holed ? 'Holed' : feet ? (this.settings.units === 'm' ? fmtFt(d / FT, 'm') : `${(d / FT).toFixed(d / FT < 10 ? 1 : 0)} ft`) : this.fmtDist(d),
       plays: this.pl && !this.club.putter && !resting && !(this.challenge && r.mode === 'drive') ? this.fmtDist(this.pl.plays) : null,
       elev: holed ? 0 : (h.height(h.cup.x, h.cup.z) - (b.p[1] - BALL.radius)) / FT,
       puttEq: this.club.putter && !resting ? this.puttEqFt : null,
       nearGreen: this.nearGreen(),
       wind: this.windRel(), windMph: this.windMph,
-      club: this.club, clubCarry: this.club.putter ? `${this.puttRange} ft range` : `Carry ${this.fmtDist(this.club.carry)} · Total ${this.fmtDist(this.club.total)}`,
+      club: this.club, clubCarry: this.club.putter ? `${fmtFt(this.puttRange, this.settings.units)} range` : `Carry ${this.fmtDist(this.club.carry)} · Total ${this.fmtDist(this.club.total)}`,
       lie: b.isTee ? SURFACES.tee.name : b.surface === 'tee' ? 'Tee box · fairway lie' : SURFACES[b.surface]?.name || b.surface,
       lieKey: lk, lieRange: lk === 'splash' ? 'Explosion shot' : `${lie.dist[0]}–${lie.dist[1]}%`, slope: resting ? { up: 0, side: 0 } : this.slope(),
       shape: SHAPES[this.shape].name, traj: TRAJ[this.traj], putter: !!this.club.putter,

@@ -7,6 +7,7 @@ import { expectedStrokes } from './stats.js';
 import { dirOf, angOf, clamp, DEG } from './util.js';
 import { SHAPES } from './config.js';
 import { findEntry } from './rules.js';
+import { fmtFt } from './units.js';
 
 // run a step generator to the end and return its value (the synchronous form of a search
 // that address frames otherwise spread a few milliseconds at a time)
@@ -280,7 +281,7 @@ export function puttRead(hole, ball, env) {
 
 // The caddie's read in words: where to start it (cup = 4.25 in), which way it
 // breaks, and how the slope changes the pace.
-export function puttNote(rd) {
+export function puttNote(rd, units) {
   const CUP = 0.108, side = rd.brk > 0 ? 'right' : 'left';
   const out = Math.abs(rd.brk) - CUP / 2; // past the edge of the hole
   let line;
@@ -291,11 +292,11 @@ export function puttNote(rd) {
     const n = Math.max(0.5, Math.round(out / CUP * 2) / 2);
     const txt = (n % 1 ? (n > 1 ? `${Math.floor(n)}½` : '½') : `${n}`);
     line = `Aim ${txt} cup${n > 1 ? 's' : ''} outside the ${side} edge`;
-  } else line = `Aim ${Math.round(Math.abs(rd.brk) / FT)} ft ${side} of the hole`;
+  } else line = `Aim ${fmtFt(Math.abs(rd.brk) / FT, units)} ${side} of the hole`;
   const breaks = Math.abs(rd.brk) < 0.02 ? '' : `, breaks ${side === 'right' ? 'right to left' : 'left to right'}`;
   const e = Math.round(rd.elevIn);
   const slope = Math.abs(e) < 2 ? 'Level' : `${e > 0 ? 'Uphill' : 'Downhill'} ${Math.abs(e)} in`;
-  let msg = `Read: ${line}${breaks}. ${slope}, stroke it ${Math.round(rd.eqFt)} ft.`;
+  let msg = `Read: ${line}${breaks}. ${slope}, stroke it ${fmtFt(rd.eqFt, units)}.`;
   if (rd.leave > 0.9 || rd.spread > 1.5) msg += ' No easy line here – lag it close.';
   return msg;
 }
@@ -739,9 +740,12 @@ export class Caddie {
     g.puttRange = ps.range;
     g.puttElevIn = ps.elevIn;
     const R = g.puttRange;
-    g.meter.configure({ labels: [[0.25, `${Math.round(R * 0.25)}ft`], [0.5, `${Math.round(R * 0.5)}ft`], [0.75, `${Math.round(R * 0.75)}ft`], [1, `${R}ft`]], rangeLabel: `Putter range ${R} ft` });
+    const u = g.settings.units;
+    // each mark sits where its printed (rounded) distance really is, not at the quarter point
+    const mark = (f) => { const ft = Math.max(1, Math.round(R * f)); return [ft / R, fmtFt(ft, u)]; };
+    g.meter.configure({ labels: [mark(0.25), mark(0.5), mark(0.75), [1, fmtFt(R, u)]], rangeLabel: `Putter range ${fmtFt(R, u)}` });
     if (!keepAim) g.aim = ps.aim;
-    this.msg = this.withLead(read ? puttNote(ps) : '');
+    this.msg = this.withLead(read ? puttNote(ps, u) : '');
     if (g.ui) g.caddieNote();
   }
 

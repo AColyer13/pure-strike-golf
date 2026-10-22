@@ -8,7 +8,7 @@ import { MODES, SIGNATURE, dailySpec, holesFor, challengeHash, challengeScore, R
 import { loadHistory, bestFor, handicapIndex, sgTrend, clearHistory, localDay, RATINGS } from './history.js';
 import { firstRun } from './tutorial.js';
 import { QUALITY } from './post.js';
-import { fmtYd, fmtElev, windUnit, windValue, localizeText } from './units.js';
+import { fmtYd, fmtFt, fmtElev, windUnit, windValue, localizeText } from './units.js';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
@@ -284,6 +284,7 @@ export class UI {
     opt('optTees', tees, Object.entries(TEE_SETS).map(([k, t]) => [k, t.name, `${fmtYd(course.holes.reduce((a, h) => a + teeYds(h, k), 0), units).replace(/\d+/, (n) => (+n).toLocaleString())} at ${course.name}${k === 'back' ? ': the full championship length' : k === 'middle' ? ': a shorter course for most club golfers' : ': the shortest, for newer players and slower swings'}`]));
     opt('optDiff', s.difficulty, [['beginner', 'Beginner', 'Big impact zone, full aim preview with wind and roll, full putt line'], ['standard', 'Standard', 'Normal zone, carry preview without wind, partial putt line'], ['pro', 'Pro', 'Small zone, no wind/putt assistance – read it yourself']]);
     opt('optControl', s.control, [['meter', '3-Click Meter', 'Click to start, set power, hit the impact zone'], ['mouse', 'Analog Swing', 'Pull the mouse back, push it through straight']]);
+    opt('optUnits', s.units === 'm' ? 'm' : 'yd', [['yd', 'Yards'], ['m', 'Metres']]);
     const hs = $('optHole');
     const pickHole = ['single', 'ctp', 'drive'].includes(this.sel.mode);
     hs.classList.toggle('hidden', !pickHole);
@@ -332,6 +333,7 @@ export class UI {
     if (id === 'optTees') { s.tees = k; s.teesChosen = true; }
     if (id === 'optDiff') s.difficulty = k;
     if (id === 'optControl') s.control = k;
+    if (id === 'optUnits') s.units = k;
     this.game.saveSettings();
     this.saveSel();
   }
@@ -442,7 +444,7 @@ export class UI {
     if (d.plays) this.firstTip('plays', '“Plays like” is the distance adjusted for wind and elevation. Pick a club for that number, not the yardage.');
     let sub = '';
     if (d.plays) sub = `<span class="plays">Plays like <b>${d.plays}</b></span>`;
-    else if (d.puttEq != null) sub = `Stroke it <b>${d.puttEq.toFixed(0)} ft</b><br><small>to finish about 17 in past the hole</small>`;
+    else if (d.puttEq != null) sub = `Stroke it <b>${fmtFt(d.puttEq, units)}</b><br><small>to finish about 17 in past the hole</small>`;
     const e = Math.round(d.elev);
     if (Math.abs(e) >= 1) sub += `<span class="elev">${e > 0 ? '▲' : '▼'} ${fmtElev(e, units)} ${e > 0 ? 'uphill' : 'downhill'}</span>`;
     const sl = d.slope, parts = [];
@@ -656,8 +658,8 @@ export class UI {
     const rows = [];
     const ld = info.ld;
     if (info.putt) {
-      rows.push(['Putt length', `${info.startFt.toFixed(0)} ft`]);
-      rows.push(['Result', info.holed ? '<b class="good">Holed</b>' : `${Math.abs(info.shortFt).toFixed(1)} ft ${info.shortFt > 0 ? 'short' : 'past'}${Math.abs(info.lateralFt) >= 0.4 ? ` · ${Math.abs(info.lateralFt).toFixed(1)} ft ${info.lateralFt > 0 ? 'right' : 'left'}` : ''}`]);
+      rows.push(['Putt length', fmtFt(info.startFt, this.game.settings.units)]);
+      rows.push(['Result', info.holed ? '<b class="good">Holed</b>' : `${fmtFt(Math.abs(info.shortFt), this.game.settings.units, 1)} ${info.shortFt > 0 ? 'short' : 'past'}${Math.abs(info.lateralFt) >= 0.4 ? ` · ${fmtFt(Math.abs(info.lateralFt), this.game.settings.units, 1)} ${info.lateralFt > 0 ? 'right' : 'left'}` : ''}`]);
       rows.push(['Start speed', `${(ld.speed * 2.237).toFixed(1)} mph`, 1]);
       rows.push(['Face at impact', `${Math.abs(ld.face).toFixed(1)}° ${ld.face > 0.05 ? 'open' : ld.face < -0.05 ? 'closed' : 'square'}`, 1]);
     } else {

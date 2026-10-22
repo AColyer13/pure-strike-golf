@@ -14,6 +14,13 @@ export const fmtElev = (ft, units) => {
   return isMetric(units) ? `${Math.max(1, Math.round(a * M_PER_FT))} m` : `${Math.round(a)} ft`;
 };
 
+// putting distance in feet → "N ft" | "N.N m" (a metre or less of precision is kept below 10 m)
+export const fmtFt = (ft, units, dec = 0) => {
+  if (!isMetric(units)) return `${dec ? ft.toFixed(dec) : Math.round(ft)} ft`;
+  const m = ft * M_PER_FT;
+  return `${m < 10 ? (Math.round(m * 10) / 10).toFixed(1) : Math.round(m)} m`;
+};
+
 // Rewrite "300-yard", "50–60 yards", "40 feet" etc. inside authored prose for the metric setting.
 const MEASURE = /(\d[\d,]*)(?:\s?[–-]\s?(\d[\d,]*))?([\s-]?)(yards?|yds|feet|foot|ft)\b/gi;
 export function localizeText(text, units) {
