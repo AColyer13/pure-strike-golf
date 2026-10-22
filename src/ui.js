@@ -1,6 +1,7 @@
 // DOM user interface: menus, HUD, shot panel, scorecard, summaries, stats and settings.
 import { COURSES, courseById } from './courses/index.js';
 import { CADDIES, CADDIE_IDS } from './caddies.js';
+import { TEMPOS, TEMPO_IDS } from './meter.js';
 import { PROFILES, TEE_FOR_PROFILE } from './clubs.js';
 import { YD, TEE_SETS, teeYds } from './hole.js';
 import { SURFACES } from './physics.js';
@@ -71,6 +72,8 @@ export class UI {
     this.toasts = $('toasts');
     $('minimap').addEventListener('pointerdown', (e) => this.minimapClick(e));
     this.initDialogs();
+    addEventListener('resize', () => this.placeMinimap());
+    if (typeof ResizeObserver === 'function') new ResizeObserver(() => { this.mmDirty = true; }).observe($('minimap'));
   }
 
   // Every dialog is announced and focus-managed in one place: when it opens it gets a dialog role and a name,
@@ -284,7 +287,9 @@ export class UI {
     opt('optProfile', s.profile, Object.entries(PROFILES).map(([k, p]) => [k, p.name, p.desc]));
     opt('optTees', tees, Object.entries(TEE_SETS).map(([k, t]) => [k, t.name, `${fmtYd(course.holes.reduce((a, h) => a + teeYds(h, k), 0), units).replace(/\d+/, (n) => (+n).toLocaleString())} at ${course.name}${k === 'back' ? ': the full championship length' : k === 'middle' ? ': a shorter course for most club golfers' : ': the shortest, for newer players and slower swings'}`]));
     opt('optDiff', s.difficulty, [['beginner', 'Beginner', 'Big impact zone, full aim preview with wind and roll, full putt line'], ['standard', 'Standard', 'Normal zone, carry preview without wind, partial putt line'], ['pro', 'Pro', 'Small zone, no wind/putt assistance – read it yourself']]);
-    opt('optControl', s.control, [['meter', '3-Click Meter', 'Click to start, set power, hit the impact zone'], ['mouse', 'Analog Swing', 'No meter: your caddie says how hard to hit it. Take it back in 3 seconds, then push through']]);
+    opt('optControl', s.control, [['meter', '3-Click Meter', 'Click to start, set power, hit the impact zone'], ['mouse', 'Analog Swing', 'No meter: your caddie says how hard to hit it. Take it back on a 3-count, push through on 1 (hold Shift to practise)']]);
+    opt('optTempo', s.tempo, TEMPO_IDS.map((k) => [k, TEMPOS[k].name, TEMPOS[k].blurb + ' – three counts back, one through (analog swing)']));
+    opt('optGuide', s.guide, [['off', 'Off', 'No guide: feel the tempo yourself'], ['ticks', 'Ticks', 'A tick on each of the three counts'], ['bar', 'Ticks + bar', 'Ticks, and a bar that fills to the mark']]);
     opt('optCaddie', s.caddie, [...CADDIE_IDS.map((k) => [k, CADDIES[k].name, CADDIES[k].blurb]), ['none', 'None', 'A plain, quiet caddie']]);
     opt('optUnits', s.units === 'm' ? 'm' : 'yd', [['yd', 'Yards'], ['m', 'Metres']]);
     const hs = $('optHole');
@@ -335,6 +340,8 @@ export class UI {
     if (id === 'optTees') { s.tees = k; s.teesChosen = true; }
     if (id === 'optDiff') s.difficulty = k;
     if (id === 'optControl') s.control = k;
+    if (id === 'optTempo') s.tempo = k;
+    if (id === 'optGuide') s.guide = k;
     if (id === 'optCaddie') { s.caddie = k; this.game.greeted = false; if (CADDIES[k]) this.game.auditionCaddie(k); }
     if (id === 'optUnits') s.units = k;
     this.game.saveSettings();
@@ -396,7 +403,7 @@ export class UI {
     $('kShapeL').textContent = k('shapeLeft'); $('kShapeR').textContent = k('shapeRight');
     $('kTrajU').textContent = k('trajUp'); $('kTrajD').textContent = k('trajDown');
     const swing = mouse ? '<b>Hold LMB</b> 3-count back, push up to swing' : `<b>${k('swing')}</b> swing`;
-    const basics = [swing, `<b>${k('aimLeft')}${k('aimRight')}</b> aim (${k('aimFine')} fine)`, `<b>${k('clubUp')}${k('clubDown')}</b> club`];
+    const basics = [swing, ...(mouse ? ['<b>Shift</b> practice'] : []), `<b>${k('aimLeft')}${k('aimRight')}</b> aim (${k('aimFine')} fine)`, `<b>${k('clubUp')}${k('clubDown')}</b> club`];
     const st = document.body.dataset.state;
     // once the ball is away the swing hint flips to fast-forward (hold) and a skip button, and flips back at the next address
     const ico = (d, w = 2) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="${d}" fill="currentColor" stroke="currentColor" stroke-width="${w}" stroke-linejoin="round"/></svg>`;
@@ -407,7 +414,17 @@ export class UI {
       : [...basics, `<b>${k('targetView')}</b> target view`, ...(this.game.nearGreen?.() ? [`<b>${k('grid')}</b> green grid`] : []), `<b>${k('pause')}</b> menu · all keys`];
     const bar = $('helpBar');
     bar.innerHTML = items.map((x) => (x.startsWith('<button') ? x : `<span>${x}</span>`)).join('');
+    this.fitHelpBar();
     if (this.hbState !== st) { bar.classList.remove('hb-flip'); void bar.offsetWidth; bar.classList.add('hb-flip'); this.hbState = st; }
+  }
+
+  // the hints wrap onto a second line in a narrow window: tell the CSS how tall they are so the
+  // club box rides above them, and keep telling it when the window changes
+  fitHelpBar() {
+    const bar = $('helpBar');
+    const set = () => document.documentElement.style.setProperty('--hb-h', `${Math.ceil(bar.getBoundingClientRect().height)}px`);
+    set();
+    if (!this.hbWatch && typeof ResizeObserver === 'function') { this.hbWatch = new ResizeObserver(set); this.hbWatch.observe(bar); }
   }
 
   // ------------------------------------------------------------ loading / intro
@@ -454,13 +471,11 @@ export class UI {
     if (Math.abs(sl.up) >= 1.5) parts.push(`${sl.up > 0 ? 'Uphill' : 'Downhill'} ${Math.abs(sl.up).toFixed(0)}°`);
     if (Math.abs(sl.side) >= 1.5) parts.push(`Ball ${sl.side > 0 ? 'above' : 'below'} feet ${Math.abs(sl.side).toFixed(0)}°`);
     // the lie box is folded away: its one useful line lives here
-    const lie = d.putter ? `Stimp ${d.stimp.toFixed(1)}` : [d.lieRange === '100–100%' ? '' : d.lieRange, ...parts].filter(Boolean).join(' · ');
-    // a clean tee shot has nothing to say about the lie
-    // (on a phone a good lie says nothing either: only rough, sand and the like earn a line)
-    const quiet = this.touch ? ['tee', 'fairway', 'green'].includes(d.lieKey) : d.lieKey === 'tee' && !lie;
-    if (!quiet) sub += `<span class="lie-line" data-lie="${d.lieKey}"><b>${esc(d.lie)}</b> <span class="lie-range">${lie}</span></span>`;
+    const facts = d.putter ? [`Stimp ${d.stimp.toFixed(1)}`] : [d.lieRange === '100–100%' ? '' : d.lieRange, ...parts].filter(Boolean);
+    sub += `<span class="lie-line" data-lie="${d.lieKey}"><b>${esc(d.lie)}</b> <span class="lie-facts">${facts.map((f) => `<span class="lie-range">${f}</span>`).join('')}</span></span>`;
     $('dSub').innerHTML = sub;
     this.setState(d.state);
+    this.placeMinimap();
     if (this.hbNear !== d.nearGreen && !this.touch) { this.hbNear = d.nearGreen; this.helpBar(); } // the grid hint comes and goes with the green
     document.body.dataset.putt = d.putter ? '1' : '';
     this.touchChips(d);
@@ -476,6 +491,8 @@ export class UI {
     $('clubName').textContent = d.club.name;
     $('clubKey').textContent = d.club.key;
     $('clubDist').textContent = d.clubCarry;
+    $('clubTempo').textContent = d.tempoNote;
+    $('clubTempo').classList.toggle('alt', d.tempoAlt);
     $('shapeVal').textContent = d.putter ? '—' : d.shape;
     $('trajVal').textContent = d.putter ? '—' : d.traj;
     $('shapeRow').classList.toggle('dim', d.putter);
@@ -507,13 +524,34 @@ export class UI {
     c.shot?.classList.toggle('set', d.shape !== 'Straight' || d.traj !== 'Standard');
   }
 
+  // portrait phone: the map hangs under the distance panel, the same gap below it as the panel has
+  // below the wind box, and shrinks (or steps aside) rather than ride over the swing controls
+  placeMinimap() {
+    const mm = $('minimap'), dist = $('distBox'), wind = $('windBox');
+    if (!this.touch || !matchMedia('(orientation: portrait)').matches || !dist.offsetHeight) { mm.style.top = mm.style.height = ''; mm.classList.remove('mm-nofit'); return; }
+    const k = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ui-scale')) || 1;
+    const d = dist.getBoundingClientRect(), w = wind.getBoundingClientRect();
+    const gap = Math.max(6, d.top - w.bottom), top = d.bottom + gap;
+    let limit = innerHeight - 8;
+    for (const el of [document.querySelector('.tc-right'), $('caddie')]) {
+      const r = el?.offsetHeight ? el.getBoundingClientRect() : null;
+      if (r && r.right > innerWidth - 170 && r.top > top) limit = Math.min(limit, r.top - gap);
+    }
+    const h = Math.min(170, limit - top);
+    mm.classList.toggle('mm-nofit', h < 80);
+    mm.style.top = `${top / k}px`; mm.style.height = `${Math.max(h, 80) / k}px`;
+    this.mmDirty = true;
+  }
+
   minimap(game) {
     const cv = $('minimap');
     const W = game.world, h = game.hole;
+    this.mmDirty = true; // stays set until a draw lands (hidden, zero-sized or still loading)
     if (!W.textureCanvas || !h) return;
     const dpr = Math.min(2, devicePixelRatio || 1);
     const cw = cv.clientWidth, ch = cv.clientHeight;
     if (!cw || !ch) return;
+    this.mmDirty = false; this.mmSize = cw + 'x' + ch;
     if (cv.width !== cw * dpr) { cv.width = cw * dpr; cv.height = ch * dpr; }
     const g = cv.getContext('2d');
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -988,6 +1026,8 @@ export class UI {
       <label class="set"><span>Volume</span><input type="range" id="sVol" min="0" max="1" step="0.05" value="${s.volume}"></label>
       ${chk('sTracer', 'Shot tracer', s.tracer)}
       <label class="set"><span>Caddie<small>${CADDIES[s.caddie]?.blurb || 'A plain, quiet caddie'}</small></span><select id="sCaddie">${CADDIE_IDS.map((k) => `<option value="${k}" ${s.caddie === k ? 'selected' : ''}>${CADDIES[k].name}</option>`).join('')}<option value="none" ${CADDIES[s.caddie] ? '' : 'selected'}>None</option></select></label>
+      <label class="set"><span>Swing tempo<small>${TEMPOS[s.tempo]?.blurb || ''} (analog swing)</small></span><select id="sTempo">${TEMPO_IDS.map((k) => `<option value="${k}" ${s.tempo === k ? 'selected' : ''}>${TEMPOS[k].name}</option>`).join('')}</select></label>
+      <label class="set"><span>Tempo guide<small>Ticks on each count and a timing bar while you swing (always on in practice and the tutorial)</small></span><select id="sGuide"><option value="off" ${s.guide === 'off' ? 'selected' : ''}>Off</option><option value="ticks" ${s.guide === 'ticks' ? 'selected' : ''}>Ticks</option><option value="bar" ${s.guide === 'bar' ? 'selected' : ''}>Ticks + bar</option></select></label>
       ${chk('sVoice', 'Caddie voice', s.caddyVoice, 'Your caddie speaks: the club and how hard to hit it (analog swing), and what he thinks of your shots.')}
       <label class="set"><span>Distances</span><select id="sUnits"><option value="yd" ${s.units !== 'm' ? 'selected' : ''}>Yards</option><option value="m" ${s.units === 'm' ? 'selected' : ''}>Metres</option></select></label>
       <label class="set"><span>Swing control</span><select id="sCtl"><option value="meter" ${s.control === 'meter' ? 'selected' : ''}>3-click meter</option><option value="mouse" ${s.control === 'mouse' ? 'selected' : ''}>Analog mouse swing</option></select></label>
@@ -1011,6 +1051,8 @@ export class UI {
     $('sVol').oninput = (e) => { s.volume = +e.target.value; g.audio.setVolume(s.volume); g.saveSettings(); };
     $('sTracer').onchange = (e) => { s.tracer = e.target.checked; save(); };
     $('sCaddie').onchange = (e) => { s.caddie = e.target.value; g.greeted = false; g.saveSettings(); this.showSettings(true); };
+    $('sGuide').onchange = (e) => { s.guide = e.target.value; g.saveSettings(); };
+    $('sTempo').onchange = (e) => { s.tempo = e.target.value; g.saveSettings(); this.showSettings(true); };
     $('sVoice').onchange = (e) => { s.caddyVoice = e.target.checked; g.saveSettings(); };
     $('sUnits').onchange = (e) => { s.units = e.target.value; save(); g.updateHUD?.(true); };
     $('sCtl').onchange = (e) => { s.control = e.target.value; save(); };
@@ -1127,8 +1169,10 @@ export class UI {
         <li>In flight: hold <b>${k('fastForward')}</b> to fast-forward, <b>${k('skip')}</b> skips to where it finishes. <b>${k('replay')}</b> replays the shot from a new angle.</li>
         <li>Right-drag orbits the camera; the wheel zooms.</li>`;
     const analog = touch
-      ? `<ol><li>Your caddie tells you how hard to hit it ("about 75%", or "go all out"). Put one finger on the view and drag <b>down</b> that far – the blue mark on the scale is his number.</li><li>Take it back on a <b>three-second count</b> (1… 2… 3), whatever the distance. Reaching the top right on 3 is a pure strike.</li><li>Then drag <b>up</b> past the start point, straight – drifting left or right opens/closes the clubface.</li></ol>`
-      : `<ol><li>Your caddie tells you how hard to hit it ("about 75%", or "go all out"). Hold the left mouse button and pull <b>down</b> that far – the blue mark on the scale is his number.</li><li>Take it back on a <b>three-second count</b> (1… 2… 3), whatever the distance. Reaching the top right on 3 is a pure strike; rushed or slow costs contact and turns the face.</li><li>Then push <b>up</b> past the start point, straight – drifting left or right opens/closes the clubface.</li></ol>
+      ? `<ol><li>Your caddie tells you how hard to hit it ("about 75%", or "go all out"). Put one finger on the view and drag <b>down</b> that far – the blue mark on the scale is his number.</li><li>Take it back on a <b>three-count</b> (1… 2… 3) at your chosen tempo (24/8 by default: a 0.8 s backswing), whatever the distance. Reaching the top right on 3 is a pure strike. Putts and short wedge shots take <b>two</b> counts back instead; the club box tells you.</li><li>Then drag <b>up</b> past the start point, straight – drifting left or right opens/closes the clubface.</li></ol>
+        <p class="muted small">Tap the shot-options button, then <b>practice</b>, and your next drag is a practice swing: same timing feedback, no shot.</p>`
+      : `<ol><li>Your caddie tells you how hard to hit it ("about 75%", or "go all out"). Hold the left mouse button and pull <b>down</b> that far – the blue mark on the scale is his number.</li><li>Take it back on a <b>three-count</b> (1… 2… 3) at your chosen tempo (24/8 by default: a 0.8 s backswing), whatever the distance. Reaching the top right on 3 and pushing through in one count is a pure strike; rushed or slow costs contact and turns the face. Putts and short wedge shots (under about 50%) take <b>two</b> counts back and one through – the club box and your caddie tell you which.</li><li>Then push <b>up</b> past the start point, straight – drifting left or right opens/closes the clubface.</li></ol>
+        <p class="muted small">Hold <b>Shift</b> while you swing for a practice swing: same timing feedback, no shot.</p>
         <p class="muted small">Gamepad: the right stick does the same – pull back, then push up.</p>`;
     h.innerHTML = `<h2>How to play</h2>
       <div class="help-cols">

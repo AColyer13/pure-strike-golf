@@ -87,8 +87,14 @@ export class Input {
     if (st === 'flight' && a === 'skip') { g.skipFlight(); return true; }
     if (st === 'swing' && a === 'swing') { g.meterClick(); return true; }
     if (st !== 'address') return false;
+    if (a === 'practice') {
+      const m = g.mouseSwing; m.armed = !m.armed;
+      document.querySelector('.tc-prac')?.classList.toggle('set', m.armed);
+      g.ui.toast(m.armed ? 'Practice swing: your next drag is free, no shot' : 'Practice off');
+      return true;
+    }
     if (a === 'swing') {
-      if (g.settings.control === 'mouse') g.ui.toast('Analog swing: hold the left button, take it back on a 3-count, push through');
+      if (g.settings.control === 'mouse') g.ui.toast(g.ui.touch ? 'Analog swing: drag down on the view on a 3-count, then flick up' : 'Analog swing: hold the left button, take it back on a 3-count, push through');
       else g.meterClick();
       return true;
     }

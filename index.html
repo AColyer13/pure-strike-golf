@@ -67,6 +67,8 @@
         <div class="opt"><label>Assists</label><div id="optDiff" class="segs"></div><div id="optDiffDesc" class="seg-desc muted small"></div></div>
         <div class="opt"><label>Distances</label><div id="optUnits" class="segs"></div></div>
         <div class="opt"><label>Swing</label><div id="optControl" class="segs"></div><div id="optControlDesc" class="seg-desc muted small"></div></div>
+        <div class="opt"><label>Tempo</label><div id="optTempo" class="segs"></div><div id="optTempoDesc" class="seg-desc muted small"></div></div>
+        <div class="opt"><label>Guide</label><div id="optGuide" class="segs"></div><div id="optGuideDesc" class="seg-desc muted small"></div></div>
         <div class="opt"><label>Caddie</label><div id="optCaddie" class="segs"></div><div id="optCaddieDesc" class="seg-desc muted small"></div></div>
       </div>
     </details>
@@ -98,6 +100,7 @@
   <div id="clubBox" class="panel">
     <div class="club-top"><span class="club-key" id="clubKey"></span><span class="club-name" id="clubName"></span><span class="club-arrows">↑↓</span></div>
     <div class="sub" id="clubDist"></div>
+    <div class="sub" id="clubTempo"></div>
     <div class="club-row" id="shapeRow"><span title="Shape: draw curves the ball right-to-left, fade left-to-right (for a right-hander).">Shape <b id="shapeVal"></b> <kbd id="kShapeL"></kbd><kbd id="kShapeR"></kbd></span><span title="Flight: low runs under the wind and rolls out, high lands soft and stops quickly.">Flight <b id="trajVal"></b> <kbd id="kTrajU"></kbd><kbd id="kTrajD"></kbd></span></div>
   </div>
   <div id="lieBox" class="panel" title="Lie: the percentage is how much distance the grass costs you. Rough and sand take yards off.">
@@ -127,6 +130,7 @@
     <div class="tc-opts" role="group" aria-label="Shot options">
       <button data-act="aimPin" aria-label="Aim at the pin">⚑<small>pin</small></button>
       <button data-act="shapeCycle" aria-label="Shot shape: draw, straight, fade">⤳<small>shape</small></button>
+      <button data-act="practice" class="tc-prac" aria-label="Practice swing: the next swing is free, no shot">↺<small>practice</small></button>
       <button data-act="trajCycle" aria-label="Ball flight: low, standard, high">⤒<small>flight</small></button>
     </div>
     <button data-act="skip" aria-label="Skip"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5l11 7-11 7zM18 5v14" fill="currentColor" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/></svg><small>skip</small></button>

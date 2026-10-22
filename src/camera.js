@@ -362,11 +362,13 @@ export class CameraDirector {
     // portrait phone, lining up a shot: the golfer stands left of the ball and would hug the left edge,
     // so slide the picture right (a putt, framed tighter, needs more) to bring the golfer toward the middle
     const lining = this.g.state === 'address' || this.g.state === 'swing' || this.g.state === 'backswing';
-    const wantShift = a > 0 && a < 0.8 && lining && !this.targetView ? (this.g.club?.putter ? 0.19 : 0.09) * clamp((0.8 - a) / 0.3, 0, 1) : 0;
+    // (the ramp runs on into a squarish window, where the golfer is just as tall and hugs the top)
+    const tall = clamp((1.05 - a) / 0.55, 0, 1);
+    const wantShift = a > 0 && a < 1.05 && lining && !this.targetView ? (this.g.club?.putter ? 0.19 : 0.09) * tall : 0;
     this.shiftX += (wantShift - this.shiftX) * (1 - Math.exp(-dt * 6));
     if (Math.abs(this.shiftX - wantShift) < 0.001) this.shiftX = wantShift;
     // ...and the ball is held so high (clear of the HUD) that the golfer hugs the top, so slide the picture down toward the middle
-    let wantY = a > 0 && a < 0.8 && lining && !this.targetView ? (this.g.club?.putter ? 0.33 : 0.3) * clamp((0.8 - a) / 0.3, 0, 1) : 0;
+    let wantY = a > 0 && a < 1.05 && lining && !this.targetView ? (this.g.club?.putter ? 0.33 : 0.3) * tall : 0;
     // a short landscape window: the swing meter's cue line would run across the golfer's feet, so lift the picture a little
     if (a >= 1 && innerHeight < 500 && lining && !this.targetView) wantY = this.g.club?.putter ? -0.035 : -0.08;
     // target view on a portrait phone: the cards and meter fill the bottom third, so frame the picture in the clear band above them

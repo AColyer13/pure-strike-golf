@@ -15,7 +15,7 @@ import { BallSim, LIES, SURFACES, puttSpeedFor, BALL } from './physics.js';
 import { buildBag } from './clubs.js';
 import { YD, FT, mulberry32 } from './hole.js';
 import { scoreName } from './stats.js';
-import { SwingMeter, MouseSwing, meterToStrike, tempoToMeterError, BACKSWING_S, TEMPO_PURE } from './meter.js';
+import { SwingMeter, MouseSwing, meterToStrike, tempoToMeterError, tempo, setTempo, setCounts, countsFor, tempoNote, DEFAULT_TEMPO } from './meter.js';
 import { say, hush } from './voice.js';
 import { CADDIES, advice, greeting, tempoLine, judgeShot, reaction } from './caddies.js';
 import { SoundEngine } from './audio.js';
@@ -138,7 +138,7 @@ export class Game {
     const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
     return {
       // a first visit starts a typical golfer on the middle tees; saved settings from before tee sets keep the back tees
-      profile: 'mid', difficulty: 'standard', tees: Object.keys(s).length ? 'back' : 'middle', control: 'meter', units: 'yd', volume: 0.7, tracer: true, caddyVoice: true, caddie: 'tech',
+      profile: 'mid', difficulty: 'standard', tees: Object.keys(s).length ? 'back' : 'middle', control: 'mouse', units: 'yd', volume: 0.7, tracer: true, caddyVoice: true, caddie: 'tech', tempo: DEFAULT_TEMPO, guide: 'off',
       reducedMotion: reduce, oneButton: false, captions: false, uiScale: 1, keys: {}, ffSeen: 0, quality: 'auto', ...s,
     };
   }
@@ -328,7 +328,12 @@ export class Game {
     this.mouseSwing.putt = !!this.club.putter;
     this.mouseSwing.result = null;
     this.mouseSwing.target = null; this.powerReady = false; this.adviceErr = 0;
-    this.mouseSwing.count = !!this.tutorial || this.round?.mode === 'practice'; // the 3-second count is a training aid
+    setTempo(this.settings.tempo);
+    setCounts(countsFor(this.club, this.suggestedPower));
+    // the tempo guide: ticks on each count, and the timing bar; always on in training
+    const training = !!this.tutorial || this.round?.mode === 'practice', guide = this.settings.guide;
+    this.mouseSwing.count = training || guide === 'ticks' || guide === 'bar';
+    this.mouseSwing.bar = training || guide === 'bar';
     document.body.classList.toggle('analog', this.mouseSwing.enabled);
     this.mouseSwing.draw();
     this.world.showGreenGrid(this.onGreen ? !this.gridHide : this.nearGreen() && this.gridOn);
@@ -463,10 +468,11 @@ export class Game {
     const where = c.putter ? this.fmtPutt(this.puttEqFt) : full ? '' : this.fmtDist(this.pl ? this.pl.plays : this.distToPin());
     const words = (t) => t.replace(/(\d+)%/, '$1 percent').replace(/\b(\d+) yds\b/g, '$1 yards').replace(/\b(\d+(?:\.\d)?) m\b/g, '$1 metres').replace(/\b(\d+) ft\b/g, '$1 feet');
     const id = this.settings.caddie;
+    const cnt = tempo.counts === 3 ? '' : ` ${tempo.counts === 2 ? 'Two' : tempo.counts} counts back, one through.`;
     if (!CADDIES[id]) {
       const head = `${c.name}${where ? `, ${where}` : ''}.`;
       const how = full ? 'Go all out.' : `Hit this about ${pct}%.`;
-      return { text: `${head} ${how}`, say: words(`${head} ${how}`), pct, err: 0 };
+      return { text: `${head} ${how}${cnt}`, say: words(`${head} ${how}${cnt}`), pct, err: 0 };
     }
     // what Angus knows about the course: the caddie's aim and lie notes, the trees, the break
     const m = this.caddie.msg || '';
@@ -477,10 +483,11 @@ export class Game {
       wind: this.pl ? this.pl.windAdj / YD : 0, elev: this.pl ? this.pl.elevAdj / YD : 0, tip,
       seed: `${this.round?.i}|${this.strokes}|${this.ballNo}|${c.key}`, greet: !this.greeted,
     });
-    return { ...out, say: words(out.say) };
+    return { ...out, text: out.text + cnt, say: words(out.say + cnt) };
   }
   // the blue mark on the swing follows what the caddie says (Nigel is sometimes a tad out)
   syncTarget() {
+    setCounts(countsFor(this.club, this.suggestedPower)); // (the count depends on the club and how hard it is to be hit)
     const a = this.analogAdvice();
     this.mouseSwing.target = a ? a.pct / 100 : this.suggestedPower;
     this.adviceErr = a?.err || 0;
@@ -516,18 +523,41 @@ export class Game {
     if (this.settings.caddyVoice) say(line, this.settings.volume, p.voice);
   }
 
-  // a 3-second backswing is a pure strike; each tenth of a second off costs contact and turns the face
+  // Shift + swing: the same swing and the same feedback, but the ball stays put
+  practiceSwing(r) {
+    // the golfer swings through at the same power, and the ball stays where it is
+    this.golfer.startSwing(this.club.putter ? r.power : clamp(r.power, 0.35, 1.05), () => {});
+    this.golfer.phase = 'down'; this.golfer.t = 0;
+    this.practicing = true; // (the frame loop ends it when the follow-through is done)
+    const e = r.backTime - tempo.back;
+    const kind = Math.abs(e) <= tempo.pure ? 'pure' : e < 0 ? 'quick' : 'slow';
+    const p = CADDIES[this.settings.caddie];
+    const line = (p ? tempoLine(p.id, kind) : { pure: 'Smooth tempo.', quick: 'Too quick.', slow: 'Too slow.' }[kind]);
+    this.ui.toast(`Practice swing: ${line}`);
+    this.practiceLine = this.settings.caddyVoice ? { line, voice: p?.voice } : null;
+  }
+  endPractice() {
+    this.practicing = false;
+    this.golfer.phase = 'idle';
+    if (this.state === 'swing') this.state = 'address';
+    if (this.practiceLine) say(this.practiceLine.line, this.settings.volume, this.practiceLine.voice);
+    this.practiceLine = null;
+  }
+
+  // a backswing on the count (3 counts at the chosen tempo) is a pure strike; off it costs contact and turns the face
   mouseDone(r) {
     if (r.backTime != null) {
       const putt = !!this.club.putter;
       const zone = (putt ? this.diff.puttZone : this.diff.zone) * this.lieZone();
       const t = meterToStrike(tempoToMeterError(r.backTime, zone), zone, putt);
       r = { ...r, face: r.face + t.face, strike: r.strike * t.strike };
+      if (this.mouseSwing.result) Object.assign(this.mouseSwing.result, { finalFace: r.face, tempoFace: t.face }); // (what the readout shows)
     }
+    if (r.practice) { this.practiceSwing(r); return; }
     this.executeSwing(r);
     if (r.backTime == null) return;
-    const e = r.backTime - BACKSWING_S;
-    const kind = Math.abs(e) <= TEMPO_PURE ? 'pure' : e < 0 ? 'quick' : 'slow';
+    const e = r.backTime - tempo.back;
+    const kind = Math.abs(e) <= tempo.pure ? 'pure' : e < 0 ? 'quick' : 'slow';
     const p = CADDIES[this.settings.caddie];
     const line = p ? (kind === 'pure' && Math.random() < 0.6 ? '' : tempoLine(p.id, kind)) : { pure: 'Smooth tempo.', quick: 'Too quick.', slow: 'Too slow.' }[kind];
     if (line && this.settings.caddyVoice) say(line, this.settings.volume, p?.voice);
@@ -1127,6 +1157,7 @@ export class Game {
       puttEq: this.club.putter && !resting ? this.puttEqFt : null,
       nearGreen: this.nearGreen(),
       wind: this.windRel(), windMph: this.windMph,
+      tempoNote: this.settings.control === 'mouse' ? tempoNote(this.club) : '', tempoAlt: tempo.counts !== 3,
       club: this.club, clubCarry: this.club.putter ? `${fmtFt(this.puttRange, this.settings.units)} range` : `Carry ${this.fmtDist(this.club.carry)} · Total ${this.fmtDist(this.club.total)}`,
       lie: b.isTee ? SURFACES.tee.name : b.surface === 'tee' ? 'Tee box · fairway lie' : SURFACES[b.surface]?.name || b.surface,
       lieKey: lk, lieRange: lk === 'splash' ? 'Explosion shot' : `${lie.dist[0]}–${lie.dist[1]}%`, slope: resting ? { up: 0, side: 0 } : this.slope(),
@@ -1219,6 +1250,7 @@ export class Game {
       else if (st === 'flight') this.updateFlight(dt);
       else if (st === 'replay') this.updateReplay(dt);
       if (['backswing', 'flight', 'result', 'address', 'swing', 'flyover', 'replay'].includes(st) && !(st === 'flight' && this.hang > 0)) this.golfer.update(dt);
+      if (this.practicing && this.golfer.phase === 'hold') this.endPractice();
       // camera targets
       if (st === 'address' || st === 'swing' || st === 'backswing') {
         const c = this.cam.targetView ? this.cam.target() : this.cam.address();
@@ -1237,7 +1269,7 @@ export class Game {
     // the touch buttons and cards follow the game state, even mid-swing when the HUD numbers are not refreshed
     if (st !== this.hudState) { this.hudState = st; this.ui.setState(st); }
     this.hudTimer += dt;
-    if (this.hudTimer > 0.25 && (st === 'address' || st === 'flight')) { this.hudTimer = 0; this.updateHUD(st === 'flight'); }
+    if (this.hudTimer > 0.25 && (st === 'address' || st === 'flight')) { this.hudTimer = 0; this.updateHUD(st === 'flight' || this.ui.mmDirty); }
     this.tutorial?.update(dt);
     this.post.render();
   }

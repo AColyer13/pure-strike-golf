@@ -156,7 +156,7 @@ select { font: 500 13px Barlow, sans-serif; background: #173022; color: var(--te
 .hc-score { font: 800 26px 'Barlow Condensed', sans-serif; }
 .hc-score.under { color: #ff6b5e; }
 .hc-score.over { color: #8fc6ff; }
-#distBox { top: 100px; left: 14px; min-width: 180px; }
+#distBox { top: 100px; left: 14px; min-width: 0; width: max-content; }
 #distBox .sub { display: flex; flex-direction: column; gap: 1px; }
 .elev { font-size: 12px; }
 #windBox { top: 14px; right: 14px; display: flex; gap: 12px; align-items: center; }
@@ -164,7 +164,11 @@ select { font: 500 13px Barlow, sans-serif; background: #173022; color: var(--te
 #windArrow { font-size: 22px; color: var(--blue); transition: transform .4s; }
 #windArrow i { display: block; font-style: normal; transform: rotate(-90deg); }
 #windBox .big small { font-size: 14px; color: var(--muted); }
-#clubBox { left: 14px; bottom: 140px; min-width: 250px; }
+/* the key hints can wrap to two lines on a narrow window: --hb-h (their height, set from JS) keeps the club box above them */
+#clubBox { left: 14px; bottom: max(140px, calc(var(--hb-h, 0px) + 24px)); min-width: 250px; }
+#clubTempo { font-size: 12px; }
+#clubTempo:empty { display: none; }
+#clubTempo { color: #ffd24d; font-weight: 700; }
 .club-top { display: flex; align-items: center; gap: 8px; }
 .club-key { font: 800 18px 'Barlow Condensed', sans-serif; background: #fff; color: #10241a; border-radius: 6px; padding: 1px 7px; }
 .club-name { font: 700 20px 'Barlow Condensed', sans-serif; }
@@ -172,7 +176,7 @@ select { font: 500 13px Barlow, sans-serif; background: #173022; color: var(--te
 .club-row { display: flex; gap: 14px; font-size: 12px; margin-top: 6px; color: var(--muted); }
 .club-row b { color: var(--text); }
 .club-row.dim { opacity: .35; }
-#lieBox { left: 14px; bottom: 236px; min-width: 170px; }
+#lieBox { left: 14px; bottom: 236px; min-width: 0; width: max-content; }
 .lie-name { font: 700 20px 'Barlow Condensed', sans-serif; }
 .lie-range { font-weight: 700; color: var(--accent); }
 #lieBox[data-lie="deep"] .lie-range, #lieBox[data-lie="splash"] .lie-range { color: var(--red); }
@@ -423,6 +427,9 @@ body[data-state="address"][data-putt="1"] .tc-pin { display: block; }
 .tc-opts { position: absolute; right: 0; top: 0; height: 44px; gap: 4px; z-index: 1; border-radius: 22px; background: rgba(10,22,16,.92); }
 body.tc-opts[data-state="address"]:not([data-putt="1"]) .tc-opts { display: flex; animation: tin .15s ease-out; }
 .tc-opts button { flex: 0 0 48px; }
+.tc-prac { display: none; }
+body.analog .tc-prac { display: block; }
+.tc-prac.set { background: var(--accent); color: #17210f; }
 /* only what matters now stays up: mid-swing just the swing button and the meter; once the ball is away
    the aim and club buttons and the club card go, and on the result the swing button too (tap anywhere continues) */
 body.touch.in-round:is([data-state="swing"], [data-state="backswing"]) :is(.tc-left, .tc-right > :not(.tc-swing)) { visibility: hidden; }
@@ -486,7 +493,7 @@ body.touch.in-round #caddieText { display: -webkit-box; -webkit-box-orient: vert
   /* no touch buttons here, so the club box sits just above the meter and the key hint bar steps aside */
   body:not(.touch).in-round #helpBar { display: none; }
   body:not(.touch).in-round #meter { bottom: 10px; }
-  body:not(.touch).in-round #clubBox { bottom: 106px; min-width: 0; max-width: 270px; }
+  body:not(.touch).in-round #clubBox { bottom: max(106px, calc(var(--hb-h, 0px) + 24px)); min-width: 0; max-width: 270px; }
   body:not(.touch).in-round #clubBox kbd { display: none; }
   body:not(.touch).in-round #clubBox .club-row { gap: 10px; }
 }
@@ -518,6 +525,8 @@ body.in-round:not(.target-view) #hud:not([data-state="flight"]) #caddie { right:
 .lie-line { display: flex; flex-wrap: wrap; gap: 0 6px; align-items: baseline; font-size: 12px; margin-top: 3px; padding-top: 4px; border-top: 1px solid var(--line); }
 .lie-line b { font: 700 15px 'Barlow Condensed', sans-serif; color: var(--text); }
 .lie-line .lie-range { font-size: 12px; }
+.lie-facts { display: flex; flex-direction: column; flex-basis: 100%; gap: 0; line-height: 1.25; }
+body.touch.in-round #distBox .lie-facts { align-items: flex-end; }
 .lie-line[data-lie="deep"] .lie-range, .lie-line[data-lie="splash"] .lie-range { color: var(--red); }
 
 /* phones, either way up: the putt note and the tour-average sums wait under Details, so the cards stay small */
@@ -743,7 +752,12 @@ body.touch.in-round #distBox .sub { font-size: 11px; }
 body.touch.in-round.pintag:not(.coaching) #distBox .big, body.touch.in-round.pintag:not(.coaching) #distBox .plays { display: none; }
 body.touch.in-round.pintag:not(.coaching) #distBox:not(:has(.lie-line)) { display: none; }
 @media (orientation: portrait) { body.touch.in-round #distBox { top: 58px; } }
+/* a portrait phone shows the map at address (not putting) and in flight: ui.placeMinimap sizes it, or hides it when it won't fit */
 body.touch.in-round:not(.target-view) #hud #minimap { display: none !important; }
+@media (orientation: portrait) {
+  body.touch.in-round:not(.target-view):not(.coaching) #hud[data-state="address"]:not([data-putt="1"]) #minimap, body.touch.in-round:not(.target-view) #hud[data-state="flight"] #minimap { display: block !important; }
+  body.touch.in-round #hud #minimap.mm-nofit { display: none !important; }
+}
 body.touch.in-round #caddie { font-size: 12px; padding: 5px 10px; transition: opacity .6s; }
 body.touch.in-round #caddie.quiet { opacity: 0; pointer-events: none; }
 body.touch.in-round #clubBox { padding: 4px 10px; }
@@ -771,8 +785,8 @@ body.touch.in-round #caddie .caddie-ico { color: var(--accent); }
 }
 /* a narrow window with a mouse (no touch rules): the note sits on the club card, full width, not mid-screen */
 @media (max-width: 700px) and (orientation: portrait) {
-  body.in-round:not(.touch) #caddie { left: 14px; right: 14px; max-width: none; bottom: 214px; }
-  body.in-round:not(.touch)[data-putt="1"] #caddie { bottom: 190px; }
+  body.in-round:not(.touch) #caddie { left: 14px; right: 14px; max-width: none; bottom: calc(var(--hb-h, 0px) + 134px); }
+  body.in-round:not(.touch)[data-putt="1"] #caddie { bottom: calc(var(--hb-h, 0px) + 112px); }
   /* the result card is full width here and the club card is not part of it: stack, don't overlap */
   body.in-round:not(.touch) #shotPanel { left: 14px; right: 14px; width: auto; }
   body.in-round:not(.touch):not([data-state="address"], [data-state="swing"], [data-state="backswing"]) #clubBox { opacity: 0; pointer-events: none; }
@@ -798,7 +812,18 @@ body.in-round[data-putt="1"] #clubBox .club-row { display: none; }
 
 /* Analog swing: no meter strip; the caddie says how far back to go and the depth scale is on the swing itself */
 body.analog #meter { display: none; }
-body.analog:not(.touch).in-round #clubBox { bottom: 28px; }
+/* touch + analog: the drag on the view is the swing, so there is no SWING button (it comes back as fast-forward in flight) */
+body.analog.touch:is([data-state="address"], [data-state="swing"], [data-state="backswing"]) .tc-swing { display: none; }
+body.touch.in-round #distBox .lie-line { border-top: 0; margin-top: 0; padding-top: 0; }
+@media (orientation: portrait) {
+  /* with the big button gone the arrows fit in one row and the stack above sits lower */
+  body.analog.touch { --tc-h: 48px; --tcb: calc(var(--tc-h) + 22px + env(safe-area-inset-bottom)); }
+  body.analog.touch .tc-left { grid-template-columns: repeat(4, 44px); gap: 4px; }
+  body.analog.touch .tc-left button { width: 44px; height: 44px; }
+  body.analog.touch .tc-right { width: calc(100vw - 20px - 188px - 8px); }
+  body.analog.touch .tc-opts button { flex-basis: 42px; }
+}
+body.analog:not(.touch).in-round #clubBox { bottom: max(28px, calc(var(--hb-h, 0px) + 22px)); }
 @media (orientation: portrait) {
   body.analog.touch.in-round #clubBox { bottom: calc(var(--tcb) + 8px); }
   body.analog.touch.in-round :is(#lieBox, #caddie) { bottom: calc(var(--tcb) + 64px); }

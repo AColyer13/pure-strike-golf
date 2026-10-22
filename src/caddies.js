@@ -36,14 +36,10 @@ export function rngFor(seed) {
 }
 const pick = (r, list) => list[Math.floor(r() * list.length) % list.length];
 
-// Angus has been at the whisky: his words slur and he hiccups
+// Angus has been at the whisky: the odd hiccup, never so much that you can't follow him
 export function drunk(text, r) {
-  let out = text
-    .replace(/\bthe\b/gi, "th'").replace(/\byou\b/gi, 'ye').replace(/\byour\b/gi, 'yer')
-    .replace(/\bto\b/gi, 'tae').replace(/\bno\b/gi, 'nae').replace(/\bof\b/gi, "o'").replace(/\bdon't\b/gi, 'dinnae');
-  const i = out.indexOf('. ');
-  if (i > 0 && r() < 0.6) out = `${out.slice(0, i + 1)} *hic*${out.slice(i + 1)}`;
-  return out;
+  const i = text.indexOf('. ');
+  return i > 0 && r() < 0.5 ? `${text.slice(0, i + 1)} *hic*${text.slice(i + 1)}` : text;
 }
 
 // What the caddie says before the swing. c = { club, dist, pct, full, putt, wind, elev, tip, seed, greet }
@@ -72,10 +68,10 @@ export function advice(id, c) {
     const how = c.full ? 'Reckon you can just lay into it – all out, friend!' : c.putt ? `Easy does it – around ${c.pct}% oughta do it.` : `Reckon around ${c.pct}% oughta do it.`;
     line = `${open} ${c.club}${c.dist ? `, ${c.dist} out` : ''}. ${how} ${cheer}`;
   } else {
-    const open = pick(r, ['Listen tae me, laddie.', 'Och, aye.', 'Right, wee man.']);
-    const how = c.full ? 'Gie it laldy!' : `${c.pct}%. Exactly.`;
-    const know = c.tip || (Math.abs(c.wind || 0) >= 3 ? `Wind’s ${c.wind > 0 ? 'in yer face' : 'at yer back'}.`
-      : r() < 0.5 ? pick(r, ['I ken every blade o’ grass on this course.', 'Walked this hole drunk mair times than ye’ve had hot dinners.', 'Saw a man lose a ball in that rough in ’98. Never found it.']) : '');
+    const open = pick(r, ['Listen, pal.', 'Aye, right.', 'Come here, I’ll tell you something.', 'Now, I love you, but listen.']);
+    const how = c.full ? 'Just give it laldy!' : `${c.pct}%. Trust me on that.`;
+    const know = c.tip || (Math.abs(c.wind || 0) >= 3 ? `Wind’s ${c.wind > 0 ? 'in your face' : 'at your back'}.`
+      : r() < 0.5 ? pick(r, ['I know every blade of grass on this course.', 'I’ve walked this hole drunk more times than you’ve had hot dinners.', 'Saw a man lose a ball in that rough in ’98. Never found it.', 'My brother-in-law hit one in there once. We don’t talk about him.']) : '');
     line = drunk([open, `${c.club}${where}.`, how, know].filter(Boolean).join(' '), r);
   }
   const text = `${CADDIES[id].name}: ${line}`;
@@ -84,13 +80,13 @@ export function advice(id, c) {
 }
 
 export function greeting(id) {
-  return { tech: 'Good day to you. Nigel, at your service. Shall we?', south: 'Howdy, partner! Bobby Ray here. Let’s have us some fun!', scot: 'Mornin’. *hic* Angus. I ken this course better than my ain mither.' }[id];
+  return { tech: 'Good day to you. Nigel, at your service. Shall we?', south: 'Howdy, partner! Bobby Ray here. Let’s have us some fun!', scot: 'Morning! *hic* Angus. I know this course better than my own mother. Don’t tell her.' }[id];
 }
 
 const TEMPO = {
   tech: { quick: 'Bit hurried, that.', slow: 'Rather a leisurely backswing.', pure: 'Lovely tempo.' },
   south: { quick: 'Easy now, darlin’, no rush!', slow: 'Come on, sugar, that ball ain’t gettin’ any younger!', pure: 'Smooth as sweet tea!' },
-  scot: { quick: 'Ye rushed it, ye numpty!', slow: 'Did ye fall asleep back there?', pure: 'Hmph. Acceptable.' },
+  scot: { quick: 'You rushed it, pal!', slow: 'Did you fall asleep back there?', pure: 'Hmph. Acceptable.' },
 };
 // after the swing: 'quick' | 'slow' | 'pure'
 export const tempoLine = (id, kind) => TEMPO[id]?.[kind] || '';
@@ -106,8 +102,8 @@ const REACT = {
     miss: ['Shake it off, partner. Next one’s yours.', 'Aw, that’s alright, darlin’. You’ll get ’em next time!', 'Chin up, friend. Ain’t nothin’ but a thing!'],
   },
   scot: {
-    great: ['Aye, no bad. Dinnae let it go tae yer heid.', 'Well, even a blind squirrel, eh?', 'That’s mair like it. Ye must’ve been listening.'],
-    miss: ['That wasnae the club, that was YE!', 'I tellt ye! Did ye no listen?', 'Ye’ve the swing o’ a wet haggis.', 'Dinnae look at me, I gave ye the perfect number!', 'Ach, ye muppet!'],
+    great: ['Aye, not bad. Don’t let it go to your head.', 'Well, even a blind squirrel finds a nut, eh?', 'That’s more like it. You must’ve been listening.'],
+    miss: ['That wasn’t the club, that was you.', 'I told you! Did you not listen?', 'Don’t look at me, I gave you the perfect number.', 'I love you, but that was terrible.', 'My granny swings better than that, and she’s been dead years.'],
   },
 };
 
