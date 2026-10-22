@@ -401,8 +401,7 @@ body[data-state="address"][data-putt="1"] .tc-pin { display: block; }
 .tc-opts { position: absolute; right: 0; top: 0; height: 44px; gap: 4px; z-index: 1; border-radius: 22px; background: rgba(10,22,16,.92); }
 body.tc-opts[data-state="address"]:not([data-putt="1"]) .tc-opts { display: flex; animation: tin .15s ease-out; }
 .tc-opts button { flex: 0 0 48px; }
-.tc-prac { display: none; }
-body.analog .tc-prac { display: block; }
+.tc-prac { display: block; }
 .tc-prac.set { background: var(--accent); color: #17210f; }
 /* only what matters now stays up: mid-swing just the swing button and the meter; once the ball is away
    the aim and club buttons and the club card go, and on the result the swing button too (tap anywhere continues) */
@@ -758,20 +757,20 @@ body.in-round[data-putt="1"] #clubBox .club-row { display: none; }
 }
 
 /* Analog swing: no meter strip; the caddie says how far back to go and the depth scale is on the swing itself */
-/* touch + analog: the drag on the view is the swing, so there is no SWING button (it comes back as fast-forward in flight) */
-body.analog.touch:is([data-state="address"], [data-state="swing"], [data-state="backswing"]) .tc-swing { display: none; }
+/* touch: the drag on the view is the swing, so there is no SWING button (it comes back as fast-forward in flight) */
+body.touch:is([data-state="address"], [data-state="swing"], [data-state="backswing"]) .tc-swing { display: none; }
 body.in-round #distBox .lie-line { border-top: 0; margin-top: 0; padding-top: 0; }
 body.in-round:not(.pintag) #distBox .lie-line { margin-top: 3px; }
 @media (orientation: portrait) {
   /* with the big button gone the arrows fit in one row and the stack above sits lower */
-  body.analog.touch { --tc-h: 48px; --tcb: calc(var(--tc-h) + 22px + env(safe-area-inset-bottom)); }
-  body.analog.touch .tc-left { grid-template-columns: repeat(4, 44px); gap: 4px; }
-  body.analog.touch .tc-left button { width: 44px; height: 44px; }
-  body.analog.touch .tc-right { width: calc(100vw - 20px - 188px - 8px); }
-  body.analog.touch .tc-opts button { flex-basis: 42px; }
+  body.touch { --tc-h: 48px; --tcb: calc(var(--tc-h) + 22px + env(safe-area-inset-bottom)); }
+  body.touch .tc-left { grid-template-columns: repeat(4, 44px); gap: 4px; }
+  body.touch .tc-left button { width: 44px; height: 44px; }
+  body.touch .tc-right { width: calc(100vw - 20px - 188px - 8px); }
+  body.touch .tc-opts button { flex-basis: 42px; }
 }
-body.analog:not(.touch).in-round #clubBox { bottom: max(28px, calc(var(--hb-h, 0px) + 22px)); }
+body:not(.touch).in-round #clubBox { bottom: max(28px, calc(var(--hb-h, 0px) + 22px)); }
 @media (orientation: portrait) {
-  body.analog.touch.in-round #clubBox { bottom: calc(var(--tcb) + 8px); }
-  body.analog.touch.in-round :is(#lieBox, #caddie) { bottom: calc(var(--tcb) + 64px); }
+  body.touch.in-round #clubBox { bottom: calc(var(--tcb) + 8px); }
+  body.touch.in-round :is(#lieBox, #caddie) { bottom: calc(var(--tcb) + 64px); }
 }
