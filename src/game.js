@@ -83,7 +83,12 @@ export class Game {
     this.mouseSwing.onBack = (b) => { this.golfer.phase = 'manual'; this.golfer.apply(-b); };
     this.mouseSwing.onDone = (r) => this.mouseDone(r);
     this.mouseSwing.onBeat = () => this.audio.ui('tick');
-    this.mouseSwing.onCancel = () => { this.golfer.phase = 'idle'; if (this.state === 'swing') this.state = 'address'; };
+    this.mouseSwing.onCancel = () => {
+      this.golfer.phase = 'idle';
+      if (this.state === 'swing') this.state = 'address';
+      this.coachCancel();
+    };
+    this.coach = { fails: 0, tempoMiss: 0, assist: false };
 
     this.cam = new CameraDirector(this, this.camera);
     this.caddie = new Caddie(this);
@@ -177,6 +182,7 @@ export class Game {
   // opts: { courseId, holes, mode, seed?, daily?: dateKey }
   // snap: a saved round (roundSnapshot) to carry on instead of starting afresh
   startRound(opts, snap = null) {
+    this.coach = { fails: 0, tempoMiss: 0, assist: false };
     this.ui.hideAll();
     this.audio.init();
     this.audio.setVolume(this.settings.volume);
@@ -300,8 +306,8 @@ export class Game {
     setCounts(countsFor(this.club, this.suggestedPower));
     // the tempo guide: ticks on each count, and the timing bar; always on in training
     const training = !!this.tutorial || this.round?.mode === 'practice', guide = this.settings.guide;
-    this.mouseSwing.count = training || guide === 'ticks' || guide === 'bar';
-    this.mouseSwing.bar = training || guide === 'bar';
+    this.mouseSwing.count = training || guide === 'ticks' || guide === 'bar' || this.coach.assist;
+    this.mouseSwing.bar = training || guide === 'bar' || this.coach.assist;
     this.mouseSwing.draw();
     this.world.showGreenGrid(this.onGreen ? !this.gridHide : this.nearGreen() && this.gridOn);
     this.world.arc.visible = true;
@@ -545,8 +551,47 @@ export class Game {
     const p = CADDIES[this.settings.caddie];
     // shown in the result card, and spoken with the caddie's word on the shot (a pure swing is only mentioned there)
     this.tempoKind = kind;
+    this.coachTempo(kind);
     this.tempoNote = p ? tempoLine(p.id, kind, Math.random, this.recent) : null;
     if (!p && this.settings.caddyVoice) say({ pure: 'Smooth tempo.', quick: 'Too quick.', slow: 'Too slow.' }[kind], this.settings.volume);
+  }
+
+  // ------------------------------------------------------------------ swing coaching
+  // A swing that goes nowhere must say why, in the moment, and keep helping if it keeps happening:
+  // first a plain instruction, then the free practice swing, then the tempo bar, then an armed practice swing.
+  coachCancel() {
+    const m = this.mouseSwing, c = this.coach;
+    if (this.state !== 'address' || this.tutorial || m.practice) return;
+    c.fails++;
+    const pulled = m.maxY - m.y0 > 12;
+    let msg = !pulled ? 'Hold the button and drag down to take the club back, then push up to hit.'
+      : m.phase === 'fwd' ? 'Keep going: push up past where you started to hit the ball.'
+      : 'Pull down to take the club back, then push up past where you started.';
+    if (c.fails === 2) msg += ' Hold Shift for a free practice swing.';
+    this.ui.toast(msg, 'bad');
+    if (c.fails >= 3 && !c.assist) {
+      this.coachAssistOn();
+      this.ui.toast('Tempo bar on: reach the top of the backswing on count 3, then push up.');
+    }
+    if (c.fails >= 5 && !m.armed) {
+      m.armed = true; document.querySelector('.tc-prac')?.classList.add('set');
+      this.ui.toast('Your next swing is a free practice swing. Take your time.');
+      c.fails = 3;
+    }
+  }
+  coachTempo(kind) {
+    const c = this.coach;
+    if (kind === 'pure') { c.fails = 0; c.tempoMiss = 0; c.assist = false; return; }
+    c.fails = 0; c.tempoMiss++;
+    if (c.tempoMiss === 2) this.ui.toast(kind === 'quick' ? 'Too quick: take it back slower, top of the swing on count 3.' : 'Too slow: reach the top of the swing on count 3.', 'bad');
+    else if (c.tempoMiss >= 3 && !c.assist && this.settings.guide !== 'bar') {
+      this.coachAssistOn();
+      this.ui.toast('Tempo bar on: aim for the green mark at the top of the swing.');
+    }
+  }
+  coachAssistOn() {
+    this.coach.assist = true;
+    this.mouseSwing.count = true; this.mouseSwing.bar = true;
   }
 
   // ------------------------------------------------------------------ previews
@@ -1085,6 +1130,8 @@ export class Game {
     else if (x < m) { side = -1; x = m; } else if (x > W - m) { side = 1; x = W - m; }
     if (side) y = clamp(y, 120, H * 0.5);
     else y = clamp(y - 20, 100, H * 0.55);
+    // on a phone the top-right corner holds the wind, distance and lie boxes and the minimap: keep the tag between them
+    if (W < 480 && x > W - 175) y = clamp(y, 150, 208);
     // keep the tag off the golfer's head when the flag lines up behind them
     if (this.golfer?.head) {
       const hv = (this.pinH = this.pinH || new THREE.Vector3());

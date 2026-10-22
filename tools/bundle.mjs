@@ -39,9 +39,17 @@ export const SW = path.join(root, 'sw.js');
 const VERSION_LINE = /^const VERSION = '[^']*';$/m;
 export function swVersion(out) {
   const read = (f) => lf(fs.readFileSync(path.join(root, f)));
-  const h = createHash('sha256').update(lf(out)).update(read('index.html')).update(read('styles.css'))
+  const h = createHash('sha256').update(lf(out)).update(stampedIndex(out)).update(read('styles.css'))
     .update(read('sw.js').replace(VERSION_LINE, '')).digest('hex').slice(0, 8);
   return `psg-${h}`;
+}
+// index.html names the bundle with a content hash (dist/game.js?v=...), so a page fetched fresh can
+// never run against an older cached bundle after a deploy
+export const INDEX = path.join(root, 'index.html');
+const SCRIPT_REF = /dist\/game\.js(\?v=[0-9a-f]+)?"/g;
+export const bundleHash = (out) => createHash('sha256').update(lf(out)).digest('hex').slice(0, 8);
+export function stampedIndex(out) {
+  return lf(fs.readFileSync(INDEX)).replace(SCRIPT_REF, `dist/game.js?v=${bundleHash(out)}"`);
 }
 export function stampedSw(out) {
   return fs.readFileSync(SW, 'utf8').replace(VERSION_LINE, `const VERSION = '${swVersion(out)}';`);
@@ -57,14 +65,19 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       console.error('dist/game.js is out of date: run npm run bundle');
       process.exit(1);
     }
+    if (lf(fs.readFileSync(INDEX)) !== stampedIndex(out)) {
+      console.error('index.html bundle version is out of date: run npm run bundle');
+      process.exit(1);
+    }
     if (lf(fs.readFileSync(SW)) !== lf(stampedSw(out))) {
       console.error('sw.js cache version is out of date: run npm run bundle');
       process.exit(1);
     }
-    console.log('dist/game.js and the sw.js cache version are current');
+    console.log('dist/game.js, the index.html bundle version and the sw.js cache version are current');
   } else {
     fs.mkdirSync(path.dirname(OUT), { recursive: true });
     fs.writeFileSync(OUT, out);
+    fs.writeFileSync(INDEX, stampedIndex(out));
     fs.writeFileSync(SW, stampedSw(out));
     console.log(`wrote dist/game.js (${(out.length / 1024).toFixed(0)} kB), cache ${swVersion(out)}`);
   }

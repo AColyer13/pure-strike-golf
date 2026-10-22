@@ -60,7 +60,7 @@ export class CameraDirector {
     this.flyT = 0;
     this.fov = 50;
     this.par3 = h.par === 3;
-    this.flyDur = this.par3 ? 6 : clamp(3.5 + (h.length - h.teeS) / 110, 4, 8.5);
+    this.flyDur = this.par3 ? 3.5 : clamp(2 + (h.length - h.teeS) / 200, 2.5, 5); // short: most players skip a long one
   }
   // returns true when finished
   flyover(dt) {

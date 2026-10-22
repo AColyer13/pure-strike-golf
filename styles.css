@@ -70,6 +70,8 @@ h1.logo { margin: 0; line-height: 1.1; }
 .tagline { color: #d8e8dd; font-weight: 500; text-shadow: 0 2px 8px rgba(0,0,0,.6); }
 .course-tabs { display: flex; flex-wrap: nowrap; gap: 6px; overflow-x: auto; scrollbar-width: none; scroll-snap-type: x proximity; }
 .course-tabs::-webkit-scrollbar { display: none; }
+/* when the tabs overflow (a narrow window or a phone) fade the clipped edge so it reads as scrollable */
+.course-tabs.more { -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 32px), transparent); }
 .course-tab { flex: none; scroll-snap-align: start; white-space: nowrap; }
 .course-tab { display: flex; align-items: center; gap: 8px; font: 600 14px Barlow, sans-serif; color: var(--text); background: rgba(255,255,255,.06); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px 6px 10px; cursor: pointer; }
 .course-tab .cc-flag { width: 10px; height: 16px; }
@@ -427,7 +429,7 @@ body.touch.in-round #lieBox { bottom: calc(24px + 102px + 52px + env(safe-area-i
 /* keep overlays out from under the button columns: portrait stacks them above, landscape narrows them */
 @media (orientation: portrait) {
   body.touch.in-round #intro { bottom: var(--tcb); width: min(640px, calc(100vw - 16px)); }
-  body.touch.in-round #shotPanel { bottom: var(--tcb); max-height: calc(100vh - var(--tcb) - 70px); }
+  body.touch.in-round #shotPanel { bottom: calc(var(--tcb) + 8px); max-height: calc(100vh - var(--tcb) - 78px); }
   body.touch.in-round #captions, body.touch.in-round #ffHint { bottom: calc(var(--tcb) + 8px); }
   /* the club box sits on the meter, the caddie's note on the club box (and on the lie box, when the full HUD shows it) */
   body.touch.in-round #clubBox { bottom: calc(var(--tcb) + 78px); }

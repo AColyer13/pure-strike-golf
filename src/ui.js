@@ -177,6 +177,10 @@ export class UI {
       b.onclick = () => { this.sel.courseId = c.id; this.saveSel(); g.showcase(c.id); this.mainMenu(); };
       tabs.appendChild(b);
     }
+    // fade the clipped edge while more tabs are off-screen, and bring the chosen one into view
+    const fadeTabs = () => tabs.classList.toggle('more', tabs.scrollWidth - tabs.scrollLeft - tabs.clientWidth > 4);
+    tabs.onscroll = fadeTabs;
+    requestAnimationFrame(() => { tabs.querySelector('.sel')?.scrollIntoView?.({ inline: 'nearest', block: 'nearest' }); fadeTabs(); });
     const par = course.holes.reduce((s, h) => s + h.par, 0);
     const tees = g.settings.tees || 'back';
     const yds = course.holes.reduce((s, h) => s + teeYds(h, tees), 0);
@@ -234,7 +238,7 @@ export class UI {
       const { snap, round: r } = saved;
       const thru = r.scores.length, toPar = r.scores.reduce((t, x) => t + x.strokes - x.par, 0);
       const hn = r.holes[r.i], hname = r.course.holes[hn]?.name;
-      const where = snap.done ? `All ${r.holes.length} holes played – see the summary` : `Hole ${hn + 1}${hname ? `, ${hname}` : ''} · ${thru ? `${toParStr(toPar)} through ${thru}` : 'ready to tee off'}`;
+      const where = snap.done ? `All ${r.holes.length} holes played – see the summary` : `Hole ${hn + 1}${hname ? `, ${hname}` : ''} · ${[thru ? `${toParStr(toPar)} through ${thru}` : '', snap.mid?.strokes > 0 ? `shot ${snap.mid.strokes + 1} in play` : thru ? '' : 'ready to tee off'].filter(Boolean).join(' · ')}`;
       rc.innerHTML = `<div class="lbl">Resume round</div>
         <div><b>${r.course.name}</b> · ${MODES[r.mode]?.name || ''}</div>
         <div class="muted small">${where}</div><span class="rc-go" aria-hidden="true">Resume ▸</span>`;
@@ -250,6 +254,7 @@ export class UI {
     $('dailyCard').innerHTML = `<div class="lbl">Daily challenge · ${dayLabel(d.key)}</div>
       <div><b>${dc.name}</b>, holes ${d.holes[0] + 1}–${d.holes[2] + 1}. Same pins and wind for everyone today.</div>
       <div class="muted small">${dBest ? `Your best today: <b>${toParStr(dBest.toPar)}</b> (${dBest.strokes})` : 'Not played yet today'}</div>`;
+    $('dailyCard').setAttribute('aria-label', `Daily challenge, ${dayLabel(d.key)}: ${dc.name}, holes ${d.holes[0] + 1} to ${d.holes[2] + 1}. ${dBest ? `Your best today: ${toParStr(dBest.toPar)}` : 'Not played yet today'}`);
     $('dailyCard').onclick = () => { g.showcase(dc.id); this.start({ courseId: dc.id, holes: d.holes, mode: 'daily', seed: d.seed, daily: d.key }); };
 
     // shared challenge link
@@ -853,7 +858,9 @@ export class UI {
       const played = cats.filter(([k]) => Math.abs(t.sg[k]) >= 0.005);
       if (!played.length) return `<div class="tip"><b>Not enough to compare</b><p>No strokes-gained data was recorded this time, so there is nothing to measure against the tour average. Play a full hole to see where you gain and lose strokes.</p></div>`;
       const worst = played.slice().sort((a, b) => t.sg[a[0]] - t.sg[b[0]])[0];
-      if (t.sg[worst[0]] < 0) return `<div class="tip"><b>Where to improve: ${worst[1]}</b><p>${worst[0] === 'OTT' && !t.penalties && (!t.firN || t.fir / t.firN >= 0.7) ? adviceDistance : advice[worst[0]]}</p></div>`;
+      if (t.sg[worst[0]] < -0.3) return `<div class="tip"><b>Where to improve: ${worst[1]}</b><p>${worst[0] === 'OTT' && !t.penalties && (!t.firN || t.fir / t.firN >= 0.7) ? adviceDistance : advice[worst[0]]}</p></div>`;
+      // a small dip in one category (here -0.03) is noise, not a lesson: say so instead of nagging
+      if (t.sg[worst[0]] < 0) return `<div class="tip"><b>${t.sgTotal >= 0 ? 'Nothing to fix here' : 'Close to tour level'}</b><p>${t.sgTotal >= 0 ? 'You beat the tour average overall.' : 'Every part of your game was within a third of a stroke of tour level.'} The only dip was ${worst[1].toLowerCase()} (${sgn(t.sg[worst[0]])}), which is normal over ${n === 1 ? 'one hole' : `${n} holes`}.</p></div>`;
       const names = played.map(([, n]) => n.toLowerCase());
       const list = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0];
       const skipped = cats.length - played.length;

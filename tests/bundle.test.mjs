@@ -15,8 +15,10 @@ test('the service worker cache version matches what it caches', async () => {
 
 test('index.html loads the bundle and preloads it', () => {
   const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  assert.match(html, /<script type="module" src="dist\/game\.js"><\/script>/);
-  assert.match(html, /<link rel="modulepreload" href="dist\/game\.js">/);
+  // both name the bundle by its content hash, so a fresh page never pairs with an older cached bundle
+  const v = html.match(/<script type="module" src="dist\/game\.js\?v=([0-9a-f]{8})"><\/script>/);
+  assert.ok(v, 'the module script carries a ?v=<hash>');
+  assert.ok(html.includes(`<link rel="modulepreload" href="dist/game.js?v=${v[1]}">`), 'the preload uses the same version');
 });
 
 test('service worker precaches the bundle', () => {
