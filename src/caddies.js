@@ -61,13 +61,13 @@ const COLOR = {
     afterGreat: ['That last one was a beauty! Do it again!'],
   },
   scot: {
-    tee: ['And don’t you dare slice it into the trees.', 'Keep it out of the heather. I’ve lost too many balls in there.'],
-    bunker: ['Bunker. You know the drill. Open the face, hit behind the ball. Try not to cry.'],
-    rough: ['The rough here eats clubs. Grip it firm.'],
-    shortPutt: ['It’s a short one. Even you can’t miss this. Probably.', 'Don’t miss. I’m begging you.'],
-    afterMiss: ['That last one was shocking, but I’m still here.'],
-    afterGreat: ['Don’t get cocky after the last one, pal.'],
-  },
+    tee: ['Keep it out of the heather, now. I’ve lost a few balls in there. And a few friends.', 'Big swing, big smile! The tee’s all yours.'],
+    bunker: ['Bunker! Lovely. Open the face, hit behind the ball, and don’t you dare blame the sand.'],
+    rough: ['The rough here eats clubs, but you’ve got the hands for it. Grip it firm!'],
+    shortPutt: ['A wee short one. Easy as pie, as long as you don’t go and wobble it.', 'Short putt. I’ve a good feeling about this one!'],
+    afterMiss: ['Forget the last one, that was all you. This one’s a beauty, I can feel it!'],
+    afterGreat: ['That last one was grand! Do it again, and I’ll buy the first round.'],
+    },
 };
 
 // What the caddie says before the swing. c = { club, dist, pct, full, putt, wind, elev, tip, seed, greet }
@@ -104,8 +104,8 @@ export function advice(id, c) {
     const how = c.full ? 'Reckon you can just lay into it – all out, friend!' : c.putt ? `Easy does it – around ${c.pct}% oughta do it.` : `Reckon around ${c.pct}% oughta do it.`;
     line = [`${open} ${c.club}${c.dist ? `, ${c.dist} out` : ''}. ${how}`, colour, cheer].filter(Boolean).join(' ');
   } else {
-    const open = pick(r, ['Listen, pal.', 'Aye, right.', 'Come here, I’ll tell you something.', 'Now, I love you, but listen.']);
-    const how = c.full ? 'Just give it laldy!' : `${c.pct}%. Trust me on that.`;
+    const open = pick(r, ['Listen, pal.', 'Aye, right!', 'Come here, I’ll tell you something.', 'Now, I love you, but listen.']);
+    const how = c.full ? 'Just give it laldy! You’ve got this!' : `${c.pct}%. Trust me, you’ll love it!`;
     const know = c.tip || (Math.abs(c.wind || 0) >= 3 ? `Wind’s ${c.wind > 0 ? 'in your face' : 'at your back'}.`
       : r() < 0.5 ? pick(r, ['I know every blade of grass on this course.', 'I’ve walked this hole drunk more times than you’ve had hot dinners.', 'Saw a man lose a ball in that rough in ’98. Never found it.', 'My brother-in-law hit one in there once. We don’t talk about him.']) : '');
     line = drunk([open, `${c.club}${where}.`, how, colour, know].filter(Boolean).join(' '), r);
@@ -116,7 +116,7 @@ export function advice(id, c) {
 }
 
 export function greeting(id) {
-  return { tech: 'Good day to you. Nigel, at your service. Shall we?', south: 'Howdy, partner! Bobby Ray here. Let’s have us some fun!', scot: 'Morning! *hic* Angus. I know this course better than my own mother. Don’t tell her.' }[id];
+  return { tech: 'Good day to you. Nigel, at your service. Shall we?', south: 'Howdy, partner! Bobby Ray here. Let’s have us some fun!', scot: 'Morning! *hic* Angus. I know this course better than my own mother. Don’t tell her. Lovely day for it!' }[id];
 }
 
 const TEMPO = {
@@ -131,10 +131,10 @@ const TEMPO = {
     pure: ['Smooth as sweet tea!', 'Now that’s what I call rhythm, friend!', 'Slow and sweet, just like Sunday mornin’.'],
   },
   scot: {
-    quick: ['You rushed it, pal!', 'Slow down, man! You swing like you’re late for the bus.', 'Where’s the fire? Take it back properly.'],
-    slow: ['Did you fall asleep back there?', 'I’ve seen glaciers move faster.', 'Och, get on with it, pal!'],
-    pure: ['Hmph. Acceptable.', 'Aye, that’s the rhythm. Don’t get used to the praise.', 'Not bad. Not bad at all. I’ll deny I said that.'],
-  },
+    quick: ['You rushed it, pal, but that’s alright, we’ll get ’em next time!', 'Slow down, man! You swing like you’re late for the bus!', 'Where’s the fire? Take it back nice and slow.'],
+    slow: ['Did you fall asleep back there? Ha! Pick it up a wee bit.', 'I’ve seen glaciers move faster, but we’ll get there!', 'Och, come on, pal, give it a go!'],
+    pure: ['Aye, that’s the rhythm! Lovely!', 'Smooth as a good single malt, that!', 'Now that’s a tempo. I’ll drink to that!'],
+    },
 };
 // after the swing: 'quick' | 'slow' | 'pure'
 export function tempoLine(id, kind, r = Math.random, avoid = []) {
@@ -192,25 +192,25 @@ const REACT = {
     driveBad: ['That’s okay, partner. We’ll scramble it back!', 'Not our best, friend, but I got faith in your next one.'],
   },
   scot: {
-    great: ['Aye, not bad. Don’t let it go to your head.', 'Well, even a blind squirrel finds a nut, eh?', 'That’s more like it. You must’ve been listening.'],
-    miss: ['That wasn’t the club, that was you.', 'I told you! Did you not listen?', 'Don’t look at me, I gave you the perfect number.', 'I love you, but that was terrible.', 'My granny swings better than that, and she’s been dead years.'],
-    ok: ['Aye. It’s a shot.', 'Could’ve been worse. Could’ve been better.', 'Hmph. Carry on, pal.', 'I’ve seen worse. Not often, mind.'],
-    streak: ['That’s two in a row, pal. I’m starting to take it personally.', 'Are you doing this on purpose? Because it’s working.'],
-    ace: ['A HOLE IN ONE! Right, I’m drinking to that. Another one. And another.', 'In one! I’ve been walking this course forty years and I’ve never seen it. Don’t tell the wife.'],
-    birdie: ['A birdie! First time all week you’ve listened to me.', 'Under par, eh? Aye. I’ll have a wee dram on that.'],
-    par: ['Par. Steady. Boring. Perfect.', 'Aye, a par. You’ll live to play another hole.'],
-    bogey: ['A bogey. I’ve seen better scores on a tax return.', 'One over. Not terrible, not good. Like my brother-in-law.'],
-    holedLong: ['Och! From out there? Pure luck, but I’ll take the credit.', 'That went in?! I’ll never doubt you again. For about a minute.'],
-    water: ['In the water! I told you about the water. Did I not tell you about the water?', 'Splash. The fish are laughing at you, pal.'],
-    ob: ['Out of bounds. I’ve seen better direction on a drunk man’s walk home, and I’m a drunk man.', 'That’s in the next county. Hit another, ye numpty.'],
-    duff: ['Was that a golf shot or a sneeze?', 'You hit the ball with the wrong end of the club, did you?'],
-    bunker: ['In the sand. Of course you are. Open the face and hit behind it.', 'Bunker. I’ve buried better men than you in there. Not literally. Mostly.'],
-    nearpin: ['Well, would you look at that! Next to the stick!', 'Aye, that’s a lovely shot. I’ll pretend I’m not impressed.'],
-    missShort: ['You missed THAT? My granny holes those, and she’s dead.', 'A short one, and you missed it. I need a drink.'],
-    lagGood: ['That’ll do nicely. Tap-in, pal.', 'Good pace on that. Maybe you do listen.'],
-    driveGood: ['Now THAT’S a drive. Don’t spoil it with your approach.', 'Aye, that’s hit well. Enjoy it, it won’t last.'],
-    driveBad: ['That drive was a crime, and I’m a witness.', 'We’ll find it. Eventually. Possibly.'],
-  },
+    great: ['Aye, now THAT’S golf! I knew you had it in ye!', 'Ha ha, lovely! I’ll drink to that one!', 'That’s more like it! You must’ve been listening to me.'],
+    miss: ['That wasn’t the club, that was you. But don’t worry, the next one’s a winner!', 'I gave you the perfect number, pal! Never mind, the next one’s ours.', 'Ah, you didnae listen. No bother, we’ll fix it!', 'I love you, but that was terrible. Great shot next, though, I can feel it!', 'My granny swings better than that, and she’s been dead years. Still, you’ll nail the next one!'],
+    ok: ['Aye. Solid enough. On we go!', 'Could’ve been worse. Could’ve been better. Could’ve been a whisky!', 'Grand, pal. Keep it rolling.', 'Not bad at all. Carry on!'],
+    streak: ['Two in a row, pal! That’s you, not me. But the next one’s coming, I know it!', 'Are you doing this on purpose? Never mind, a wee dram and we go again!'],
+    ace: ['A HOLE IN ONE! Right, I’m drinking to that. Another one. And another!', 'In one! Forty years on this course and I’ve never seen it! Don’t tell the wife I’ve been crying!'],
+    birdie: ['A birdie! That’s because you listened to me for once! Wee dram on that!', 'Under par! Aye, that’s the stuff!'],
+    par: ['Par! Lovely, steady stuff. You’re a credit to me, pal.', 'Aye, a par. Good man! On to the next!'],
+    bogey: ['A bogey, but it’s only one hole, pal. We’ll get it back!', 'One over. That was you, mind, but it’s no bother. Birdie next!'],
+    holedLong: ['Och! From out there?! Ha ha! I’ll take the credit!', 'That went in?! Ha! I’ll never doubt you again. For about a minute!'],
+    water: ['In the water! I told you about the water. Did I not tell you about the water? Never mind, drop another!', 'Splash! The fish got a free ball. Hit another, pal, you’ve got this!'],
+    ob: ['Out of bounds! That was you, pal, not me. Hit another, you’ll get it!', 'That’s in the next county. Ha! Take another, the fresh air’s good for ye.'],
+    duff: ['Was that a golf shot or a sneeze? Ha! Shake it off, pal.', 'You hit the ball with the wrong end of the club, did you? No bother, again!'],
+    bunker: ['In the sand. That was you, pal, but you’ve got the touch for it. Open the face and hit behind it!', 'Bunker! Don’t worry, I’ve been in worse. Mostly at closing time.'],
+    nearpin: ['Well, would you look at that! Next to the stick! Ha ha!', 'Aye, that’s a beauty! Birdie putt for you, pal!'],
+    missShort: ['You missed THAT? My granny holes those, and she’s dead! Ah, never mind, we’ll get the next one.', 'A short one, and it slid by. That was you, pal! Chin up, it’s only golf.'],
+    lagGood: ['That’ll do nicely! Tap-in, pal.', 'Lovely pace on that! I told you you could do it.'],
+    driveGood: ['Now THAT’S a drive! Don’t you worry, the approach will be just as good!', 'Aye, that’s hit well! A wee dram for that one!'],
+    driveBad: ['That drive was you, pal! But we’ll find it. Eventually. Probably.', 'Ach, the drive got away from ye. We’ll scramble it, I’ve done it drunk!'],
+    },
 };
 
 // How a shot went, for the caddie: 'great' | 'miss' | null (an ordinary shot gets no comment).
