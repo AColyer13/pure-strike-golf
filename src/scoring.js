@@ -30,7 +30,7 @@ export function settleShot({ hole, shotStart: S, sim, info, stats, strokes }) {
   }
   strokes += penalty;
   let sg = null;
-  const cur = stats?.cur;
+  const cur = stats.cur;
   if (cur) {
     cur.penalties += penalty;
     sg = stats.recordShot(before, after, result === 'holed', penalty, !!info.putt);
@@ -44,7 +44,7 @@ export function settleShot({ hole, shotStart: S, sim, info, stats, strokes }) {
 export function settleRelief({ shotStart: S, option: o, stats, strokes }) {
   const penalty = 1;
   let sg = null;
-  if (stats?.cur) {
+  if (stats.cur) {
     stats.cur.penalties += penalty;
     sg = stats.recordShot(beforeOf(S), { surface: o.surface, yards: o.dist / YD }, false, penalty);
   }

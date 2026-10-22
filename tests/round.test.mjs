@@ -9,6 +9,7 @@ import { MAX_STROKES, MIN_SWING } from '../src/config.js';
 import { angOf, dirOf, clamp } from '../src/util.js';
 import { computeLaunch, simulateCarry } from '../src/physics.js';
 import { createRound, holeEnv, SIGNATURE, roundSnapshot, restoreRound, resumable } from '../src/round.js';
+import { RoundStats } from '../src/stats.js';
 import { reliefOptions } from '../src/rules.js';
 import { wantsPutter, canPutt, puttSetup, powerForCarry } from '../src/caddie.js';
 import {
@@ -204,8 +205,8 @@ test('out of bounds: stroke and distance, ball back where it was played from', (
   assert.equal(r.ball.isTee, true, 'back on the tee');
   assert.equal(stats.cur.penalties, 1);
   assert.equal(stats.cur.shots[0].penalty, 1);
-  // no stats: the same call must not throw
-  const r2 = settleShot({ hole, shotStart: S, sim, info: { result: 'ob' }, stats: null, strokes: 1 });
+  // no hole in progress in the stats: the shot still counts, with no strokes-gained
+  const r2 = settleShot({ hole, shotStart: S, sim, info: { result: 'ob' }, stats: new RoundStats(), strokes: 1 });
   assert.equal(r2.strokes, 2);
   assert.equal(r2.sg, null);
 });
