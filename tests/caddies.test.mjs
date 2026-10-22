@@ -53,5 +53,6 @@ test('judging a shot', () => {
 test('Angus blames you and Nigel owns up when his number was out', () => {
   const r = rngFor('blame');
   for (let i = 0; i < 20; i++) assert.match(reaction('scot', 'miss', {}, r), /you|number|told|granny|club/i);
+  for (const id of CADDIE_IDS) assert.ok(reaction(id, 'ok', {}, rngFor('k')));
   assert.match(reaction('tech', 'miss', { err: 5 }, rngFor('x')), /me|misjudged/);
 });

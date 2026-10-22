@@ -11,6 +11,7 @@ import { loadHistory, bestFor, handicapIndex, sgTrend, clearHistory, localDay, R
 import { firstRun } from './tutorial.js';
 import { QUALITY } from './post.js';
 import { fmtYd, fmtFt, fmtElev, windUnit, windValue, localizeText } from './units.js';
+import { clamp } from './util.js';
 
 const $ = (id) => document.getElementById(id);
 const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
@@ -543,6 +544,18 @@ export class UI {
     this.mmDirty = true;
   }
 
+  // the caddie's own notes lead the Caddie section of the result card
+  caddieNotes(notes) {
+    const p = $('shotPanel');
+    if (!p || !notes.length) return;
+    let tips = p.querySelector('.sp-tips');
+    if (!tips) {
+      tips = document.createElement('div'); tips.className = 'sp-tips'; tips.innerHTML = '<div class="sp-sub">Caddie</div>';
+      p.querySelector('.sp-btns')?.before(tips);
+    }
+    tips.querySelector('.sp-sub').insertAdjacentHTML('afterend', notes.map((n) => `<div class="tip pcad"><b>${esc(n.title)}</b><p>${esc(n.text)}</p></div>`).join(''));
+  }
+
   minimap(game) {
     const cv = $('minimap');
     const W = game.world, h = game.hole;
@@ -562,17 +575,45 @@ export class UI {
     // portrait screen the 3-D view can't show it either: when the shot can reach the
     // green, frame just the landing area and the green.
     const V = cw < 120 ? this.minimapFocus(game) : null;
-    const vx = V ? V.minX : B.minX, vz = V ? V.minZ : B.minZ;
-    const vw = V ? V.maxX - V.minX : bw, vd = V ? V.maxZ - V.minZ : bd;
-    const s = Math.min((cw - 8) / vw, (ch - 8) / vd);
-    const ox = (cw - vw * s) / 2 + (B.minX - vx) * s, oy = (ch - vd * s) / 2 + (B.minZ - vz) * s;
+    // The view fills the card: a long hole is cropped into the outer rough at the sides
+    // (centred on the hole's route) rather than letterboxed between bare bars.
+    let vx = V ? V.minX : B.minX, vz = V ? V.minZ : B.minZ;
+    let vw = V ? V.maxX - V.minX : bw, vd = V ? V.maxZ - V.minZ : bd;
+    const ar = cw / ch;
+    if (vw / vd < ar) {
+      let cx = vx + vw / 2;
+      if (!V && h.path?.length) { const xs = h.path.map((p) => p.x); cx = (Math.min(...xs) + Math.max(...xs)) / 2; }
+      vw = vd * ar; vx = cx - vw / 2;
+      if (vw <= bw) vx = clamp(vx, B.minX, B.maxX - vw); // keep the crop on painted ground where it fits
+    } else if (vw / vd > ar) {
+      const cz = vz + vd / 2;
+      vd = vw / ar; vz = cz - vd / 2;
+      if (vd <= bd) vz = clamp(vz, B.minZ, B.maxZ - vd);
+    }
+    const s = cw / vw;
+    const ox = (B.minX - vx) * s, oy = (B.minZ - vz) * s;
     this.mm = { s, ox, oy, B };
     g.save();
     g.beginPath(); if (g.roundRect) g.roundRect(0, 0, cw, ch, 10); else g.rect(0, 0, cw, ch); g.clip();
-    g.fillStyle = '#23402a'; g.fillRect(0, 0, cw, ch);
+    g.fillStyle = h.style?.palette?.deep || '#23402a'; g.fillRect(0, 0, cw, ch);
     g.drawImage(W.textureCanvas, ox, oy, bw * s, bd * s);
     if (W.hazardCanvas) g.drawImage(W.hazardCanvas, ox, oy, bw * s, bd * s); // hatched penalty areas
     const P = (x, z) => [ox + (x - B.minX) * s, oy + (z - B.minZ) * s];
+    // tree canopies: the ground texture only shows the straw under them, which reads as bare dirt
+    if (h.trees?.length) {
+      const dots = [];
+      for (const t of h.trees) {
+        const [tx, ty] = P(t.x, t.z);
+        const r = Math.max(1.2, t.crownR * (t.scale || 1) * s * 0.9);
+        if (tx >= -r && ty >= -r && tx <= cw + r && ty <= ch + r) dots.push([tx, ty, r]);
+      }
+      g.fillStyle = 'rgba(20,58,26,0.9)'; g.beginPath();
+      for (const [tx, ty, r] of dots) { g.moveTo(tx + r, ty); g.arc(tx, ty, r, 0, Math.PI * 2); }
+      g.fill();
+      g.fillStyle = 'rgba(110,175,90,0.4)'; g.beginPath();
+      for (const [tx, ty, r] of dots) { if (r < 2) continue; const hx = tx - r * 0.25, hy = ty - r * 0.3, hr = r * 0.5; g.moveTo(hx + hr, hy); g.arc(hx, hy, hr, 0, Math.PI * 2); }
+      g.fill();
+    }
     const b = game.ball;
     const [bx, by] = P(b.p[0], b.p[2]);
     if (game.state === 'address' && game.previewLand && !game.club.putter) {

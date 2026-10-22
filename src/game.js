@@ -27,7 +27,7 @@ import { Caddie, canPutt, SLICE_MS } from './caddie.js';
 import { CameraDirector } from './camera.js';
 import { Input } from './input.js';
 import { reliefOptions } from './rules.js';
-import { fmtWind, fmtFt } from './units.js';
+import { fmtWind, fmtFt, fmtElev } from './units.js';
 import { loadHistory, saveRound, roundEntry, bestFor } from './history.js';
 import { SIGNATURE, createRound, holeEnv, introExtra, RESUME_KEY, resumable, roundSnapshot, restoreRound } from './round.js';
 import {
@@ -515,12 +515,15 @@ export class Game {
 
   // the caddie's word on a shot that went very well or very badly (Angus blames you)
   caddieReact(info, sg) {
-    const p = CADDIES[this.settings.caddie], kind = judgeShot(info, sg);
-    if (!p || !kind || this.tutorial || (kind === 'great' && Math.random() > 0.7)) return;
-    const line = reaction(p.id, kind, { err: this.adviceErr });
-    if (!line) return;
-    this.ui.toast(`${p.name}: “${line.replace(/\*hic\*\s?/g, '')}”`);
-    if (this.settings.caddyVoice) say(line, this.settings.volume, p.voice);
+    // one note in the result card: how the shot went, then (analog swing) a word on the tempo
+    const p = CADDIES[this.settings.caddie], kind = judgeShot(info, sg), tempoText = this.tempoNote;
+    this.tempoNote = null;
+    if (!p || this.tutorial) return;
+    const line = reaction(p.id, kind || 'ok', { err: this.adviceErr });
+    const plain = (t) => t.replace(/\*hic\*\s?/g, '');
+    this.ui.caddieNotes([{ title: p.name, text: [line, tempoText].filter(Boolean).map(plain).join(' ') }]);
+    // only the big moments are spoken (a swing's tempo was spoken at the swing)
+    if (kind && !(kind === 'great' && Math.random() > 0.7) && this.settings.caddyVoice) say(line, this.settings.volume, p.voice);
   }
 
   // Shift + swing: the same swing and the same feedback, but the ball stays put
@@ -554,6 +557,7 @@ export class Game {
       if (this.mouseSwing.result) Object.assign(this.mouseSwing.result, { finalFace: r.face, tempoFace: t.face }); // (what the readout shows)
     }
     if (r.practice) { this.practiceSwing(r); return; }
+    this.tempoNote = null;
     this.executeSwing(r);
     if (r.backTime == null) return;
     const e = r.backTime - tempo.back;
@@ -561,6 +565,7 @@ export class Game {
     const p = CADDIES[this.settings.caddie];
     const line = p ? (kind === 'pure' && Math.random() < 0.6 ? '' : tempoLine(p.id, kind)) : { pure: 'Smooth tempo.', quick: 'Too quick.', slow: 'Too slow.' }[kind];
     if (line && this.settings.caddyVoice) say(line, this.settings.volume, p?.voice);
+    this.tempoNote = p ? tempoLine(p.id, kind) : null; // (shown in the result card)
   }
 
   // ------------------------------------------------------------------ previews
@@ -1218,7 +1223,9 @@ export class Game {
     // on a phone the tag carries the distance panel's numbers, so the panel steps aside
     const dist = this.distToPin(), plays = this.pl?.plays;
     const pl = plays && Math.abs(plays - dist) >= 1.5 * YD ? ` · plays ${this.fmtDist(plays)}` : '';
-    const text = `${side < 0 ? '◀ ' : ''}⚑ ${this.fmtDist(dist)}${pl}${side > 0 ? ' ▶' : ''}`;
+    const e = Math.round((h.height(c.x, c.z) - (this.ball.p[1] - BALL.radius)) / FT);
+    const up = Math.abs(e) >= 1 ? ` · ${e > 0 ? '▲' : '▼'} ${fmtElev(e, this.settings.units)}` : '';
+    const text = `${side < 0 ? '◀ ' : ''}⚑ ${this.fmtDist(dist)}${pl}${up}${side > 0 ? ' ▶' : ''}`;
     if (el.textContent !== text) el.textContent = text;
     document.body.classList.add('pintag');
     el.style.transform = `translate(${x.toFixed(0)}px, ${y.toFixed(0)}px) translate(-50%, -50%)`;

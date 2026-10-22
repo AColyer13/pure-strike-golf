@@ -93,15 +93,18 @@ export const tempoLine = (id, kind) => TEMPO[id]?.[kind] || '';
 
 const REACT = {
   tech: {
+    ok: ['Perfectly serviceable.', 'Nothing to fret about there.', 'Carry on, then.'],
     great: ['Oh, well played!', 'Splendid. Absolutely splendid.', 'Textbook. Almost as if I planned it.'],
     miss: ['Ah. Unlucky, that.', 'Bit of a wobble, I fear.', 'Not quite what we discussed.'],
     sorry: ['Ah – that one’s on me. I was a touch out with the number. Terribly sorry.', 'I may have misjudged that percentage. Apologies.'],
   },
   south: {
+    ok: ['Solid, friend. Real solid.', 'That’ll do just fine, darlin’.', 'Keep on truckin’, partner!'],
     great: ['Woo-wee, now THAT’S what I’m talkin’ about!', 'Pretty as a peach!', 'Lord, you hit that purdy!'],
     miss: ['Shake it off, partner. Next one’s yours.', 'Aw, that’s alright, darlin’. You’ll get ’em next time!', 'Chin up, friend. Ain’t nothin’ but a thing!'],
   },
   scot: {
+    ok: ['Aye. It’s a shot.', 'Could’ve been worse. Could’ve been better.', 'Hmph. Carry on, pal.'],
     great: ['Aye, not bad. Don’t let it go to your head.', 'Well, even a blind squirrel finds a nut, eh?', 'That’s more like it. You must’ve been listening.'],
     miss: ['That wasn’t the club, that was you.', 'I told you! Did you not listen?', 'Don’t look at me, I gave you the perfect number.', 'I love you, but that was terrible.', 'My granny swings better than that, and she’s been dead years.'],
   },

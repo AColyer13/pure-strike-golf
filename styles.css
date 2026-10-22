@@ -231,6 +231,7 @@ body.coaching #caddie { visibility: hidden; }
 .sp-sub { font: 700 11px Barlow; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 12px 0 4px; }
 .tip { background: rgba(95, 212, 255, .08); border-left: 3px solid var(--blue); border-radius: 6px; padding: 8px 10px; margin-top: 6px; }
 .tip b { font-size: 14px; }
+.tip.pcad { background: rgba(244, 211, 31, .1); border-left-color: var(--accent); }
 .tip p { margin: 3px 0 0; font-size: 13px; line-height: 1.4; color: #d7e6dc; }
 .sp-cont { text-align: center; margin-top: 10px; font-size: 12px; color: var(--muted); }
 .sp-btns { display: flex; gap: 8px; margin-top: 12px; }
@@ -522,11 +523,12 @@ body.in-round:not(.target-view) #hud:not([data-state="flight"]) #caddie { right:
 @media (orientation: landscape) and (max-height: 500px) {
   body.in-round:not(.target-view) #hud:not([data-state="flight"]) #caddie { top: 78px; right: 8px; max-width: min(330px, calc(100vw - 480px)); }
 }
-.lie-line { display: flex; flex-wrap: wrap; gap: 0 6px; align-items: baseline; font-size: 12px; margin-top: 3px; padding-top: 4px; border-top: 1px solid var(--line); }
+.lie-line { display: flex; flex-direction: column; align-items: flex-end; gap: 0; font-size: 12px; margin-top: 3px; padding-top: 4px; border-top: 1px solid var(--line); }
 .lie-line b { font: 700 15px 'Barlow Condensed', sans-serif; color: var(--text); }
 .lie-line .lie-range { font-size: 12px; }
-.lie-facts { display: flex; flex-direction: column; flex-basis: 100%; gap: 0; line-height: 1.25; }
-body.touch.in-round #distBox .lie-facts { align-items: flex-end; }
+.lie-facts:empty { display: none; }
+.lie-facts { display: flex; flex-direction: column; gap: 0; line-height: 1.25; }
+body.in-round #distBox .lie-facts { align-items: flex-end; }
 .lie-line[data-lie="deep"] .lie-range, .lie-line[data-lie="splash"] .lie-range { color: var(--red); }
 
 /* phones, either way up: the putt note and the tour-average sums wait under Details, so the cards stay small */
@@ -657,7 +659,7 @@ body.reduced-motion *, body.reduced-motion *::before, body.reduced-motion *::aft
   body.in-round #windArrow { font-size: 17px; }
   body.in-round #distBox { top: 70px; left: auto; right: 8px; min-width: 0; max-width: 150px; text-align: right; }
   body.in-round #distBox .sub { align-items: flex-end; }
-  body.in-round #distBox .lie-line { justify-content: flex-end; flex-wrap: wrap; row-gap: 0; }
+  body.in-round #distBox .lie-line { justify-content: flex-end; }
   body.in-round #distBox .sub { font-size: 12px; }
   body.in-round #minimap { top: 238px; right: 8px; height: 130px; }
   /* the caddie's note is a hint, not a paragraph: two lines */
@@ -749,8 +751,8 @@ body.touch.in-round #distBox .lbl, body.touch.in-round #distBox .elev { display:
 body.touch.in-round #distBox .big { font-size: 24px; line-height: 1.05; }
 body.touch.in-round #distBox .sub { font-size: 11px; }
 /* the flag tag already says how far (and what it plays like): the panel stays only for a lie worth knowing */
-body.touch.in-round.pintag:not(.coaching) #distBox .big, body.touch.in-round.pintag:not(.coaching) #distBox .plays { display: none; }
-body.touch.in-round.pintag:not(.coaching) #distBox:not(:has(.lie-line)) { display: none; }
+body.in-round.pintag:not(.coaching) #distBox :is(.lbl, .big, .plays, .elev) { display: none; }
+body.in-round.pintag:not(.coaching) #distBox:not(:has(.lie-line)) { display: none; }
 @media (orientation: portrait) { body.touch.in-round #distBox { top: 58px; } }
 /* a portrait phone shows the map at address (not putting) and in flight: ui.placeMinimap sizes it, or hides it when it won't fit */
 body.touch.in-round:not(.target-view) #hud #minimap { display: none !important; }
@@ -814,7 +816,8 @@ body.in-round[data-putt="1"] #clubBox .club-row { display: none; }
 body.analog #meter { display: none; }
 /* touch + analog: the drag on the view is the swing, so there is no SWING button (it comes back as fast-forward in flight) */
 body.analog.touch:is([data-state="address"], [data-state="swing"], [data-state="backswing"]) .tc-swing { display: none; }
-body.touch.in-round #distBox .lie-line { border-top: 0; margin-top: 0; padding-top: 0; }
+body.in-round #distBox .lie-line { border-top: 0; margin-top: 0; padding-top: 0; }
+body.in-round:not(.pintag) #distBox .lie-line { margin-top: 3px; }
 @media (orientation: portrait) {
   /* with the big button gone the arrows fit in one row and the stack above sits lower */
   body.analog.touch { --tc-h: 48px; --tcb: calc(var(--tc-h) + 22px + env(safe-area-inset-bottom)); }
