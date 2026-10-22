@@ -536,8 +536,6 @@ body.in-round #distBox .lie-facts { align-items: flex-end; }
   body.in-round #distBox .sub small { display: none; }
   #shotPanel:not(.open) .sg small { display: none; }
   #shotPanel:not(.open) .sg { margin-top: 8px; padding: 6px 10px; }
-  /* on the green the caddie's read and the meter's foot marks say it all: no club card, no stimp line */
-  body.touch.in-round[data-putt="1"] #distBox .lie-line { display: none; }
 }
 /* on the green the caddie's read takes the club card's place, on tablets too */
 body.touch.in-round[data-putt="1"] #clubBox { display: none; }
@@ -751,7 +749,7 @@ body.touch.in-round #distBox .lbl, body.touch.in-round #distBox .elev { display:
 body.touch.in-round #distBox .big { font-size: 24px; line-height: 1.05; }
 body.touch.in-round #distBox .sub { font-size: 11px; }
 /* the flag tag already says how far (and what it plays like): the panel stays only for a lie worth knowing */
-body.in-round.pintag:not(.coaching) #distBox :is(.lbl, .big, .plays, .elev) { display: none; }
+body.in-round.pintag:not(.coaching) #distBox :is(.lbl, .big, .plays, .elev, .putteq) { display: none; }
 body.in-round.pintag:not(.coaching) #distBox:not(:has(.lie-line)) { display: none; }
 @media (orientation: portrait) { body.touch.in-round #distBox { top: 58px; } }
 /* a portrait phone shows the map at address (not putting) and in flight: ui.placeMinimap sizes it, or hides it when it won't fit */
@@ -804,9 +802,9 @@ body.in-round[data-putt="1"] #clubBox .club-row { display: none; }
 /* after the shot: the key hints flip to clickable fast-forward and skip buttons (mouse and keyboard play) */
 #helpBar.hb-flip > * { animation: hbFlip .28s ease-out; }
 @keyframes hbFlip { from { opacity: 0; transform: rotateX(80deg) scale(.9); } to { opacity: 1; transform: none; } }
-#helpBar .hb-btn { pointer-events: auto; display: inline-flex; align-items: center; gap: 8px; padding: 7px 16px; border-radius: 999px; border: 1px solid rgba(255,255,255,.35); background: rgba(8, 20, 13, .72); color: rgba(255,255,255,.85); font: inherit; font-size: 14px; cursor: pointer; touch-action: none; }
-#helpBar .hb-btn:hover, #helpBar .hb-btn:active { background: rgba(255,255,255,.2); border-color: #fff; }
-#helpBar .hb-btn .ico { width: 20px; height: 20px; flex: none; color: #ffe25a; }
+#helpBar .hb-btn { pointer-events: auto; display: inline; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-shadow: inherit; cursor: pointer; touch-action: none; }
+#helpBar .hb-btn:hover, #helpBar .hb-btn:active { text-decoration: underline; }
+#helpBar .hb-btn .ico { display: none; }
 @media (orientation: landscape) and (max-height: 500px), (max-width: 700px) and (orientation: portrait) {
   /* the bar steps aside on a small window, but the buttons are the only on-screen way to skip, so they stay */
   body:not(.touch).in-round[data-state="flight"] #helpBar { display: flex; }

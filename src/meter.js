@@ -383,9 +383,16 @@ export class MouseSwing {
     const col = (x, pure, good) => (x <= pure ? '#4bd66b' : x <= good ? '#ffa62e' : '#ff4b3a');
     const pe = r.downTime == null ? 0 : Math.abs(r.downTime - tempo.down) / tempo.down;
     const face = r.finalFace ?? r.face, fa = Math.abs(face), fs = this.putt ? 0.5 : 1.5;
-    g.fillStyle = col(e, tempo.pure, tempo.good);
-    roundRect(g, this.x0 + 18, this.y0 - 4, 120, 10, 5); g.fill();
-    if (r.downTime != null) { g.fillStyle = col(pe, 0.3, 0.6); roundRect(g, this.x0 + 18, this.y0 + 8, 60, 6, 3); g.fill(); }
+    // each bar is as long as its part of the swing took (the same scale for both); one that ran long has a blue line
+    // where it should have ended
+    const pps = 120 / tempo.back, bx = this.x0 + 18, BH = 8;
+    const bar = (secs, target, y, c) => {
+      const w = Math.max(4, Math.min(secs, target * 1.6) * pps);
+      g.fillStyle = c; roundRect(g, bx, y, w, BH, 4); g.fill();
+      if (secs > target) { g.fillStyle = '#4aa8ff'; g.fillRect(bx + target * pps - 1, y - 3, 2, BH + 6); }
+    };
+    bar(r.backTime, tempo.back, this.y0 - 4, col(e, tempo.pure, tempo.good));
+    if (r.downTime != null) bar(r.downTime, tempo.down, this.y0 + 8, col(pe, 0.3, 0.6));
     g.font = '700 14px Barlow, system-ui, sans-serif'; g.textAlign = 'left';
     g.shadowColor = 'rgba(0,0,0,0.8)'; g.shadowBlur = 4;
     const bt = r.backTime / tempo.count, dt = r.downTime == null ? null : r.downTime / tempo.count;

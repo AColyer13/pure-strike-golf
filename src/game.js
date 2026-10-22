@@ -817,6 +817,8 @@ export class Game {
     this.flightT += dt * scale;
     while (this.evIdx < sim.events.length) this.onEvent(sim.events[this.evIdx++]);
     this.positionBall(sim.p);
+    const live = $('dPin'), ld = this.flightDist();
+    if (live.textContent !== ld) live.textContent = ld;
     if (this.world.tracer.visible) this.world.setTracer(sim.trail.concat([sim.p]));
     this.cam.flight(sim, this.shotStart, this.forecast, this.flightT);
     if (sim.state === 'rest' || sim.state === 'holed') {
@@ -1162,7 +1164,8 @@ export class Game {
     const holed = resting && this.resultNext === 'holed';
     // a hole counts toward the running score the moment it drops, not only once the scorecard is shown
     const toPar = r.scores.reduce((s, x) => s + x.strokes - x.par, 0) + (holed && !this.challenge ? this.strokes - h.par : 0);
-    const fromSim = resting && this.sim && (this.challenge || this.resultNext === 'water');
+    const flying = this.state === 'flight' && this.sim;
+    const fromSim = flying || (resting && this.sim && (this.challenge || this.resultNext === 'water'));
     const b = fromSim ? { p: this.sim.p, surface: this.lastInfo?.after || this.ball.surface } : this.ball;
     const d = holed ? 0 : distToPin(h, b);
     const feet = this.club.putter || (resting ? b.surface === 'green' : this.onGreen);
@@ -1172,7 +1175,7 @@ export class Game {
       hole: h.number, name: h.name, par: h.par, yards: h.yards,
       shot: this.challenge ? `Ball ${this.ballNo + 1}/${r.balls}` : holed ? `Holed in ${this.strokes}` : `Shot ${this.strokes + (this.state === 'flight' ? 0 : 1)}`, toPar,
       player: r.players.length > 1 ? r.player.name : null, challenge: this.challenge, mode: r.mode,
-      dist: holed ? 'Holed' : feet ? (this.settings.units === 'm' ? fmtFt(d / FT, 'm') : `${(d / FT).toFixed(d / FT < 10 ? 1 : 0)} ft`) : this.fmtDist(d),
+      dist: holed ? 'Holed' : flying ? this.flightDist() : feet ? (this.settings.units === 'm' ? fmtFt(d / FT, 'm') : `${(d / FT).toFixed(d / FT < 10 ? 1 : 0)} ft`) : this.fmtDist(d),
       plays: this.pl && !this.club.putter && !resting && !(this.challenge && r.mode === 'drive') ? this.fmtDist(this.pl.plays) : null,
       elev: holed ? 0 : (h.height(h.cup.x, h.cup.z) - (b.p[1] - BALL.radius)) / FT,
       puttEq: this.club.putter && !resting ? this.puttEqFt : null,
@@ -1202,6 +1205,12 @@ export class Game {
   // advance the simulation n frames without requestAnimationFrame (testing/debugging)
   debugStep(n = 1, dt = 1 / 60) { for (let i = 0; i < n; i++) this.frame(dt); }
 
+  // with the ball away the distance box is just a gauge: how far the ball still is from the pin, closing as it flies
+  flightDist() {
+    const d = distToPin(this.hole, { p: this.sim.p });
+    return this.club.putter ? fmtFt(d / FT, this.settings.units) : this.fmtDist(d);
+  }
+
   // A far flag is only a few pixels, and on a tee shot the green can be out of view or off
   // to one side: a tag over the flag (an arrow at the screen edge when it is off to the side)
   // says where the pin is and how far, whatever the HUD detail.
@@ -1209,7 +1218,7 @@ export class Game {
     const el = this.pinTagEl || (this.pinTagEl = document.getElementById('pinTag'));
     if (!el) return;
     const h = this.hole;
-    if (!show || !h || !this.club || this.club.putter || this.cam.targetView || this.distToPin() < 30) {
+    if (!show || !h || !this.club || this.cam.targetView) {
       if (!el.classList.contains('hidden')) el.classList.add('hidden');
       document.body.classList.remove('pintag');
       return;
@@ -1238,14 +1247,29 @@ export class Game {
     }
     // on a phone the tag carries the distance panel's numbers, so the panel steps aside
     const dist = this.distToPin(), plays = this.pl?.plays;
-    const pl = plays && Math.abs(plays - dist) >= 1.5 * YD ? ` · plays ${this.fmtDist(plays)}` : '';
+    const feet = this.club.putter || this.onGreen;
+    const dtxt = feet ? (this.settings.units === 'm' ? fmtFt(dist / FT, 'm') : `${(dist / FT).toFixed(dist / FT < 10 ? 1 : 0)} ft`) : this.fmtDist(dist);
+    const pl = this.club.putter ? ` · stroke ${this.fmtPutt(this.puttEqFt)}` : plays && Math.abs(plays - dist) >= 1.5 * YD ? ` · plays ${this.fmtDist(plays)}` : '';
     const e = Math.round((h.height(c.x, c.z) - (this.ball.p[1] - BALL.radius)) / FT);
     const up = Math.abs(e) >= 1 ? ` · ${e > 0 ? '▲' : '▼'} ${fmtElev(e, this.settings.units)}` : '';
-    const text = `${side < 0 ? '◀ ' : ''}⚑ ${this.fmtDist(dist)}${pl}${up}${side > 0 ? ' ▶' : ''}`;
+    const text = `${side < 0 ? '◀ ' : ''}⚑ ${dtxt}${pl}${up}${side > 0 ? ' ▶' : ''}`;
     if (el.textContent !== text) el.textContent = text;
     document.body.classList.add('pintag');
-    el.style.transform = `translate(${x.toFixed(0)}px, ${y.toFixed(0)}px) translate(-50%, -50%)`;
     el.classList.remove('hidden');
+    // never sit on top of a card: slide to whichever side of it is nearest (it reads as a pill hanging off the card)
+    const tw = el.offsetWidth, th = el.offsetHeight, pad = 8;
+    this.pinAvoid = this.pinAvoid || ['holeCard', 'distBox', 'windBox', 'clubBox', 'minimap', 'caddie'].map((id) => document.getElementById(id));
+    const rects = this.pinAvoid.filter(Boolean).map((n) => n.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
+    for (let pass = 0; pass < 4; pass++) {
+      const hit = rects.find((r) => x + tw / 2 > r.left - pad && x - tw / 2 < r.right + pad && y + th / 2 > r.top - pad && y - th / 2 < r.bottom + pad);
+      if (!hit) break;
+      const free = (nx, ny) => nx - tw / 2 >= 4 && nx + tw / 2 <= W - 4 && ny - th / 2 >= 4 && ny + th / 2 <= H - 4;
+      const opts = [[x, hit.bottom + pad + th / 2], [x, hit.top - pad - th / 2], [hit.right + pad + tw / 2, y], [hit.left - pad - tw / 2, y]]
+        .filter(([nx, ny]) => free(nx, ny)).sort((p, q) => Math.hypot(p[0] - x, p[1] - y) - Math.hypot(q[0] - x, q[1] - y));
+      if (!opts.length) break;
+      [x, y] = opts[0];
+    }
+    el.style.transform = `translate(${x.toFixed(0)}px, ${y.toFixed(0)}px) translate(-50%, -50%)`;
   }
 
   frame(dt) {

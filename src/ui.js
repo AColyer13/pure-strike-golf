@@ -465,7 +465,7 @@ export class UI {
     if (d.plays) this.firstTip('plays', '“Plays like” is the distance adjusted for wind and elevation. Pick a club for that number, not the yardage.');
     let sub = '';
     if (d.plays) sub = `<span class="plays">Plays like <b>${d.plays}</b></span>`;
-    else if (d.puttEq != null) sub = `Stroke it <b>${fmtFt(d.puttEq, units)}</b><br><small>to finish about 17 in past the hole</small>`;
+    else if (d.puttEq != null) sub = `<span class="putteq">Stroke it <b>${fmtFt(d.puttEq, units)}</b><br><small>to finish about 17 in past the hole</small></span>`;
     const e = Math.round(d.elev);
     if (Math.abs(e) >= 1) sub += `<span class="elev">${e > 0 ? '▲' : '▼'} ${fmtElev(e, units)} ${e > 0 ? 'uphill' : 'downhill'}</span>`;
     const sl = d.slope, parts = [];
@@ -474,7 +474,7 @@ export class UI {
     // the lie box is folded away: its one useful line lives here
     const facts = d.putter ? [`Stimp ${d.stimp.toFixed(1)}`] : [d.lieRange === '100–100%' ? '' : d.lieRange, ...parts].filter(Boolean);
     sub += `<span class="lie-line" data-lie="${d.lieKey}"><b>${esc(d.lie)}</b> <span class="lie-facts">${facts.map((f) => `<span class="lie-range">${f}</span>`).join('')}</span></span>`;
-    $('dSub').innerHTML = sub;
+    $('dSub').innerHTML = d.state === 'flight' ? '' : sub; // (in flight the box is only the closing distance)
     this.setState(d.state);
     this.placeMinimap();
     if (this.hbNear !== d.nearGreen && !this.touch) { this.hbNear = d.nearGreen; this.helpBar(); } // the grid hint comes and goes with the green
