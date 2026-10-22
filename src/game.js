@@ -17,7 +17,7 @@ import { YD, FT, mulberry32 } from './hole.js';
 import { scoreName } from './stats.js';
 import { SwingMeter, MouseSwing, meterToStrike, tempoToMeterError, tempo, setTempo, setCounts, countsFor, tempoNote, DEFAULT_TEMPO } from './meter.js';
 import { say, hush } from './voice.js';
-import { CADDIES, advice, greeting, tempoLine, judgeShot, reaction } from './caddies.js';
+import { CADDIES, advice, greeting, tempoLine, judgeShot, situationOf, reaction } from './caddies.js';
 import { SoundEngine } from './audio.js';
 import { coachShot, resetCoach } from './coach.js';
 import { COURSES, courseById } from './courses/index.js';
@@ -478,7 +478,14 @@ export class Game {
     const m = this.caddie.msg || '';
     const tip = this.caddie.blockedNote() || (/^(Aim|Favour|Greenside|Heavy lie)/.test(m) ? m : '')
       || (c.putter && this.puttRead && Math.abs(this.puttRead.brk) > 0.05 ? `Breaks ${this.puttRead.brk > 0 ? 'right to left' : 'left to right'}.` : '');
+    // the first club of a shot gets the full word; changing club just gets the new number
+    const shotKey = `${this.round?.i}|${this.strokes}|${this.ballNo}`;
+    if (this.fullShot !== shotKey) { this.fullShot = shotKey; this.fullClub = c.key; }
+    const lie = this.lieKey();
+    const color = this.strokes === 0 && !c.putter ? 'tee' : lie === 'bunker' ? 'bunker' : ['rough', 'deep', 'straw'].includes(lie) && !c.putter ? 'rough'
+      : c.putter && this.puttEqFt <= 6 ? 'shortPutt' : this.lastKind === 'miss' ? 'afterMiss' : this.lastKind === 'great' ? 'afterGreat' : '';
     const out = advice(id, {
+      short: c.key !== this.fullClub, color,
       club: c.name, dist: where, pct, full, putt: !!c.putter,
       wind: this.pl ? this.pl.windAdj / YD : 0, elev: this.pl ? this.pl.elevAdj / YD : 0, tip,
       seed: `${this.round?.i}|${this.strokes}|${this.ballNo}|${c.key}`, greet: !this.greeted,
@@ -517,13 +524,21 @@ export class Game {
   caddieReact(info, sg) {
     // one note in the result card: how the shot went, then (analog swing) a word on the tempo
     const p = CADDIES[this.settings.caddie], kind = judgeShot(info, sg), tempoText = this.tempoNote;
+    const tempoSpoken = this.tempoKind !== 'pure';
     this.tempoNote = null;
     if (!p || this.tutorial) return;
-    const line = reaction(p.id, kind || 'ok', { err: this.adviceErr });
+    this.missStreak = kind === 'miss' ? (this.missStreak || 0) + 1 : 0;
+    this.lastKind = kind;
+    const situation = situationOf(info, { tee: this.shotStart?.isTee, par: this.hole.par, strokes: this.strokes });
+    this.recent = this.recent || [];
+    const line = reaction(p.id, kind || 'ok', { err: this.adviceErr, situation, streak: this.missStreak, avoid: this.recent });
+    this.recent = [...this.recent, line, tempoText].filter(Boolean).slice(-8);
     const plain = (t) => t.replace(/\*hic\*\s?/g, '');
     this.ui.caddieNotes([{ title: p.name, text: [line, tempoText].filter(Boolean).map(plain).join(' ') }]);
     // only the big moments are spoken (a swing's tempo was spoken at the swing)
-    if (kind && !(kind === 'great' && Math.random() > 0.7) && this.settings.caddyVoice) say(line, this.settings.volume, p.voice);
+    const moment = kind || situation;
+    const spoken = [moment && !(kind === 'great' && !situation && Math.random() > 0.7) ? line : '', tempoText && (tempoSpoken || !moment) ? tempoText : ''].filter(Boolean).map(plain).join(' ');
+    if (spoken && this.settings.caddyVoice) say(spoken, this.settings.volume, p.voice);
   }
 
   // Shift + swing: the same swing and the same feedback, but the ball stays put
@@ -563,9 +578,10 @@ export class Game {
     const e = r.backTime - tempo.back;
     const kind = Math.abs(e) <= tempo.pure ? 'pure' : e < 0 ? 'quick' : 'slow';
     const p = CADDIES[this.settings.caddie];
-    const line = p ? (kind === 'pure' && Math.random() < 0.6 ? '' : tempoLine(p.id, kind)) : { pure: 'Smooth tempo.', quick: 'Too quick.', slow: 'Too slow.' }[kind];
-    if (line && this.settings.caddyVoice) say(line, this.settings.volume, p?.voice);
-    this.tempoNote = p ? tempoLine(p.id, kind) : null; // (shown in the result card)
+    // shown in the result card, and spoken with the caddie's word on the shot (a pure swing is only mentioned there)
+    this.tempoKind = kind;
+    this.tempoNote = p ? tempoLine(p.id, kind, Math.random, this.recent) : null;
+    if (!p && this.settings.caddyVoice) say({ pure: 'Smooth tempo.', quick: 'Too quick.', slow: 'Too slow.' }[kind], this.settings.volume);
   }
 
   // ------------------------------------------------------------------ previews

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { advice, judgeShot, reaction, rngFor, CADDIE_IDS } from '../src/caddies.js';
+import { advice, judgeShot, situationOf, reaction, rngFor, CADDIE_IDS } from '../src/caddies.js';
 
 const base = { club: '7 Iron', dist: '150 yds', pct: 75, full: false, putt: false, wind: 0, elev: 0, tip: '' };
 
@@ -55,4 +55,26 @@ test('Angus blames you and Nigel owns up when his number was out', () => {
   for (let i = 0; i < 20; i++) assert.match(reaction('scot', 'miss', {}, r), /you|number|told|granny|club/i);
   for (const id of CADDIE_IDS) assert.ok(reaction(id, 'ok', {}, rngFor('k')));
   assert.match(reaction('tech', 'miss', { err: 5 }, rngFor('x')), /me|misjudged/);
+});
+
+test('situationOf picks out the particular moments', () => {
+  assert.equal(situationOf({ holed: true }, { strokes: 1, par: 3 }), 'ace');
+  assert.equal(situationOf({ holed: true, putt: true, startFt: 20 }, { strokes: 3, par: 4 }), 'holedLong');
+  assert.equal(situationOf({ result: 'water' }), 'water');
+  assert.equal(situationOf({ after: 'bunker' }), 'bunker');
+  assert.equal(situationOf({ putt: true, startFt: 3, afterFt: 2 }), 'missShort');
+  assert.equal(situationOf({ after: 'fairway' }), '');
+});
+
+test('reaction avoids what was just said, and a miss streak gets its own word', () => {
+  for (const id of CADDIE_IDS) {
+    const a = reaction(id, 'ok', {}, rngFor('x'));
+    for (let i = 0; i < 20; i++) assert.notEqual(reaction(id, 'ok', { avoid: [a] }, rngFor('y' + i)), a);
+    assert.ok(reaction(id, 'miss', { streak: 2 }, rngFor('s')));
+  }
+});
+
+test('a club change gets the short form of the advice', () => {
+  const o = advice('scot', { club: '7 Iron', dist: '150 yds', pct: 80, full: false, seed: 's', short: true });
+  assert.match(o.text, /^Angus: 7 Iron, 150 yds\. 80%\.$/);
 });
