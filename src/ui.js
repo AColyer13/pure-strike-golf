@@ -1,5 +1,6 @@
 // DOM user interface: menus, HUD, shot panel, scorecard, summaries, stats and settings.
 import { COURSES, courseById } from './courses/index.js';
+import { CADDIES, CADDIE_IDS } from './caddies.js';
 import { PROFILES, TEE_FOR_PROFILE } from './clubs.js';
 import { YD, TEE_SETS, teeYds } from './hole.js';
 import { SURFACES } from './physics.js';
@@ -283,7 +284,8 @@ export class UI {
     opt('optProfile', s.profile, Object.entries(PROFILES).map(([k, p]) => [k, p.name, p.desc]));
     opt('optTees', tees, Object.entries(TEE_SETS).map(([k, t]) => [k, t.name, `${fmtYd(course.holes.reduce((a, h) => a + teeYds(h, k), 0), units).replace(/\d+/, (n) => (+n).toLocaleString())} at ${course.name}${k === 'back' ? ': the full championship length' : k === 'middle' ? ': a shorter course for most club golfers' : ': the shortest, for newer players and slower swings'}`]));
     opt('optDiff', s.difficulty, [['beginner', 'Beginner', 'Big impact zone, full aim preview with wind and roll, full putt line'], ['standard', 'Standard', 'Normal zone, carry preview without wind, partial putt line'], ['pro', 'Pro', 'Small zone, no wind/putt assistance – read it yourself']]);
-    opt('optControl', s.control, [['meter', '3-Click Meter', 'Click to start, set power, hit the impact zone'], ['mouse', 'Analog Swing', 'No meter: your caddie says how hard to hit it. Pull back on a 3-second count, then push through']]);
+    opt('optControl', s.control, [['meter', '3-Click Meter', 'Click to start, set power, hit the impact zone'], ['mouse', 'Analog Swing', 'No meter: your caddie says how hard to hit it. Take it back in 3 seconds, then push through']]);
+    opt('optCaddie', s.caddie, [...CADDIE_IDS.map((k) => [k, CADDIES[k].name, CADDIES[k].blurb]), ['none', 'None', 'A plain, quiet caddie']]);
     opt('optUnits', s.units === 'm' ? 'm' : 'yd', [['yd', 'Yards'], ['m', 'Metres']]);
     const hs = $('optHole');
     const pickHole = ['single', 'ctp', 'drive'].includes(this.sel.mode);
@@ -333,6 +335,7 @@ export class UI {
     if (id === 'optTees') { s.tees = k; s.teesChosen = true; }
     if (id === 'optDiff') s.difficulty = k;
     if (id === 'optControl') s.control = k;
+    if (id === 'optCaddie') { s.caddie = k; this.game.greeted = false; if (CADDIES[k]) this.game.auditionCaddie(k); }
     if (id === 'optUnits') s.units = k;
     this.game.saveSettings();
     this.saveSel();
@@ -984,7 +987,8 @@ export class UI {
       <h3>Game</h3>
       <label class="set"><span>Volume</span><input type="range" id="sVol" min="0" max="1" step="0.05" value="${s.volume}"></label>
       ${chk('sTracer', 'Shot tracer', s.tracer)}
-      ${chk('sVoice', 'Caddie voice', s.caddyVoice, 'Your caddie speaks the club and how hard to hit it (analog swing).')}
+      <label class="set"><span>Caddie<small>${CADDIES[s.caddie]?.blurb || 'A plain, quiet caddie'}</small></span><select id="sCaddie">${CADDIE_IDS.map((k) => `<option value="${k}" ${s.caddie === k ? 'selected' : ''}>${CADDIES[k].name}</option>`).join('')}<option value="none" ${CADDIES[s.caddie] ? '' : 'selected'}>None</option></select></label>
+      ${chk('sVoice', 'Caddie voice', s.caddyVoice, 'Your caddie speaks: the club and how hard to hit it (analog swing), and what he thinks of your shots.')}
       <label class="set"><span>Distances</span><select id="sUnits"><option value="yd" ${s.units !== 'm' ? 'selected' : ''}>Yards</option><option value="m" ${s.units === 'm' ? 'selected' : ''}>Metres</option></select></label>
       <label class="set"><span>Swing control</span><select id="sCtl"><option value="meter" ${s.control === 'meter' ? 'selected' : ''}>3-click meter</option><option value="mouse" ${s.control === 'mouse' ? 'selected' : ''}>Analog mouse swing</option></select></label>
       <label class="set"><span>Assists</span><select id="sDiff">${['beginner', 'standard', 'pro'].map((d) => `<option value="${d}" ${s.difficulty === d ? 'selected' : ''}>${d[0].toUpperCase() + d.slice(1)}</option>`).join('')}</select></label>
@@ -1006,6 +1010,7 @@ export class UI {
     const save = () => { g.saveSettings(); this.helpBar(); if (g.state === 'address') g.enterAddress(); };
     $('sVol').oninput = (e) => { s.volume = +e.target.value; g.audio.setVolume(s.volume); g.saveSettings(); };
     $('sTracer').onchange = (e) => { s.tracer = e.target.checked; save(); };
+    $('sCaddie').onchange = (e) => { s.caddie = e.target.value; g.greeted = false; g.saveSettings(); this.showSettings(true); };
     $('sVoice').onchange = (e) => { s.caddyVoice = e.target.checked; g.saveSettings(); };
     $('sUnits').onchange = (e) => { s.units = e.target.value; save(); g.updateHUD?.(true); };
     $('sCtl').onchange = (e) => { s.control = e.target.value; save(); };

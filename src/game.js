@@ -17,6 +17,7 @@ import { YD, FT, mulberry32 } from './hole.js';
 import { scoreName } from './stats.js';
 import { SwingMeter, MouseSwing, meterToStrike, tempoToMeterError, BACKSWING_S, TEMPO_PURE } from './meter.js';
 import { say, hush } from './voice.js';
+import { CADDIES, advice, greeting, tempoLine, judgeShot, reaction } from './caddies.js';
 import { SoundEngine } from './audio.js';
 import { coachShot, resetCoach } from './coach.js';
 import { COURSES, courseById } from './courses/index.js';
@@ -137,7 +138,7 @@ export class Game {
     const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
     return {
       // a first visit starts a typical golfer on the middle tees; saved settings from before tee sets keep the back tees
-      profile: 'mid', difficulty: 'standard', tees: Object.keys(s).length ? 'back' : 'middle', control: 'meter', units: 'yd', volume: 0.7, tracer: true, caddyVoice: true,
+      profile: 'mid', difficulty: 'standard', tees: Object.keys(s).length ? 'back' : 'middle', control: 'meter', units: 'yd', volume: 0.7, tracer: true, caddyVoice: true, caddie: 'tech',
       reducedMotion: reduce, oneButton: false, captions: false, uiScale: 1, keys: {}, ffSeen: 0, quality: 'auto', ...s,
     };
   }
@@ -194,6 +195,7 @@ export class Game {
     this.audio.init();
     this.audio.setVolume(this.settings.volume);
     this.round = snap ? restoreRound(snap) : createRound(opts);
+    this.greeted = false;
     if (!this.round) { this.quitToMenu(); return; }
     // what this round is played with, for its summary and history (the lesson swaps in beginner assists)
     this.round.played = { profile: this.settings.profile, difficulty: this.settings.difficulty };
@@ -325,7 +327,7 @@ export class Game {
     this.mouseSwing.enabled = this.settings.control === 'mouse';
     this.mouseSwing.putt = !!this.club.putter;
     this.mouseSwing.result = null;
-    this.mouseSwing.target = null; this.powerReady = false;
+    this.mouseSwing.target = null; this.powerReady = false; this.adviceErr = 0;
     this.mouseSwing.count = !!this.tutorial || this.round?.mode === 'practice'; // the 3-second count is a training aid
     document.body.classList.toggle('analog', this.mouseSwing.enabled);
     this.mouseSwing.draw();
@@ -459,10 +461,29 @@ export class Game {
     const sp = this.suggestedPower, full = sp >= 0.97;
     const pct = full ? 100 : Math.max(5, Math.round(sp * 20) * 5);
     const where = c.putter ? this.fmtPutt(this.puttEqFt) : full ? '' : this.fmtDist(this.pl ? this.pl.plays : this.distToPin());
-    const head = `${c.name}${where ? `, ${where}` : ''}.`;
-    const how = full ? 'Go all out.' : `Hit this about ${pct}%.`;
-    const words = (t) => t.replace(/(\d+)%/, '$1 percent').replace(/\b(\d+) yds\b/, '$1 yards').replace(/\b(\d+(?:\.\d)?) m\b/, '$1 metres').replace(/\b(\d+) ft\b/, '$1 feet');
-    return { text: `${head} ${how}`, say: words(`${head} ${how}`), pct };
+    const words = (t) => t.replace(/(\d+)%/, '$1 percent').replace(/\b(\d+) yds\b/g, '$1 yards').replace(/\b(\d+(?:\.\d)?) m\b/g, '$1 metres').replace(/\b(\d+) ft\b/g, '$1 feet');
+    const id = this.settings.caddie;
+    if (!CADDIES[id]) {
+      const head = `${c.name}${where ? `, ${where}` : ''}.`;
+      const how = full ? 'Go all out.' : `Hit this about ${pct}%.`;
+      return { text: `${head} ${how}`, say: words(`${head} ${how}`), pct, err: 0 };
+    }
+    // what Angus knows about the course: the caddie's aim and lie notes, the trees, the break
+    const m = this.caddie.msg || '';
+    const tip = this.caddie.blockedNote() || (/^(Aim|Favour|Greenside|Heavy lie)/.test(m) ? m : '')
+      || (c.putter && this.puttRead && Math.abs(this.puttRead.brk) > 0.05 ? `Breaks ${this.puttRead.brk > 0 ? 'right to left' : 'left to right'}.` : '');
+    const out = advice(id, {
+      club: c.name, dist: where, pct, full, putt: !!c.putter,
+      wind: this.pl ? this.pl.windAdj / YD : 0, elev: this.pl ? this.pl.elevAdj / YD : 0, tip,
+      seed: `${this.round?.i}|${this.strokes}|${this.ballNo}|${c.key}`, greet: !this.greeted,
+    });
+    return { ...out, say: words(out.say) };
+  }
+  // the blue mark on the swing follows what the caddie says (Nigel is sometimes a tad out)
+  syncTarget() {
+    const a = this.analogAdvice();
+    this.mouseSwing.target = a ? a.pct / 100 : this.suggestedPower;
+    this.adviceErr = a?.err || 0;
   }
   fmtPutt(eqFt) { return fmtFt(eqFt, this.settings.units); }
 
@@ -471,13 +492,28 @@ export class Game {
     clearTimeout(this.adviceT);
     const a = this.analogAdvice();
     if (!a || !this.settings.caddyVoice) return;
-    const key = `${this.round?.i}|${this.strokes}|${this.ballNo}|${this.club.key}|${a.pct}`;
+    const key = `${this.settings.caddie}|${this.round?.i}|${this.strokes}|${this.ballNo}|${this.club.key}|${a.pct}`;
     if (key === this.spokenKey) return;
     this.adviceT = setTimeout(() => {
       if (this.state !== 'address' || this.ui.paused) return;
-      this.spokenKey = key;
-      say(a.say, this.settings.volume);
+      this.spokenKey = key; this.greeted = true;
+      say(a.say, this.settings.volume, CADDIES[this.settings.caddie]?.voice);
     }, 900);
+  }
+
+  // picking a caddie in the menu: he says hello, so you can hear who you're getting
+  auditionCaddie(id) {
+    if (this.settings.caddyVoice) say(greeting(id).replace(/\*hic\*/g, 'hic'), this.settings.volume, CADDIES[id].voice);
+  }
+
+  // the caddie's word on a shot that went very well or very badly (Angus blames you)
+  caddieReact(info, sg) {
+    const p = CADDIES[this.settings.caddie], kind = judgeShot(info, sg);
+    if (!p || !kind || this.tutorial || (kind === 'great' && Math.random() > 0.7)) return;
+    const line = reaction(p.id, kind, { err: this.adviceErr });
+    if (!line) return;
+    this.ui.toast(`${p.name}: “${line.replace(/\*hic\*\s?/g, '')}”`);
+    if (this.settings.caddyVoice) say(line, this.settings.volume, p.voice);
   }
 
   // a 3-second backswing is a pure strike; each tenth of a second off costs contact and turns the face
@@ -491,8 +527,10 @@ export class Game {
     this.executeSwing(r);
     if (r.backTime == null) return;
     const e = r.backTime - BACKSWING_S;
-    const msg = Math.abs(e) <= TEMPO_PURE ? 'Perfect tempo' : e < 0 ? 'Too quick' : 'Too slow';
-    if (this.settings.caddyVoice) say(Math.abs(e) <= TEMPO_PURE ? 'Smooth tempo.' : `${msg}.`, this.settings.volume);
+    const kind = Math.abs(e) <= TEMPO_PURE ? 'pure' : e < 0 ? 'quick' : 'slow';
+    const p = CADDIES[this.settings.caddie];
+    const line = p ? (kind === 'pure' && Math.random() < 0.6 ? '' : tempoLine(p.id, kind)) : { pure: 'Smooth tempo.', quick: 'Too quick.', slow: 'Too slow.' }[kind];
+    if (line && this.settings.caddyVoice) say(line, this.settings.volume, p?.voice);
   }
 
   // ------------------------------------------------------------------ previews
@@ -510,7 +548,7 @@ export class Game {
       this.suggestedPower = clamp(this.puttEqFt / this.puttRange, 0.02, 1);
       this.meter.configure({ marker: assist.marker ? this.suggestedPower : null });
       this.configureAuto();
-      this.powerReady = true; this.mouseSwing.target = this.suggestedPower;
+      this.powerReady = true; this.syncTarget();
       this.caddieNote(); this.sayAdvice();
       if (assist.putt <= 0) { w.puttLine.visible = false; return; }
       // read: roll the marker-speed putt along the current aim
@@ -573,7 +611,7 @@ export class Game {
   setSuggestedPower(p) {
     // never below the shortest real swing: under it every swing is a chunk (normalizeSwing)
     this.suggestedPower = Math.max(p, MIN_SWING + 0.01);
-    this.powerReady = true; this.mouseSwing.target = this.suggestedPower;
+    this.powerReady = true; this.syncTarget();
     this.caddie.checkBlocked(this.suggestedPower);
     this.caddieNote();
     this.sayAdvice();
@@ -839,6 +877,7 @@ export class Game {
     this.lastSg = r.sg;
     this.resultNext = r.next;
     this.showResult(info, r.sg);
+    this.caddieReact(r.result === 'holed' ? { ...info, holed: true } : info, r.sg);
     if (r.result === 'holed') this.onHoled();
     else if (!putt && info.onGreen && this.distToPin() < 3) this.sfx('crowd', '[crowd applauds]', 0.6);
     else if (!putt && info.onGreen) this.sfx('crowd', '[polite applause]', 0.25, 1.6);
