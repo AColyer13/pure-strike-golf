@@ -18,6 +18,8 @@ export class Input {
     this.bindKeyboard();
     this.bindPointer();
     this.bindTouch();
+    this.bindClubSwipe();
+    this.bindHintButtons();
     // a phone or tablet shows the on-screen controls from the first frame, not after the first touch
     // (a mouse pointer still switches them off; see bindPointer)
     if (matchMedia('(pointer: coarse)').matches) this.showTouch(true);
@@ -75,7 +77,6 @@ export class Input {
     }
     if (g.ui.paused || g.ui.modalOpen()) return false;
     if (a === 'mute') { g.toggleMute(); return true; }
-    if (a === 'hudDetail') { if (g.round) g.toggleHudDetail(); return true; }
     if (a === 'scorecard') { if (!repeat) g.peekScorecard(); return true; }
     if (repeat) return a !== 'swing' && a !== 'skip' && a !== 'replay' ? this.dispatchAddress(a) : true;
     if (st === 'flyover' && (a === 'swing' || a === 'skip')) { g.endFlyover(); return true; }
@@ -185,22 +186,36 @@ export class Input {
       return;
     }
     const t0 = { x: e.clientX, y: e.clientY, time: performance.now(), yaw: g.cam.orbit.yaw, pitch: g.cam.orbit.pitch };
+    // a drag that starts mostly sideways steers the aim (like holding ◀ ▶); one that starts mostly vertical
+    // orbits the camera. Target view keeps the plain orbit, since a tap there already places the aim.
     const move = (ev) => {
       if (ev.pointerId !== e.pointerId) return;
-      if (Math.hypot(ev.clientX - t0.x, ev.clientY - t0.y) > 12 && g.state === 'address') {
-        g.cam.orbit.yaw = t0.yaw - (ev.clientX - t0.x) * 0.006;
-        g.cam.orbit.pitch = clamp(t0.pitch - (ev.clientY - t0.y) * 0.005, -0.3, 2.5);
+      const dx = ev.clientX - t0.x, dy = ev.clientY - t0.y;
+      if (!t0.mode && Math.hypot(dx, dy) > 12 && g.state === 'address') {
+        t0.mode = !g.cam.targetView && Math.abs(dx) > Math.abs(dy) * 1.2 ? 'aim' : 'orbit';
         t0.dragged = true;
+        t0.ax = ev.clientX; t0.aim = this.aimGoal ?? g.aim;
+        if (t0.mode === 'aim') { this.aimGoal = t0.aim; this.aimDrag = true; }
+      }
+      if (t0.mode === 'orbit' && g.state === 'address') {
+        g.cam.orbit.yaw = t0.yaw - dx * 0.006;
+        g.cam.orbit.pitch = clamp(t0.pitch - dy * 0.005, -0.3, 2.5);
+      } else if (t0.mode === 'aim' && g.state === 'address') {
+        // finer on the green, where a degree is a lot of cup
+        this.aimGoal = t0.aim + (ev.clientX - t0.ax) * (g.club.putter ? 0.05 : 0.15) * DEG;
       }
     };
     const up = (ev) => {
       if (ev.pointerId !== e.pointerId) return;
       removeEventListener('pointermove', move);
       removeEventListener('pointerup', up);
+      removeEventListener('pointercancel', up);
+      if (t0.mode === 'aim') this.aimDrag = false;
       if (!t0.dragged && performance.now() - t0.time < 400) this.primary(ev.clientX, ev.clientY, null);
     };
     addEventListener('pointermove', move);
     addEventListener('pointerup', up);
+    addEventListener('pointercancel', up);
   }
 
   bindTouch() {
@@ -227,6 +242,47 @@ export class Input {
       b.addEventListener('pointerup', release);
       b.addEventListener('pointercancel', release);
     }
+  }
+  // After the shot the key-hint bar offers clickable fast-forward (hold) and skip buttons for mouse players.
+  bindHintButtons() {
+    const bar = $('helpBar');
+    if (!bar) return;
+    const stop = () => { this.touchHeld.fastForward = false; };
+    bar.addEventListener('pointerdown', (e) => {
+      const b = e.target.closest?.('.hb-btn');
+      if (!b) return;
+      e.preventDefault();
+      this.g.audio.init();
+      if (b.dataset.hold) { this.touchHeld[b.dataset.hold] = true; b.setPointerCapture?.(e.pointerId); }
+      else if (b.dataset.act) this.dispatch(b.dataset.act);
+    });
+    bar.addEventListener('pointerup', stop);
+    bar.addEventListener('pointercancel', stop);
+    bar.addEventListener('lostpointercapture', stop);
+  }
+  // Swiping up or down on the club pill steps through the bag, one club per ~22 px, alongside the ▲ ▼ buttons.
+  bindClubSwipe() {
+    const box = $('clubBox');
+    if (!box) return;
+    let s = null;
+    box.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'touch') return;
+      this.g.audio.init();
+      s = { id: e.pointerId, y: e.clientY };
+      box.setPointerCapture(e.pointerId);
+      box.classList.add('swiping');
+    });
+    box.addEventListener('pointermove', (e) => {
+      if (!s || e.pointerId !== s.id) return;
+      const steps = Math.trunc((s.y - e.clientY) / 22);
+      if (!steps) return;
+      s.y -= steps * 22;
+      const a = steps > 0 ? 'clubUp' : 'clubDown';
+      for (let i = 0; i < Math.abs(steps); i++) this.dispatchAddress(a);
+    });
+    const end = (e) => { if (s && e.pointerId === s.id) { s = null; box.classList.remove('swiping'); } };
+    box.addEventListener('pointerup', end);
+    box.addEventListener('pointercancel', end);
   }
   // The pin, shape and flight buttons live in a tray that replaces the top button row while it is open.
   // It closes on its own: after a few seconds, on a tap anywhere else, or when the shot is struck.
@@ -319,17 +375,25 @@ export class Input {
   update(dt) {
     this.pollGamepad(dt);
     const g = this.g;
-    if (g.state !== 'address') { this.aimHold = 0; return; }
+    if (g.state !== 'address') { this.aimHold = 0; this.aimVel = 0; this.aimGoal = null; return; }
     const fine = this.held('aimFine');
     const rate = (g.club.putter ? 4 : 14) * (fine ? 0.2 : 1) * DEG;
     let d = 0;
     if (this.held('aimLeft')) d -= 1;
     if (this.held('aimRight')) d += 1;
     if (this.pad.aimAxis) d = this.pad.aimAxis;
-    if (d) {
-      this.aimHold = (this.aimHold || 0) + dt;
-      g.setAim(g.aim + d * rate * dt * (1 + Math.min(2, this.aimHold)));
-    } else this.aimHold = 0;
+    // the turn rate eases in and out rather than jumping to full speed, so the golfer and the camera glide
+    if (d) { this.aimHold = (this.aimHold || 0) + dt; this.aimGoal = null; } else this.aimHold = 0;
+    const want = d * rate * (1 + Math.min(2, this.aimHold));
+    this.aimVel = (this.aimVel || 0) + (want - (this.aimVel || 0)) * (1 - Math.exp(-dt * (d ? 14 : 22)));
+    if (Math.abs(this.aimVel) < 1e-4) this.aimVel = 0;
+    else g.setAim(g.aim + this.aimVel * dt);
+    // a finger drag sets a goal the aim glides to, so the golfer follows smoothly instead of in touch-sampled steps
+    if (this.aimGoal != null) {
+      const gap = this.aimGoal - g.aim;
+      if (Math.abs(gap) < 1e-4 && !this.aimDrag) this.aimGoal = null;
+      else g.setAim(g.aim + gap * (1 - Math.exp(-dt * 18)));
+    }
   }
   get fastForward() { return this.held('fastForward'); }
 }

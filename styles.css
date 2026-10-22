@@ -156,7 +156,7 @@ select { font: 500 13px Barlow, sans-serif; background: #173022; color: var(--te
 .hc-score { font: 800 26px 'Barlow Condensed', sans-serif; }
 .hc-score.under { color: #ff6b5e; }
 .hc-score.over { color: #8fc6ff; }
-#distBox { top: 88px; left: 14px; min-width: 180px; }
+#distBox { top: 100px; left: 14px; min-width: 180px; }
 #distBox .sub { display: flex; flex-direction: column; gap: 1px; }
 .elev { font-size: 12px; }
 #windBox { top: 14px; right: 14px; display: flex; gap: 12px; align-items: center; }
@@ -164,7 +164,7 @@ select { font: 500 13px Barlow, sans-serif; background: #173022; color: var(--te
 #windArrow { font-size: 22px; color: var(--blue); transition: transform .4s; }
 #windArrow i { display: block; font-style: normal; transform: rotate(-90deg); }
 #windBox .big small { font-size: 14px; color: var(--muted); }
-#clubBox { left: 14px; bottom: 116px; min-width: 250px; }
+#clubBox { left: 14px; bottom: 124px; min-width: 250px; }
 .club-top { display: flex; align-items: center; gap: 8px; }
 .club-key { font: 800 18px 'Barlow Condensed', sans-serif; background: #fff; color: #10241a; border-radius: 6px; padding: 1px 7px; }
 .club-name { font: 700 20px 'Barlow Condensed', sans-serif; }
@@ -172,7 +172,7 @@ select { font: 500 13px Barlow, sans-serif; background: #173022; color: var(--te
 .club-row { display: flex; gap: 14px; font-size: 12px; margin-top: 6px; color: var(--muted); }
 .club-row b { color: var(--text); }
 .club-row.dim { opacity: .35; }
-#lieBox { left: 14px; bottom: 212px; min-width: 170px; }
+#lieBox { left: 14px; bottom: 220px; min-width: 170px; }
 .lie-name { font: 700 20px 'Barlow Condensed', sans-serif; }
 .lie-range { font-weight: 700; color: var(--accent); }
 #lieBox[data-lie="deep"] .lie-range, #lieBox[data-lie="splash"] .lie-range { color: var(--red); }
@@ -452,12 +452,11 @@ body.touch.in-round #lieBox { bottom: calc(24px + 102px + 52px + env(safe-area-i
   body.touch.in-round #captions, body.touch.in-round #ffHint { bottom: calc(var(--tcb) + 8px); }
   /* the club box sits on the meter, the caddie's note on the club box (and on the lie box, when the full HUD shows it) */
   body.touch.in-round #clubBox { bottom: calc(var(--tcb) + 78px); }
-  body.touch.in-round #lieBox { bottom: calc(var(--tcb) + 122px); }
-  body.touch.in-round #caddie { bottom: calc(var(--tcb) + 122px); }
+  body.touch.in-round #lieBox { bottom: calc(var(--tcb) + 134px); }
+  body.touch.in-round #caddie { bottom: calc(var(--tcb) + 134px); }
   body.touch #coachMark { font-size: 13px; padding: 10px 12px 8px; }
   body.touch #coachMark h4 { font-size: 18px; }
   body.touch #coachMark p { margin-bottom: 8px; }
-  body.touch.in-round:not(.hud-essential) #caddie { bottom: calc(var(--tcb) + 226px); }
 }
 @media (orientation: landscape) {
   .tc-right { width: 150px; }
@@ -502,30 +501,41 @@ body.touch.in-round #caddieText { display: -webkit-box; -webkit-box-orient: vert
 }
 
 /* ---------- essential HUD (default): lie folded into the distance panel, minimap only in target view / flight, shape row on change ---------- */
-body.hud-essential.in-round #lieBox { display: none; }
-body.hud-essential.in-round #holeCard { min-width: 0; }
-body.hud-essential.in-round #windBox #windTxt { display: none; }
-body.hud-essential.in-round .wind-dial { width: 40px; height: 40px; }
-body.hud-essential.in-round #windArrow { font-size: 18px; }
-body.hud-essential.in-round #clubBox .club-row { display: none; }
-body.hud-essential.in-round #clubBox.show-row .club-row { display: flex; animation: tin .2s ease-out; }
-body.hud-essential.in-round:not(.target-view) #hud:not([data-state="flight"]) #minimap { display: none; }
-body.hud-essential.in-round:not(.target-view) #hud:not([data-state="flight"]) #caddie { right: 14px; }
+body.in-round #lieBox { display: none; }
+body.in-round #holeCard { min-width: 0; }
+body.in-round #windBox #windTxt { display: none; }
+body.in-round .wind-dial { width: 40px; height: 40px; }
+body.in-round #windArrow { font-size: 18px; }
+/* the phone keeps the shape and flight row tucked away until one of them changes */
+body.touch.in-round #clubBox .club-row { display: none; }
+body.touch.in-round #clubBox.show-row .club-row { display: flex; animation: tin .2s ease-out; }
+body.in-round:not(.target-view) #hud:not([data-state="flight"]) #minimap { display: none; }
+body.in-round:not(.target-view) #hud:not([data-state="flight"]) #caddie { right: 14px; }
 /* phone landscape: with the map hidden the caddie moves up under the wind dial */
 @media (orientation: landscape) and (max-height: 500px) {
-  body.hud-essential.in-round:not(.target-view) #hud:not([data-state="flight"]) #caddie { top: 78px; right: 8px; max-width: min(330px, calc(100vw - 480px)); }
+  body.in-round:not(.target-view) #hud:not([data-state="flight"]) #caddie { top: 78px; right: 8px; max-width: min(330px, calc(100vw - 480px)); }
 }
 .lie-line { display: flex; flex-wrap: wrap; gap: 0 6px; align-items: baseline; font-size: 12px; margin-top: 3px; padding-top: 4px; border-top: 1px solid var(--line); }
 .lie-line b { font: 700 15px 'Barlow Condensed', sans-serif; color: var(--text); }
 .lie-line .lie-range { font-size: 12px; }
 .lie-line[data-lie="deep"] .lie-range, .lie-line[data-lie="splash"] .lie-range { color: var(--red); }
-body:not(.hud-essential) .lie-line { display: none; }
 
 /* phones, either way up: the putt note and the tour-average sums wait under Details, so the cards stay small */
 @media (max-width: 760px), (max-height: 500px) {
   body.in-round #distBox .sub small { display: none; }
   #shotPanel:not(.open) .sg small { display: none; }
   #shotPanel:not(.open) .sg { margin-top: 8px; padding: 6px 10px; }
+  /* on the green the caddie's read and the meter's foot marks say it all: no club card, no stimp line */
+  body.touch.in-round[data-putt="1"] #distBox .lie-line { display: none; }
+}
+/* on the green the caddie's read takes the club card's place, on tablets too */
+body.touch.in-round[data-putt="1"] #clubBox { display: none; }
+/* target view puts the map on the right: the club card keeps to its left on narrow phones */
+@media (max-width: 760px) and (orientation: portrait) { body.touch.in-round.target-view #clubBox { max-width: calc(100vw - 124px); } }
+/* short landscape: the result banner rides above the launch monitor instead of across its title */
+@media (orientation: landscape) and (max-height: 500px) {
+  .banner { top: 14%; font-size: 52px; }
+  .banner.pure { top: 14%; font-size: 34px; }
 }
 
 /* ---------- guided first hole ---------- */
@@ -581,7 +591,7 @@ body.reduced-motion *, body.reduced-motion *::before, body.reduced-motion *::aft
 
 /* ---------- phone dialogs: bottom sheets the thumb can reach ---------- */
 @media (max-width: 760px) and (orientation: portrait) {
-  .modal, .modal.wide, #confirmBox { left: 0; right: 0; top: auto; bottom: 0; transform: none; width: 100%; max-height: 88vh; max-height: 88dvh; border-radius: 18px 18px 0 0; border-bottom: 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); animation: sheet-in .25s ease-out; box-shadow: 0 -16px 50px rgba(0,0,0,.5); }
+  .modal, .modal.wide, #confirmBox, #pause { left: 0; right: 0; top: auto; bottom: 0; transform: none; width: 100%; max-height: 88vh; max-height: 88dvh; border-radius: 18px 18px 0 0; border-bottom: 0; padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); animation: sheet-in .25s ease-out; box-shadow: 0 -16px 50px rgba(0,0,0,.5); }
   .modal::before { content: ''; display: block; width: 36px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.25); margin: -8px auto 10px; }
   #settings .set-foot, .sum-actions { margin: 14px -16px calc(-18px - env(safe-area-inset-bottom)); padding: 12px 16px calc(14px + env(safe-area-inset-bottom)); bottom: calc(-18px - env(safe-area-inset-bottom)); }
   #settings .set-foot .btn { flex: 1; }
@@ -645,7 +655,7 @@ body.reduced-motion *, body.reduced-motion *::before, body.reduced-motion *::aft
   body.touch.in-round #caddieText { -webkit-line-clamp: 2; line-clamp: 2; }
   /* the 3-D view can't show a far green at this width, so the map (zoomed on the green when the
      shot can reach it) stays up at address; not for putts, where the green fills the view anyway */
-  body.hud-essential.in-round:not(.target-view) #hud[data-state="address"]:not([data-putt="1"]) #minimap { display: block; }
+  body.in-round:not(.target-view) #hud[data-state="address"]:not([data-putt="1"]) #minimap { display: block; }
   /* the lesson's tips sit in this column on a narrow phone: the map waits until the lesson ends */
   body.in-round.coaching #hud #minimap { display: none !important; }
 }
@@ -711,3 +721,77 @@ body.touch .drawer > summary { min-height: 44px; display: flex; align-items: cen
 .empty-state { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; padding: 18px 8px 8px; }
 .empty-state b { font: 700 20px 'Barlow Condensed', sans-serif; }
 .empty-state p { margin: 0 0 6px; max-width: 360px; line-height: 1.45; }
+
+/* ---------- phone play HUD: slim strips and one read-out, in the manner of a console golf game ----------
+   the hole card and wind shrink to strips, the flag tag carries the distance (and plays-like), the map
+   waits in target view and the caddie's note fades once it has been read */
+body.touch.in-round #hud .panel { padding: 4px 9px; border-radius: 12px; }
+body.touch.in-round #holeCard { top: 8px; left: 8px; gap: 8px; min-width: 0; max-width: calc(100vw - 112px); }
+body.touch.in-round #holeCard .hc-num { width: 34px; height: 34px; font-size: 24px; border-radius: 8px; }
+body.touch.in-round #holeCard .hc-name { font-size: 16px; line-height: 1.1; }
+body.touch.in-round #holeCard :is(.hc-par, .hc-shot) { font-size: 11px; line-height: 1.25; }
+body.touch.in-round #holeCard .hc-score { font-size: 20px; line-height: 1; }
+body.touch.in-round #windBox { top: 8px; right: 8px; gap: 6px; }
+body.touch.in-round #windBox .wind-dial { width: 28px; height: 28px; border-width: 1.5px; }
+body.touch.in-round #windBox #windArrow { font-size: 14px; }
+body.touch.in-round #windBox .big { font-size: 18px; line-height: 1; }
+body.touch.in-round #windBox .big small { font-size: 11px; }
+body.touch.in-round #distBox .lbl, body.touch.in-round #distBox .elev { display: none; }
+body.touch.in-round #distBox .big { font-size: 24px; line-height: 1.05; }
+body.touch.in-round #distBox .sub { font-size: 11px; }
+/* the flag tag already says how far (and what it plays like): the panel stays only for a lie worth knowing */
+body.touch.in-round.pintag:not(.coaching) #distBox .big, body.touch.in-round.pintag:not(.coaching) #distBox .plays { display: none; }
+body.touch.in-round.pintag:not(.coaching) #distBox:not(:has(.lie-line)) { display: none; }
+@media (orientation: portrait) { body.touch.in-round #distBox { top: 58px; } }
+body.touch.in-round:not(.target-view) #hud #minimap { display: none !important; }
+body.touch.in-round #caddie { font-size: 12px; padding: 5px 10px; transition: opacity .6s; }
+body.touch.in-round #caddie.quiet { opacity: 0; pointer-events: none; }
+body.touch.in-round #clubBox { padding: 4px 10px; }
+body.touch.in-round #clubBox .club-name { font-size: 17px; }
+body.touch.in-round #clubBox .club-key { font-size: 15px; }
+/* in the air the panel would only repeat the shot being played */
+body.touch.in-round[data-state="flight"]:not(.coaching) #distBox { display: none; }
+/* once the ball is away the big button is a fast-forward button, and wears the icon instead of "SWING" */
+#touchControls .tc-swing .tc-ff { display: none; width: 34px; height: 34px; }
+body.touch.in-round[data-state="flight"] #touchControls .tc-swing .tc-lbl { display: none; }
+body.touch.in-round[data-state="flight"] #touchControls .tc-swing .tc-ff { display: block; }
+body.touch.in-round[data-state="flight"] #touchControls .tc-swing { background: linear-gradient(180deg, #cfe9d6, #8fc6a0); }
+/* the caddie's note wears the same dark glass as the rest of the HUD and sits right on the club card
+   (or on the meter, on the green where there is no club card) instead of floating in the grass */
+body.touch.in-round #caddie { background: rgba(10, 22, 16, .8); color: #f3f6ef; border: 1px solid rgba(255, 255, 255, .16); box-shadow: none; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); align-items: center; }
+body.touch.in-round #caddie .caddie-ico { color: var(--accent); }
+@media (orientation: portrait) {
+  body.touch.in-round #caddie { left: 14px; right: 14px; max-width: none; bottom: calc(var(--tcb) + 78px + 40px); }
+  body.touch.in-round[data-putt="1"] #caddie { bottom: calc(var(--tcb) + 78px); }
+}
+/* the result card has Continue and Details, so the menu / view / skip buttons under it step aside and the card drops into their place */
+@media (orientation: portrait) {
+  body.touch.in-round[data-state="result"] .tc-right > :not(.tc-swing) { visibility: hidden; pointer-events: none; }
+  body.touch.in-round[data-state="result"] #shotPanel { bottom: calc(14px + env(safe-area-inset-bottom)); max-height: calc(100vh - 100px); }
+}
+/* a narrow window with a mouse (no touch rules): the note sits on the club card, full width, not mid-screen */
+@media (max-width: 700px) and (orientation: portrait) {
+  body.in-round:not(.touch) #caddie { left: 14px; right: 14px; max-width: none; bottom: 214px; }
+  body.in-round:not(.touch)[data-putt="1"] #caddie { bottom: 190px; }
+  /* the result card is full width here and the club card is not part of it: stack, don't overlap */
+  body.in-round:not(.touch) #shotPanel { left: 14px; right: 14px; width: auto; }
+  body.in-round:not(.touch):not([data-state="address"], [data-state="swing"], [data-state="backswing"]) #clubBox { opacity: 0; pointer-events: none; }
+}
+
+/* swipe up/down on the club pill to change club (the ▲ ▼ buttons still work) */
+body.touch.in-round[data-state="address"] #clubBox { pointer-events: auto; touch-action: none; }
+#clubBox.swiping { border-color: var(--accent, #ffe25a); }
+
+/* nothing to shape or flight with a putter */
+body.in-round[data-putt="1"] #clubBox .club-row { display: none; }
+
+/* after the shot: the key hints flip to clickable fast-forward and skip buttons (mouse and keyboard play) */
+#helpBar.hb-flip > * { animation: hbFlip .28s ease-out; }
+@keyframes hbFlip { from { opacity: 0; transform: rotateX(80deg) scale(.9); } to { opacity: 1; transform: none; } }
+#helpBar .hb-btn { pointer-events: auto; display: inline-flex; align-items: center; gap: 8px; padding: 7px 16px; border-radius: 999px; border: 1px solid rgba(255,255,255,.35); background: rgba(8, 20, 13, .72); color: rgba(255,255,255,.85); font: inherit; font-size: 14px; cursor: pointer; touch-action: none; }
+#helpBar .hb-btn:hover, #helpBar .hb-btn:active { background: rgba(255,255,255,.2); border-color: #fff; }
+#helpBar .hb-btn .ico { width: 20px; height: 20px; flex: none; color: #ffe25a; }
+@media (orientation: landscape) and (max-height: 500px), (max-width: 700px) and (orientation: portrait) {
+  /* the bar steps aside on a small window, but the buttons are the only on-screen way to skip, so they stay */
+  body:not(.touch).in-round[data-state="flight"] #helpBar { display: flex; }
+}

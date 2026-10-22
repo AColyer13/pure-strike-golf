@@ -97,7 +97,7 @@ export class SwingMeter {
     const g = this.g, w = this.w, h = this.h;
     g.clearRect(0, 0, w, h);
     if (this.state === 'hidden') return;
-    const y = 18, bh = 26;
+    const y = 26, bh = 26; // (the cue text sits in the 18 px above the frame, clear of it)
     const x0 = this.x(-0.12), x1 = this.x(this.putt ? 1.0 : 1.1);
     // frame
     g.fillStyle = 'rgba(8,16,12,0.72)';
@@ -128,7 +128,10 @@ export class SwingMeter {
       g.fillRect(xx - 0.5, y + (i % 5 ? bh - 7 : bh - 12), 1, i % 5 ? 7 : 12);
     }
     if (this.labels) {
-      for (const [v, txt] of this.labels) { g.fillText(txt, this.x(v), y + bh + 13); }
+      for (const [v, txt] of this.labels) {
+        const hw = g.measureText(txt).width / 2; // keep each foot mark inside the frame
+        g.fillText(txt, clamp(this.x(v), x0 + hw, x1 - hw), y + bh + 13);
+      }
     }
     // impact zone
     const zw = Math.max(2, this.x(this.zone) - this.x(0));
@@ -170,6 +173,10 @@ export class SwingMeter {
       const e = this.error, z = this.zone;
       msg = Math.abs(e) <= z * 0.35 ? 'PERFECT STRIKE' : Math.abs(e) <= z ? 'Good contact' : e > 0 ? 'Early – face closed (pull/hook)' : 'Late – face open (push/slice)';
     }
+    // a long cue shrinks, then truncates, so it never runs past the frame
+    const room = x1 - x0;
+    for (let px = 12; px > 9 && g.measureText(msg).width > room; px--) g.font = `700 ${px - 1}px Barlow, system-ui, sans-serif`;
+    while (msg.length > 1 && g.measureText(msg).width > room) msg = msg.slice(0, -2).trimEnd() + '…';
     g.fillText(msg, x0, 11);
     // a narrow meter (phone landscape) drops the club's range rather than print over the cue;
     // the club box shows it anyway, and on touch it is always there, so the meter never repeats it

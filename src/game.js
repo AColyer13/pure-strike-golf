@@ -136,7 +136,7 @@ export class Game {
     return {
       // a first visit starts a typical golfer on the middle tees; saved settings from before tee sets keep the back tees
       profile: 'mid', difficulty: 'standard', tees: Object.keys(s).length ? 'back' : 'middle', control: 'meter', units: 'yd', volume: 0.7, tracer: true,
-      reducedMotion: reduce, oneButton: false, captions: false, uiScale: 1, keys: {}, ffSeen: 0, hudDetail: 'essential', quality: 'auto', ...s,
+      reducedMotion: reduce, oneButton: false, captions: false, uiScale: 1, keys: {}, ffSeen: 0, quality: 'auto', ...s,
     };
   }
   saveSettings() {
@@ -147,14 +147,6 @@ export class Game {
     const s = this.settings;
     document.documentElement.style.setProperty('--ui-scale', String(s.uiScale || 1));
     document.body.classList.toggle('reduced-motion', !!s.reducedMotion);
-    document.body.classList.toggle('hud-essential', s.hudDetail !== 'full');
-  }
-  toggleHudDetail() {
-    this.settings.hudDetail = this.settings.hudDetail === 'full' ? 'essential' : 'full';
-    this.saveSettings();
-    this.ui.helpBar();
-    this.ui.toast(this.settings.hudDetail === 'full' ? 'Full HUD' : 'Essential HUD');
-    this.updateHUD(true);
   }
   get diff() { return DIFFICULTY[this.settings.difficulty] || DIFFICULTY.standard; }
 
@@ -330,7 +322,7 @@ export class Game {
     this.mouseSwing.putt = !!this.club.putter;
     this.mouseSwing.result = null;
     this.mouseSwing.draw();
-    this.world.showGreenGrid(this.onGreen || (this.distToPin() < 25 && this.gridOn));
+    this.world.showGreenGrid(this.onGreen ? !this.gridHide : this.nearGreen() && this.gridOn);
     this.world.arc.visible = true;
     this.world.reticle.visible = !this.club.putter;
     this.world.tracer.visible = false;
@@ -342,6 +334,8 @@ export class Game {
   }
 
   distToPin() { return distToPin(this.hole, this.ball); }
+  // close enough to the green for its grid to mean something
+  nearGreen() { return !!this.hole && !!this.ball && (!!this.onGreen || this.distToPin() < 25); }
   lieKey() { return lieKeyFor(this.ball, this.hole, this.club); }
   slope() { return slopeAt(this.hole, this.ball.p, this.aim); }
 
@@ -349,6 +343,8 @@ export class Game {
     i = clamp(i, 0, this.bag.length - 1);
     // the putter only comes out near the green – no 465 ft "putts" from the tee
     if (user && this.bag[i].putter && !canPutt(this.hole, this.ball)) { this.ui.toast('Too far to putt – get it near the green first'); return; }
+    // ...and once it is out on the green it stays out
+    if (user && this.onGreen && this.club?.putter && !this.bag[i].putter) { this.ui.toast('On the green – putter only'); return; }
     this.clubIdx = i;
     this.club = this.bag[this.clubIdx];
     if (user) this.userClub = true;
@@ -423,8 +419,12 @@ export class Game {
     this.ui.toast(this.cam.targetView ? 'Target view – click the ground to aim' : 'Address view');
   }
   toggleGrid() {
-    this.gridOn = !this.world.gridGroup?.visible;
-    this.world.showGreenGrid(this.gridOn);
+    if (!this.nearGreen()) { this.ui.toast('The green grid is for when you are near the green'); return; }
+    const on = !this.world.gridGroup?.visible;
+    // on the green the grid is the default, so G there records a choice to hide it; elsewhere it records a choice to show it
+    if (this.onGreen) this.gridHide = !on; else this.gridOn = on;
+    this.world.showGreenGrid(on);
+    this.ui.toast(on ? 'Green grid on' : 'Green grid off');
   }
   toggleMute() {
     this.audio.setEnabled(!this.audio.enabled);
@@ -1029,6 +1029,7 @@ export class Game {
       plays: this.pl && !this.club.putter && !resting && !(this.challenge && r.mode === 'drive') ? this.fmtDist(this.pl.plays) : null,
       elev: holed ? 0 : (h.height(h.cup.x, h.cup.z) - (b.p[1] - BALL.radius)) / FT,
       puttEq: this.club.putter && !resting ? this.puttEqFt : null,
+      nearGreen: this.nearGreen(),
       wind: this.windRel(), windMph: this.windMph,
       club: this.club, clubCarry: this.club.putter ? `${this.puttRange} ft range` : `Carry ${this.fmtDist(this.club.carry)} · Total ${this.fmtDist(this.club.total)}`,
       lie: b.isTee ? SURFACES.tee.name : b.surface === 'tee' ? 'Tee box · fairway lie' : SURFACES[b.surface]?.name || b.surface,
@@ -1062,6 +1063,7 @@ export class Game {
     const h = this.hole;
     if (!show || !h || !this.club || this.club.putter || this.cam.targetView || this.distToPin() < 30) {
       if (!el.classList.contains('hidden')) el.classList.add('hidden');
+      document.body.classList.remove('pintag');
       return;
     }
     const c = h.cup, cam = this.camera;
@@ -1078,14 +1080,20 @@ export class Game {
     if (side) y = clamp(y, 120, H * 0.5);
     else y = clamp(y - 20, 100, H * 0.55);
     // keep the tag off the golfer's head when the flag lines up behind them
-    const hp = this.ball?.p;
-    if (hp) {
-      const hv = (this.pinH = this.pinH || new THREE.Vector3()).set(hp[0], hp[1] + 1.9, hp[2]).project(cam);
+    if (this.golfer?.head) {
+      const hv = (this.pinH = this.pinH || new THREE.Vector3());
+      this.golfer.head.getWorldPosition(hv);
+      hv.y += 0.12; // the cap
+      hv.project(cam);
       const hx = (hv.x * 0.5 + 0.5) * W, hy = (-hv.y * 0.5 + 0.5) * H;
-      if (Math.abs(x - hx) < 80 && Math.abs(y - hy) < 36) y = Math.max(70, hy - 46);
+      if (Math.abs(x - hx) < el.offsetWidth / 2 + 28 && y > hy - 78 && y < hy + 44) y = Math.max(70, hy - 58);
     }
-    const text = `${side < 0 ? '◀ ' : ''}⚑ ${this.fmtDist(this.distToPin())}${side > 0 ? ' ▶' : ''}`;
+    // on a phone the tag carries the distance panel's numbers, so the panel steps aside
+    const dist = this.distToPin(), plays = this.pl?.plays;
+    const pl = plays && Math.abs(plays - dist) >= 1.5 * YD ? ` · plays ${this.fmtDist(plays)}` : '';
+    const text = `${side < 0 ? '◀ ' : ''}⚑ ${this.fmtDist(dist)}${pl}${side > 0 ? ' ▶' : ''}`;
     if (el.textContent !== text) el.textContent = text;
+    document.body.classList.add('pintag');
     el.style.transform = `translate(${x.toFixed(0)}px, ${y.toFixed(0)}px) translate(-50%, -50%)`;
     el.classList.remove('hidden');
   }
@@ -1099,7 +1107,16 @@ export class Game {
         if (this.caddie.analysis) this.caddie.stepAnalysis();
         if (this.caddie.reading) this.caddie.stepReading();
         if (this.powerJob && !this.previewDirty) this.stepPower(); // (a new preview replaces it)
-        if (this.previewDirty) { this.previewT = (this.previewT || 0) + dt; if (this.previewT > 0.06) { this.previewT = 0; this.updatePreview(); this.updateHUD(true); } }
+        if (this.previewDirty) {
+          // rebuild the preview as often as the device can afford (a held aim key keeps it dirty), not on a fixed beat
+          this.previewT = (this.previewT || 0) + dt;
+          if (this.previewT > (this.previewGap ?? 0.04)) {
+            this.previewT = 0;
+            const t0 = performance.now();
+            this.updatePreview(); this.updateHUD(true);
+            this.previewGap = clamp((performance.now() - t0) * 0.004, 0.03, 0.12);
+          }
+        }
         this.caddieTick = (this.caddieTick || 0) + dt;
         if (this.caddieTick > 0.5) { this.caddieTick = 0; this.caddieNote(); }
       } else if (st === 'swing') this.meter.update(dt);

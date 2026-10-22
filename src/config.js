@@ -49,7 +49,6 @@ export const DEFAULT_KEYS = {
   replay: ['x'],
   mute: ['m'],
   scorecard: ['Tab'],
-  hudDetail: ['h'],
   pause: ['Escape'],
 };
 
@@ -57,5 +56,5 @@ export const ACTION_LABELS = {
   swing: 'Swing / continue', clubUp: 'Longer club', clubDown: 'Shorter club', aimLeft: 'Aim left', aimRight: 'Aim right',
   aimFine: 'Fine aim (hold)', shapeLeft: 'Draw', shapeRight: 'Fade', trajUp: 'Higher flight', trajDown: 'Lower flight',
   targetView: 'Target view', grid: 'Green grid', caddie: 'Caddie advice', aimPin: 'Aim at pin', fastForward: 'Fast-forward (hold)',
-  skip: 'Skip to result', replay: 'Replay last shot', mute: 'Sound on/off', scorecard: 'Scorecard (hold)', hudDetail: 'Essential / full HUD', pause: 'Pause',
+  skip: 'Skip to result', replay: 'Replay last shot', mute: 'Sound on/off', scorecard: 'Scorecard (hold)', pause: 'Pause',
 };

@@ -36,14 +36,14 @@ const keyName = (k) => ({ ' ': 'Space', ArrowUp: '↑', ArrowDown: '↓', ArrowL
 const TOUCH_LABELS = {
   swing: 'SWING', aimLeft: '◀', aimRight: '▶', clubUp: '▲', clubDown: '▼', aimPin: '⚑', targetView: 'view',
   shapeLeft: 'shape', shapeRight: 'shape', trajUp: 'flight', trajDown: 'flight', skip: 'skip', replay: 'view',
-  fastForward: 'SWING', pause: '☰',
+  fastForward: '▶▶', pause: '☰',
 };
 // actions that share a key without clashing: they only act in different states (a held Space is
 // swing on the tee and fast-forward in flight), so only keys that collide inside a group are a conflict
 const KEY_GROUPS = {
   address: ['swing', 'clubUp', 'clubDown', 'aimLeft', 'aimRight', 'aimFine', 'shapeLeft', 'shapeRight', 'trajUp', 'trajDown', 'targetView', 'grid', 'caddie', 'aimPin'],
   flight: ['fastForward', 'skip', 'replay'],
-  always: ['mute', 'scorecard', 'hudDetail', 'pause'],
+  always: ['mute', 'scorecard', 'pause'],
 };
 const groupsOf = (a) => Object.entries(KEY_GROUPS).filter(([, l]) => l.includes(a)).map(([g]) => g);
 // the action that already uses key `k` in a state where `a` is also live, if any
@@ -392,13 +392,17 @@ export class UI {
     $('kTrajU').textContent = k('trajUp'); $('kTrajD').textContent = k('trajDown');
     const swing = mouse ? '<b>Hold LMB</b> pull back, push up to swing' : `<b>${k('swing')}</b> swing`;
     const basics = [swing, `<b>${k('aimLeft')}${k('aimRight')}</b> aim (${k('aimFine')} fine)`, `<b>${k('clubUp')}${k('clubDown')}</b> club`];
-    const items = this.game.settings.hudDetail === 'full' ? [
-      ...basics,
-      `<b>${k('shapeLeft')}/${k('shapeRight')}</b> draw/fade`, `<b>${k('trajUp')}/${k('trajDown')}</b> high/low`,
-      `<b>${k('targetView')}</b> target view`, `<b>${k('grid')}</b> green grid`, `<b>${k('aimPin')}</b> aim at pin`,
-      `<b>${k('scorecard')}</b> card`, `<b>${k('hudDetail')}</b> essential HUD`, `<b>${k('pause')}</b> menu`,
-    ] : [...basics, `<b>${k('hudDetail')}</b> full HUD`, `<b>${k('pause')}</b> menu · all keys`];
-    $('helpBar').innerHTML = items.map((x) => `<span>${x}</span>`).join('');
+    const st = document.body.dataset.state;
+    // once the ball is away the swing hint flips to fast-forward (hold) and a skip button, and flips back at the next address
+    const ico = (d, w = 2) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="${d}" fill="currentColor" stroke="currentColor" stroke-width="${w}" stroke-linejoin="round"/></svg>`;
+    const items = st === 'flight'
+      ? [`<button type="button" class="hb-btn" data-hold="fastForward" aria-label="Hold to fast-forward">${ico('M2.5 5.5l9 6.5-9 6.5zM12.5 5.5l9 6.5-9 6.5z')}<span><b>${k('fastForward')}</b> hold to fast-forward</span></button>`,
+        `<button type="button" class="hb-btn" data-act="skip" aria-label="Skip to the result">${ico('M4 5l11 7-11 7zM18 5v14', 2.4)}<span><b>${k('skip')}</b> skip</span></button>`]
+      : st === 'result' ? [`<b>${k('swing')}</b> continue`, `<b>${k('pause')}</b> menu · all keys`]
+      : [...basics, `<b>${k('targetView')}</b> target view`, ...(this.game.nearGreen?.() ? [`<b>${k('grid')}</b> green grid`] : []), `<b>${k('pause')}</b> menu · all keys`];
+    const bar = $('helpBar');
+    bar.innerHTML = items.map((x) => (x.startsWith('<button') ? x : `<span>${x}</span>`)).join('');
+    if (this.hbState !== st) { bar.classList.remove('hb-flip'); void bar.offsetWidth; bar.classList.add('hb-flip'); this.hbState = st; }
   }
 
   // ------------------------------------------------------------ loading / intro
@@ -444,14 +448,15 @@ export class UI {
     const sl = d.slope, parts = [];
     if (Math.abs(sl.up) >= 1.5) parts.push(`${sl.up > 0 ? 'Uphill' : 'Downhill'} ${Math.abs(sl.up).toFixed(0)}°`);
     if (Math.abs(sl.side) >= 1.5) parts.push(`Ball ${sl.side > 0 ? 'above' : 'below'} feet ${Math.abs(sl.side).toFixed(0)}°`);
-    if (this.game.settings.hudDetail !== 'full') {
-      // essential HUD: the lie box is hidden, so its one useful line lives here
-      const lie = d.putter ? `Stimp ${d.stimp.toFixed(1)}` : [d.lieRange === '100–100%' ? '' : d.lieRange, ...parts].filter(Boolean).join(' · ');
-      // a clean tee shot has nothing to say about the lie
-      if (d.lieKey !== 'tee' || lie) sub += `<span class="lie-line" data-lie="${d.lieKey}"><b>${esc(d.lie)}</b> <span class="lie-range">${lie}</span></span>`;
-    }
+    // the lie box is folded away: its one useful line lives here
+    const lie = d.putter ? `Stimp ${d.stimp.toFixed(1)}` : [d.lieRange === '100–100%' ? '' : d.lieRange, ...parts].filter(Boolean).join(' · ');
+    // a clean tee shot has nothing to say about the lie
+    // (on a phone a good lie says nothing either: only rough, sand and the like earn a line)
+    const quiet = this.touch ? ['tee', 'fairway', 'green'].includes(d.lieKey) : d.lieKey === 'tee' && !lie;
+    if (!quiet) sub += `<span class="lie-line" data-lie="${d.lieKey}"><b>${esc(d.lie)}</b> <span class="lie-range">${lie}</span></span>`;
     $('dSub').innerHTML = sub;
     this.setState(d.state);
+    if (this.hbNear !== d.nearGreen && !this.touch) { this.hbNear = d.nearGreen; this.helpBar(); } // the grid hint comes and goes with the green
     document.body.dataset.putt = d.putter ? '1' : '';
     this.touchChips(d);
     $('hud').dataset.putt = d.putter ? '1' : '';
@@ -478,7 +483,11 @@ export class UI {
   setState(state) {
     $('hud').dataset.state = state;
     document.body.dataset.state = state; // the touch buttons that make sense change with it
+    if (this.hbState !== state && !this.touch) this.helpBar();
     if (state !== 'address') this.game.input?.toggleShotOpts(false);
+    // with the ball away the big button holds to fast-forward, and its label says so
+    const sw = document.querySelector('.tc-swing');
+    if (sw) sw.setAttribute('aria-label', state === 'flight' ? 'Hold to fast-forward' : 'Swing');
   }
   // the shot tray's buttons say what is set, and the tray's own button shows a dot when the shot is shaped
   touchChips(d) {
@@ -580,7 +589,13 @@ export class UI {
   caddie(text) {
     const c = $('caddie');
     if (!text) { c.classList.add('hidden'); return; }
-    if (c.dataset.text !== text) { c.dataset.text = text; $('caddieText').textContent = this.touch ? caddieBrief(text) : text; $('caddieText').title = text; }
+    if (c.dataset.text !== text) {
+      c.dataset.text = text; $('caddieText').textContent = this.touch ? caddieBrief(text) : text; $('caddieText').title = text;
+      // on a phone the note is read once and then fades; a new note (new club, new aim) brings it back
+      c.classList.remove('quiet');
+      clearTimeout(this.caddieT);
+      if (this.touch) this.caddieT = setTimeout(() => c.classList.add('quiet'), 7000);
+    }
     c.classList.remove('hidden');
   }
 
@@ -624,13 +639,15 @@ export class UI {
   ffHint(on) {
     const h = $('ffHint');
     if (!h) return;
-    if (on) h.innerHTML = this.touch ? 'Hold <b>SWING</b> to fast-forward · <b>skip</b> button to skip'
+    if (on) h.innerHTML = this.touch ? 'Hold <b>▶▶</b> to fast-forward · <b>skip</b> button to skip'
       : `Hold <b>${this.key('fastForward')}</b> to fast-forward · <b>${this.key('skip')}</b> to skip`;
     h.classList.toggle('hidden', !on);
   }
 
   // ------------------------------------------------------------ shot panel
   shotPanelShown() { return !$('shotPanel').classList.contains('hidden'); }
+  // where the top of the result card sits, as a fraction of the window height (the camera lifts the picture clear of it)
+  shotPanelTop() { return $('shotPanel').getBoundingClientRect().top / (window.innerHeight || 1); }
   showShotPanel(o) {
     const p = $('shotPanel');
     if (!o) { p.classList.add('hidden'); document.body.classList.remove('shot-open'); return; }
@@ -969,7 +986,6 @@ export class UI {
       <label class="set"><span>Swing control</span><select id="sCtl"><option value="meter" ${s.control === 'meter' ? 'selected' : ''}>3-click meter</option><option value="mouse" ${s.control === 'mouse' ? 'selected' : ''}>Analog mouse swing</option></select></label>
       <label class="set"><span>Assists</span><select id="sDiff">${['beginner', 'standard', 'pro'].map((d) => `<option value="${d}" ${s.difficulty === d ? 'selected' : ''}>${d[0].toUpperCase() + d.slice(1)}</option>`).join('')}</select></label>
       <label class="set"><span>Graphics<small id="sQualDesc">${this.qualityDesc()}</small></span><select id="sQual">${Object.keys(QUALITY).map((q) => `<option value="${q}" ${(s.quality || 'auto') === q ? 'selected' : ''}>${QUALITY[q].name}</option>`).join('')}</select></label>
-      <label class="set"><span>HUD detail<small>Essential folds the lie into the distance panel and hides the minimap and shape row until you use them.${this.touch ? '' : ` ${this.key('hudDetail')} toggles in play.`}</small></span><select id="sHud"><option value="essential" ${s.hudDetail !== 'full' ? 'selected' : ''}>Essential</option><option value="full" ${s.hudDetail === 'full' ? 'selected' : ''}>Full</option></select></label>
       <h3>Tools</h3>
       <div class="set"><span>Course editor<small>Change par, yardage and layout of a hole, then play-test it.</small></span><button class="btn small-btn" id="sEditor">Open</button></div>
       <h3>Accessibility</h3>
@@ -990,7 +1006,6 @@ export class UI {
     $('sUnits').onchange = (e) => { s.units = e.target.value; save(); g.updateHUD?.(true); };
     $('sCtl').onchange = (e) => { s.control = e.target.value; save(); };
     $('sDiff').onchange = (e) => { s.difficulty = e.target.value; save(); };
-    $('sHud').onchange = (e) => { s.hudDetail = e.target.value; save(); g.updateHUD(true); };
     $('sQual').onchange = (e) => { s.quality = e.target.value; g.saveSettings(); g.post.setQuality(s.quality); $('sQualDesc').textContent = this.qualityDesc(); };
     $('sOne').onchange = (e) => { s.oneButton = e.target.checked; save(); };
     $('sReduce').onchange = (e) => { s.reducedMotion = e.target.checked; save(); };
@@ -1093,7 +1108,7 @@ export class UI {
         <li><b>${k('trajUp')}</b> cycles low, standard and high flight.</li>
         <li><b>Plays like</b> includes elevation and wind. The lie box shows how the lie affects distance.</li>
         <li>In flight: hold <b>${k('fastForward')}</b> to fast-forward, <b>${k('skip')}</b> skips to where it finishes. <b>${k('replay')}</b> replays the shot from a new angle.</li>
-        <li>Drag one finger on the view to look around.</li>`
+        <li>Drag a finger sideways on the view to turn your aim, or up and down to look around. Swipe up or down on the club to change it.</li>`
       : `<li><b>${k('aimLeft')} ${k('aimRight')}</b> aim, <b>${k('aimFine')}</b> for fine aim. <b>${k('aimPin')}</b> re-aims at the pin (on the green it flips between the caddie's read and the cup). Click the mini-map, or press <b>${k('targetView')}</b> and click the ground.</li>
         <li><b>${k('clubUp')} ${k('clubDown')}</b> change club. Carry / total distances are shown for a full swing.</li>
         <li><b>${k('shapeLeft')} / ${k('shapeRight')}</b> draw (curves left) or fade (curves right) for a right-hander.</li>

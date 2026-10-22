@@ -27,6 +27,11 @@ export class CameraDirector {
     this.shakeClock = 0;
     this.lift = 0; // fraction of the screen height the picture is slid up for the result card
     this.liftApplied = 0;
+    this.sightM = 0; // metres the camera rises to see the green: sightLift()
+    this.sightE = 0; // ...eased, so a step in it does not jolt the picture while aiming
+    this.shiftY = 0; // fraction of the screen height the picture is slid down (portrait framing)
+    this.shiftX = 0; // fraction of the screen width the picture is slid right (portrait framing)
+    this.shiftApplied = 0;
   }
 
   kick(deg) { this.fovKick = deg; }
@@ -113,7 +118,7 @@ export class CameraDirector {
     // shift right of the line, away from the golfer; on a narrow screen full swings stand left of it
     // instead so the golfer, who is left of the ball, is not cut off by the screen edge
     const side = putt ? 0.55 * (0.5 + 0.5 * wide) : lerp(-0.5, 0.3, wide);
-    if (!putt) { const e = this.sightLift(f, back, up, side); up += e; back += e * 2.2; }
+    if (!putt) { this.sightLift(f, back, up, side); const e = this.sightE; up += e; back += e * 2.2; }
     const px = b.p[0] - f.x * back - f.z * side, pz = b.p[2] - f.z * back + f.x * side;
     const py = Math.max(h.height(px, pz) + 0.6, b.p[1] + up);
     // tilt the view so the ball sits below the screen centre (above the swing meter)
@@ -131,7 +136,7 @@ export class CameraDirector {
     const g = this.g, b = g.ball, h = g.hole;
     const T = g.previewLand || [h.cup.x, 0, h.cup.z];
     const key = `${b.p[0]},${b.p[2]},${f.x.toFixed(4)},${f.z.toFixed(4)},${Math.round(T[0])},${Math.round(T[2])},${back.toFixed(2)},${up.toFixed(2)}`;
-    if (key === this.liftKey) return this.lift;
+    if (key === this.liftKey) return this.sightM;
     const tx = T[0], tz = T[2], ty = h.height(tx, tz) + 0.3;
     const sees = (e) => {
       const bk = back + e * 2.2;
@@ -147,19 +152,41 @@ export class CameraDirector {
     let lift = 0;
     while (lift < 2 && !sees(lift)) lift += 0.25;
     this.liftKey = key;
-    this.lift = lift;
+    this.sightM = lift;
     return lift;
   }
   snapAddress() {
+    this.address();
+    this.sightE = this.sightM;
     const c = this.address();
     this.set(c.pos, c.look);
   }
   target() {
     const g = this.g, h = g.hole;
-    const land = g.club.putter ? [h.cup.x, 0, h.cup.z] : (g.previewLand || g.ball.p);
+    if (g.club.putter) return this.targetPutt();
+    const land = g.previewLand || g.ball.p;
     const f = dirOf(g.aim);
     const y = h.height(land[0], land[2]);
     return { pos: new THREE.Vector3(land[0] - f.x * 30, y + 70, land[2] - f.z * 30), look: new THREE.Vector3(land[0], y, land[2]) };
+  }
+
+  // Putting target view: look almost straight down on the whole putt, the ball at the bottom and the cup toward the
+  // top, pulled back just far enough to hold both (and some room for the break) whatever the length and screen shape.
+  targetPutt() {
+    const g = this.g, h = g.hole, b = g.ball.p, cup = h.cup;
+    let dx = cup.x - b[0], dz = cup.z - b[2];
+    const d = Math.hypot(dx, dz);
+    if (d > 0.05) { dx /= d; dz /= d; } else { const f = dirOf(g.aim); dx = f.x; dz = f.z; }
+    const a = this.camera.aspect > 0 ? this.camera.aspect : 1;
+    const th = Math.tan((this.fitFov(50) / 2) * DEG);
+    const along = d * 1.7 + 3, across = Math.max(3.2, d * 0.5 + 2);
+    const dist = clamp(Math.max(along / (2 * th), across / (2 * th * a)), 3.5, 60);
+    const mx = (b[0] + cup.x) / 2, mz = (b[2] + cup.z) / 2, my = h.height(mx, mz);
+    const el = 72 * DEG;
+    return {
+      pos: new THREE.Vector3(mx - dx * dist * Math.cos(el), my + dist * Math.sin(el), mz - dz * dist * Math.cos(el)),
+      look: new THREE.Vector3(mx, my, mz),
+    };
   }
 
   // ------------------------------------------------------------------ flight
@@ -321,12 +348,35 @@ export class CameraDirector {
     // portrait phone, shot result showing: the result card fills the lower half, so slide the
     // picture up (a view offset, not a camera move) until the ball and flag sit above it
     const a = this.camera.aspect;
-    const wantLift = a > 0 && a < 0.8 && this.g.state === 'result' && this.g.ui.shotPanelShown() ? 0.2 : 0;
+    let wantLift = 0;
+    if (a > 0 && a < 0.8 && this.g.state === 'result' && this.g.ui.shotPanelShown()) {
+      // a tall card (a phone) needs the full lift, a short one (putt, narrow window) far less
+      this.liftClock = (this.liftClock || 0) - dt;
+      if (this.liftClock <= 0) { this.liftClock = 0.25; this.liftWant = clamp((0.85 - this.g.ui.shotPanelTop()) * 0.7, 0, 0.2); }
+      wantLift = this.liftWant;
+    }
+    this.sightE += (this.sightM - this.sightE) * (1 - Math.exp(-dt * 4));
+    if (Math.abs(this.sightE - this.sightM) < 0.005) this.sightE = this.sightM;
     this.lift += (wantLift - this.lift) * (1 - Math.exp(-dt * 6));
     if (Math.abs(this.lift - wantLift) < 0.002) this.lift = wantLift;
-    if (this.lift !== this.liftApplied) {
-      this.liftApplied = this.lift;
-      if (this.lift > 0) this.camera.setViewOffset(1000 * a, 1000, 0, 1000 * this.lift, 1000 * a, 1000);
+    // portrait phone, lining up a shot: the golfer stands left of the ball and would hug the left edge,
+    // so slide the picture right (a putt, framed tighter, needs more) to bring the golfer toward the middle
+    const lining = this.g.state === 'address' || this.g.state === 'swing' || this.g.state === 'backswing';
+    const wantShift = a > 0 && a < 0.8 && lining && !this.targetView ? (this.g.club?.putter ? 0.19 : 0.09) * clamp((0.8 - a) / 0.3, 0, 1) : 0;
+    this.shiftX += (wantShift - this.shiftX) * (1 - Math.exp(-dt * 6));
+    if (Math.abs(this.shiftX - wantShift) < 0.001) this.shiftX = wantShift;
+    // ...and the ball is held so high (clear of the HUD) that the golfer hugs the top, so slide the picture down toward the middle
+    let wantY = a > 0 && a < 0.8 && lining && !this.targetView ? (this.g.club?.putter ? 0.33 : 0.3) * clamp((0.8 - a) / 0.3, 0, 1) : 0;
+    // a short landscape window: the swing meter's cue line would run across the golfer's feet, so lift the picture a little
+    if (a >= 1 && innerHeight < 500 && lining && !this.targetView) wantY = this.g.club?.putter ? -0.035 : -0.08;
+    // target view on a portrait phone: the cards and meter fill the bottom third, so frame the picture in the clear band above them
+    if (this.targetView && a > 0 && a < 0.8 && lining) wantY = -0.155 * clamp((0.8 - a) / 0.3, 0, 1);
+    this.shiftY += (wantY - this.shiftY) * (1 - Math.exp(-dt * 6));
+    if (Math.abs(this.shiftY - wantY) < 0.001) this.shiftY = wantY;
+    const up = this.lift - this.shiftY;
+    if (up !== this.liftApplied || this.shiftX !== this.shiftApplied) {
+      this.liftApplied = up; this.shiftApplied = this.shiftX;
+      if (up !== 0 || this.shiftX > 0) this.camera.setViewOffset(1000 * a, 1000, -1000 * a * this.shiftX, 1000 * up, 1000 * a, 1000);
       else this.camera.clearViewOffset();
       this.camera.updateProjectionMatrix();
     }
