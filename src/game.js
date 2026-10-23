@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import { World } from './world.js';
 import { PostPipeline } from './post.js';
 import { Golfer } from './golfer.js';
-import { BallSim, LIES, SURFACES, puttSpeedFor, BALL } from './physics.js';
+import { BallSim, LIES, SURFACES, puttSpeedFor, puttRollAt, BALL } from './physics.js';
 import { buildBag } from './clubs.js';
 import { YD, FT, mulberry32 } from './hole.js';
 import { scoreName } from './stats.js';
@@ -224,7 +224,7 @@ export class Game {
         const m = snap.mid;
         this.strokes = m.strokes; this.penalties = m.penalties;
         if (cur) { r.stats.cur = cur; this.holeStats = cur; }
-        this.ball = { ...this.ball, p: m.ball.p.slice(), isTee: m.ball.isTee };
+        this.ball = { ...this.ball, p: m.ball.p.slice(), isTee: m.ball.isTee, plugged: !!m.ball.plugged };
         this.startFlyover();
         this.endFlyover();
         this.ui.toast('Round resumed');
@@ -277,7 +277,7 @@ export class Game {
   // ------------------------------------------------------------------ address
   prepareAddress() {
     const h = this.hole;
-    const b = this.ball = groundBall(h, this.ball.p, this.ball.isTee);
+    const b = this.ball = groundBall(h, this.ball.p, this.ball.isTee, this.ball.plugged);
     this.onGreen = b.surface === 'green';
     h.pinIn = !this.onGreen;
     this.aim = angOf(h.cup.x - b.p[0], h.cup.z - b.p[2]);
@@ -293,7 +293,7 @@ export class Game {
   enterAddress() {
     this.state = 'address';
     this.addressAt = performance.now();
-    this.saveProgress({ mid: { ball: { p: this.ball.p.slice(), isTee: !!this.ball.isTee }, strokes: this.strokes, penalties: this.penalties } });
+    this.saveProgress({ mid: { ball: { p: this.ball.p.slice(), isTee: !!this.ball.isTee, plugged: !!this.ball.plugged }, strokes: this.strokes, penalties: this.penalties } });
     this.cam.resetOrbit();
     this.cam.targetView = false;
     document.body.classList.remove('target-view');
@@ -579,7 +579,7 @@ export class Game {
       this.caddieNote(); this.sayAdvice();
       if (assist.putt <= 0) { w.puttLine.visible = false; return; }
       // read: roll the marker-speed putt along the current aim
-      const v = puttSpeedFor(this.puttEqFt * FT, h.greenRoll);
+      const v = puttSpeedFor(this.puttEqFt * FT, puttRollAt(h, b.p));
       const sim = new BallSim(h, this.env, mulberry32(3));
       sim.putt(b.p.slice(), [dir.x, 0, dir.z], v);
       const pts = [b.p.slice()];
@@ -816,7 +816,7 @@ export class Game {
     const lie = this.lieKey(), st = this.hole.style, pal = st.palette;
     const strength = clamp(sw.power, 0.3, 1);
     const grass = (s) => { const c = pal[s] ?? pal.fairway; return Array.isArray(c) ? c[0] : c; };
-    if (lie === 'splash' || lie === 'bunker') fx.sand(p, fwd, { strength, color: st.sand || pal.bunker });
+    if (lie === 'splash' || lie === 'bunker' || lie === 'plugged') fx.sand(p, fwd, { strength, color: st.sand || pal.bunker });
     else if (lie === 'tee') {
       // off a peg only an iron brushes the turf
       if (this.club.loft > 20) fx.burst(p, [fwd[0] * 0.6, 0.7, fwd[2] * 0.6], { count: 10, speed: 2.5, spread: 0.4, life: 0.8, color: grass('tee'), size: 0.04, bounce: 1 });
@@ -834,6 +834,8 @@ export class Game {
       if (e.surface === 'green' && e.type === 'land' && e.speed > 12) fx.pitchMark(e.p, e.speed);
       else if (e.surface === 'path' && live && e.speed > 3) fx.dust(e.p, e.speed);
       else if (e.surface === 'bunker' && live && e.type === 'land' && e.speed > 8) fx.burst(e.p, [0, 1, 0], { count: 25, speed: 1.8, spread: 0.8, life: 1.0, color: this.hole.style.sand || this.hole.style.palette.bunker, size: 0.1, grav: 0.4, bounce: 1, tint: 0.08 });
+    } else if (e.type === 'plug') {
+      fx.plug(e.p, { particles: live, color: this.hole.style.sand || this.hole.style.palette.bunker });
     } else if (e.type === 'water') {
       const lvl = this.hole.waterLevel(e.p[0], e.p[2]);
       fx.splash([e.p[0], lvl ?? e.p[1], e.p[2]], { particles: live });
@@ -891,6 +893,7 @@ export class Game {
     this.ui.showShotPanel({ info, sg, fmt: (m) => this.fmtDist(m), tips: coachShot(info, this.settings.units), canReplay: !!this.rec?.length });
     if (info.result === 'water') this.ui.banner('Penalty area', 'bad');
     else if (info.result === 'ob') this.ui.banner('Out of bounds', 'bad');
+    else if (info.plugged) this.ui.banner('Plugged in the sand', 'bad');
     this.updateHUD(true);
   }
 
@@ -1047,8 +1050,8 @@ export class Game {
       wind: this.windRel(), windMph: this.windMph,
       tempoNote: tempoNote(this.club), tempoAlt: tempo.counts !== 3,
       club: this.club, clubCarry: this.club.putter ? `${fmtFt(this.puttRange, this.settings.units)} range` : `Carry ${this.fmtDist(this.club.carry)} · Total ${this.fmtDist(this.club.total)}`,
-      lie: b.isTee ? SURFACES.tee.name : b.surface === 'tee' ? 'Tee box · fairway lie' : SURFACES[b.surface]?.name || b.surface,
-      lieKey: lk, lieRange: lk === 'splash' ? 'Explosion shot' : `${lie.dist[0]}–${lie.dist[1]}%`, slope: resting ? { up: 0, side: 0 } : this.slope(),
+      lie: b.isTee ? SURFACES.tee.name : b.plugged ? 'Bunker · plugged' : b.surface === 'tee' ? 'Tee box · fairway lie' : SURFACES[b.surface]?.name || b.surface,
+      lieKey: lk, lieRange: lk === 'splash' ? 'Explosion shot' : lk === 'plugged' ? 'Buried lie' : `${lie.dist[0]}–${lie.dist[1]}%`, slope: resting ? { up: 0, side: 0 } : this.slope(),
       shape: SHAPES[this.shape].name, traj: TRAJ[this.traj], putter: !!this.club.putter,
       stimp: h.stimp, state: this.state,
     });
@@ -1129,6 +1132,15 @@ export class Game {
     const tw = el.offsetWidth, th = el.offsetHeight, pad = 8;
     this.pinAvoid = this.pinAvoid || ['holeCard', 'distBox', 'windBox', 'clubBox', 'minimap', 'caddie'].map((id) => document.getElementById(id));
     const rects = this.pinAvoid.filter(Boolean).map((n) => n.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
+    // first choice: the nearest spot that clears every card at once (nudging off one card used to land on the next)
+    const clear = (nx, ny) => nx - tw / 2 >= 4 && nx + tw / 2 <= W - 4 && ny - th / 2 >= 4 && ny + th / 2 <= H - 4
+      && !rects.some((r) => nx + tw / 2 > r.left - pad && nx - tw / 2 < r.right + pad && ny + th / 2 > r.top - pad && ny - th / 2 < r.bottom + pad);
+    if (!clear(x, y)) {
+      const cand = [];
+      for (const r of rects) cand.push([x, r.bottom + pad + th / 2], [x, r.top - pad - th / 2], [r.right + pad + tw / 2, y], [r.left - pad - tw / 2, y]);
+      const ok = cand.filter(([nx, ny]) => clear(nx, ny)).sort((p, q) => Math.hypot(p[0] - x, p[1] - y) - Math.hypot(q[0] - x, q[1] - y));
+      if (ok.length) [x, y] = ok[0];
+    }
     for (let pass = 0; pass < 4; pass++) {
       const hit = rects.find((r) => x + tw / 2 > r.left - pad && x - tw / 2 < r.right + pad && y + th / 2 > r.top - pad && y - th / 2 < r.bottom + pad);
       if (!hit) break;

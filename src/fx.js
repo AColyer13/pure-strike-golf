@@ -67,6 +67,24 @@ function pitchTexture() {
   return t;
 }
 
+// a plugged ball's crater: a dark dimple inside a lighter, raised rim of thrown sand
+function craterTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grad = g.createRadialGradient(32, 32, 2, 32, 32, 31);
+  grad.addColorStop(0, 'rgba(0,0,0,0.85)');
+  grad.addColorStop(0.4, 'rgba(0,0,0,0.6)');
+  grad.addColorStop(0.62, 'rgba(0,0,0,0.12)');
+  grad.addColorStop(0.78, 'rgba(255,255,255,0.35)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
 function ringTexture() {
   const c = document.createElement('canvas');
   c.width = c.height = 64;
@@ -189,7 +207,7 @@ export class Effects {
 
   // ------------------------------------------------------------ decals
   initDecals() {
-    this.tex = { divot: [divotTexture(1), divotTexture(2.3), divotTexture(4.1)], pitch: pitchTexture(), ring: ringTexture() };
+    this.tex = { divot: [divotTexture(1), divotTexture(2.3), divotTexture(4.1)], pitch: pitchTexture(), ring: ringTexture(), crater: craterTexture() };
     this.decals = [];
     const geo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
     for (let i = 0; i < MAX_DECALS; i++) {
@@ -221,7 +239,7 @@ export class Effects {
     m.rotateY(yaw);
     m.scale.set(size, 1, size);
     const mat = m.material;
-    mat.map = kind === 'divot' ? this.tex.divot[Math.floor(this.rnd() * 3)] : kind === 'pitch' ? this.tex.pitch : this.tex.ring;
+    mat.map = kind === 'divot' ? this.tex.divot[Math.floor(this.rnd() * 3)] : kind === 'pitch' ? this.tex.pitch : kind === 'crater' ? this.tex.crater : this.tex.ring;
     mat.color.set(color);
     mat.opacity = opacity;
     mat.needsUpdate = true;
@@ -263,6 +281,12 @@ export class Effects {
     const s = Math.min(1, speed / 35);
     // oversized against a real 3 cm mark so it still reads from the next address camera
     this.decal('pitch', p, { yaw: this.rnd() * Math.PI * 2, size: 0.14 + 0.1 * s, color: 0x26351a, opacity: 0.55 + 0.35 * s, lift: 0.006 });
+  }
+
+  // A ball buried by a steep landing: a dimple with a raised rim, and a small puff of sand
+  plug(p, { particles = true, color = '#f6f4ee' } = {}) {
+    this.decal('crater', p, { yaw: this.rnd() * Math.PI * 2, size: 0.34, color: 0xb5a57a, opacity: 0.85, lift: 0.012 });
+    if (particles) this.burst(p, [0, 1, 0], { count: 30, speed: 1.6, spread: 0.7, life: 1.1, color, size: 0.09, grav: 0.5, bounce: 1, tint: 0.1 });
   }
 
   // Water: an expanding ring on the surface plus a column of droplets.
@@ -350,6 +374,6 @@ export class Effects {
     this.decals[0].geometry.dispose();
     for (const m of this.decals) m.material.dispose();
     for (const t of this.tex.divot) t.dispose();
-    this.tex.pitch.dispose(); this.tex.ring.dispose();
+    this.tex.pitch.dispose(); this.tex.ring.dispose(); this.tex.crater.dispose();
   }
 }

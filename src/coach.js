@@ -96,6 +96,8 @@ export function coachShot(s, units = 'yd') {
     L.push({ id: 'deep', pri: 6, title: 'Lie: deep rough', text: 'Thick grass wraps the hosel and slows the club. Take a lofted club, get back in play, and accept a bogey at worst.' });
   } else if (s.lie === 'splash') {
     L.push({ id: 'splash', pri: 6, title: 'Explosion shot', text: 'From a greenside bunker the club enters the sand ~2 inches behind the ball and never touches it. The sand throws the ball out – so you swing about twice as hard as for a pitch of the same length.' });
+  } else if (s.lie === 'plugged') {
+    L.push({ id: 'plugged', pri: 6, title: 'Plugged lie', text: 'The ball is buried in its own crater, so the club has to dig it out: square the face, hit hard behind it and expect a low, spinless shot that runs. Nothing is free here – you play it as it lies.' });
   } else if (s.lie === 'bunker') {
     L.push({ id: 'fwbunker', pri: 4, title: 'Fairway bunker', text: 'Pick it clean: ball speed is reduced. Take one more club and make sure the loft clears the lip.' });
   }

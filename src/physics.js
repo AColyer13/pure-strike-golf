@@ -73,7 +73,20 @@ export const LIES = {
   path:    { speed: 0.97, spin: 0.9,  launch: -0.5, rand: 0.03, dist: [92, 100] },
   // greenside explosion shot: the club enters the sand ~2" behind the ball
   splash:  { speed: 0.52, spin: 0.45, launch: 6,   rand: 0.08, dist: [40, 60] },
+  // a ball buried in its own pitch mark: the club digs through the sand, the ball squirts out low with no spin
+  plugged: { speed: 0.46, spin: 0.12, launch: -4,  rand: 0.12, dist: [25, 45] },
 };
+
+// Rolling resistance of a putt struck from sand: the ball ploughs through it at about a stimp-2 pace, so the stroke needs
+// roughly five times the speed it would on a 10-stimp green
+export const SAND_PUTT_ROLL = 0.30;
+// what a putt starting at p has to overcome: the green's roll, or the sand's when the ball sits in a bunker
+export const puttRollAt = (hole, p) => (hole.surface(p[0], p[2]) === 'bunker' ? SAND_PUTT_ROLL : hole.greenRoll);
+
+// A ball landing in a bunker steeper than this (degrees below horizontal) can bury itself in the sand
+const PLUG_DESCENT = 48;
+// how far (in ball radii) a plugged ball sits below where a ball resting on the sand would
+export const PLUG_SINK = 0.85;
 
 // ---------------------------------------------------------------- vectors
 const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
@@ -265,6 +278,9 @@ export class BallSim {
     this.rng = rng;
     this.state = 'rest';
     this.pinOut = !!opts.pinOut;
+    this.noPlug = !!opts.noPlug; // the caddie's practice shots never bury the ball
+    this.puttStroke = false;
+    this.plugged = false;
     this.cup = opts.cup || world.cup;
   }
 
@@ -301,6 +317,7 @@ export class BallSim {
     this.events = [];
     this.trail = [pos.slice()];
     this.skid = 0.25; // brief skid phase
+    this.puttStroke = true;
   }
 
   emit(type, data = {}) { this.events.push({ type, t: this.t, ...data }); }
@@ -399,6 +416,24 @@ export class BallSim {
       this.holeOut(); return;
     }
 
+    // a steep, fast landing in soft sand buries the ball in its own crater (a "fried egg"): it stops dead
+    if (surf === 'bunker' && !this.noPlug && this.bounces === 1) {
+      const desc = Math.atan2(-this.v[1], Math.hypot(this.v[0], this.v[2])) / DEG;
+      if (desc > PLUG_DESCENT && speedIn > 12) {
+        const firm = this.env.firmness ?? 1;
+        const chance = Math.min(0.3, (desc - PLUG_DESCENT) * 0.012) * clamp(1.4 - 0.6 * firm, 0.6, 1.2);
+        if (this.rng() < chance) {
+          this.v = [0, 0, 0]; this.w = [0, 0, 0];
+          this.p[1] -= PLUG_SINK * r;
+          this.plugged = true;
+          this.state = 'rest';
+          this.emit('plug', { p: this.p.slice() });
+          this.emit('stop', { p: this.p.slice(), surface: surf });
+          return;
+        }
+      }
+    }
+
     let n = W.normal(this.p[0], this.p[2]);
     let vn = dot(this.v, n);
     if (vn >= 0) { this.p[1] += 0.001; return; }
@@ -467,6 +502,8 @@ export class BallSim {
     let v = this.v;
     const sp = len(v);
     let rollRes = S.roll * (this.env.rollScale?.[surf] ?? 1);
+    // a putter does not dig: struck from sand the ball rolls on its surface instead of ploughing
+    if (surf === 'bunker' && this.puttStroke) rollRes = SAND_PUTT_ROLL;
     // sand holds a ball only up to its angle of repose (~34 degrees); on a steeper face it runs down to the floor
     if (surf === 'bunker' && len(gPar) / (1 + k) > 0.4 * G) rollRes = Math.min(rollRes, 0.25);
     // grass grabs slow balls more (rough) – and the ball sits down

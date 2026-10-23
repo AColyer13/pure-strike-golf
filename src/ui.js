@@ -428,7 +428,7 @@ export class UI {
     if (Math.abs(sl.up) >= 1.5) parts.push(`${sl.up > 0 ? 'Uphill' : 'Downhill'} ${Math.abs(sl.up).toFixed(0)}°`);
     if (Math.abs(sl.side) >= 1.5) parts.push(`Ball ${sl.side > 0 ? 'above' : 'below'} feet ${Math.abs(sl.side).toFixed(0)}°`);
     // the lie box is folded away: its one useful line lives here
-    const facts = d.putter ? [`Stimp ${d.stimp.toFixed(1)}`] : [d.lieRange === '100–100%' ? '' : d.lieRange, ...parts].filter(Boolean);
+    const facts = d.putter ? [d.lieKey === 'bunker' ? 'Putting through sand' : `Stimp ${d.stimp.toFixed(1)}`] : [d.lieRange === '100–100%' ? '' : d.lieRange, ...parts].filter(Boolean);
     sub += `<span class="lie-line" data-lie="${d.lieKey}"><b>${esc(d.lie)}</b> <span class="lie-facts">${facts.map((f) => `<span class="lie-range">${f}</span>`).join('')}</span></span>`;
     $('dSub').innerHTML = d.state === 'flight' ? '' : sub; // (in flight the box is only the closing distance)
     this.setState(d.state);
@@ -454,7 +454,7 @@ export class UI {
     $('trajVal').textContent = d.putter ? '—' : d.traj;
     $('shapeRow').classList.toggle('dim', d.putter);
     $('lieName').textContent = d.lie;
-    $('lieRange').textContent = d.putter ? `Stimp ${d.stimp.toFixed(1)}` : d.lieRange;
+    $('lieRange').textContent = d.putter ? (d.lieKey === 'bunker' ? 'Through sand' : `Stimp ${d.stimp.toFixed(1)}`) : d.lieRange;
     $('lieSlope').textContent = d.putter ? '' : parts.join(' · ') || 'Flat lie';
     $('lieBox').dataset.lie = d.lieKey;
   }

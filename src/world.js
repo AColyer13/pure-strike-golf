@@ -588,7 +588,9 @@ export class World {
           const sand = b.kind === 'waste' ? col.waste : col.bunker;
           const edge = b.kind === 'pot' ? col.dirt : mix3(c3, [c3[0] * 0.8, c3[1] * 0.8, c3[2] * 0.8], 0.6);
           c3 = mix3(c3, edge, 1 - smooth(0.4, 1.2, bd));
-          const rake = 0.96 + 0.04 * Math.sin((x * 0.7 + z * 0.4) * 6);
+          // raked furrows that follow the bunker's outline, over a fine grain, and a darker shadow under the lip
+          const ring = Math.sin(bd * 5.2 + Math.sin((x + z) * 0.9) * 0.6), grain = Math.sin(x * 23.1 + z * 17.3) * Math.sin(x * 11.7 - z * 29.9);
+          const rake = (0.955 + 0.03 * ring + 0.015 * grain) * (1 - 0.1 * smooth(-0.9, -0.15, bd) * (b.kind === 'pot' ? 1 : 0.5));
           c3 = mix3(c3, [sand[0] * rake, sand[1] * rake, sand[2] * rake], 1 - smooth(-0.2, 0.15, bd));
         }
         // water beds & banks

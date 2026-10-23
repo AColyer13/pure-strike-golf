@@ -8,7 +8,7 @@ const $ = (id) => document.getElementById(id);
 import { MPH } from './util.js';
 
 // the lab's lie list uses the same names as the in-play LIE badge; the two bunker lies are spelled out
-const LIE_LABEL = { bunker: 'Fairway bunker', splash: 'Greenside bunker (splash)' };
+const LIE_LABEL = { bunker: 'Fairway bunker', splash: 'Greenside bunker (splash)', plugged: 'Plugged in a bunker' };
 const lieName = (k) => LIE_LABEL[k] || SURFACES[k]?.name || k;
 
 const LESSONS = [

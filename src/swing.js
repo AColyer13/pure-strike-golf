@@ -284,7 +284,13 @@ export class MouseSwing {
         g.textAlign = 'left';
       }
       const deep = (this.maxY - this.y0) / this.range;
-      if (deep > 0.04) { g.fillStyle = '#fff'; g.fillText(`${Math.round(deep * 100)}%`, this.flip ? this.x0 + 12 : Math.max(4, this.x0 - 40), this.maxY + 4); }
+      if (deep > 0.04) {
+        g.fillStyle = '#fff';
+        if (this.flip) { // on the finger's left of the scale, a row clear of the caddie's number
+          const ty = this.target != null && !this.pro ? this.y0 + clamp(this.target, 0, 1.1) * this.range : -99;
+          g.textAlign = 'right'; g.fillText(`${Math.round(deep * 100)}%`, this.x0 - 34, this.maxY + 4 + (Math.abs(this.maxY - ty) < 14 ? 14 : 0)); g.textAlign = 'left';
+        } else g.fillText(`${Math.round(deep * 100)}%`, Math.max(4, this.x0 - 40), this.maxY + 4);
+      }
       if (this.bar || this.practice) this.drawCount();
       // trail
       g.strokeStyle = '#ffe14d'; g.lineWidth = 3;

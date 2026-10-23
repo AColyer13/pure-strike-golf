@@ -29,7 +29,7 @@ export function settleShot({ hole, shotStart: S, sim, info, stats, strokes }) {
     // a ball that came to rest on a ridge too steep to stand on is placed on the nearest playable ground
     const p = playableNear(hole, sim.p.slice());
     const moved = p[0] !== sim.p[0] || p[2] !== sim.p[2];
-    ball = { p, surface: moved ? hole.surface(p[0], p[2]) : info.after, isTee: false };
+    ball = { p, surface: moved ? hole.surface(p[0], p[2]) : info.after, isTee: false, plugged: !moved && !!sim.plugged };
     after = { surface: ball.surface, yards: Math.hypot(hole.cup.x - ball.p[0], hole.cup.z - ball.p[2]) / YD };
   }
   strokes += penalty;

@@ -1,7 +1,7 @@
 // Pure shot logic: everything about a stroke that does not touch the renderer,
 // the UI or the audio. The Game class delegates here so the same code runs
 // headless in tests (see tests/round.test.mjs).
-import { BallSim, computeLaunch, LIES, puttSpeedFor, BALL } from './physics.js';
+import { BallSim, computeLaunch, LIES, puttSpeedFor, puttRollAt, BALL, PLUG_SINK } from './physics.js';
 import { YD, FT, mulberry32 } from './hole.js';
 import { SHAPES, MIN_SWING } from './config.js';
 import { DEG, dirOf, clamp } from './util.js';
@@ -17,8 +17,11 @@ export function teeBall(hole) {
   return { p: [h.tee.x, h.height(h.tee.x, h.tee.z) + BALL.radius, h.tee.z], surface: 'tee', isTee: true };
 }
 // a ball resting on the ground at (x, z): height and surface re-read from the terrain
-export function groundBall(hole, p, isTee = false) {
-  return { p: [p[0], hole.height(p[0], p[2]) + BALL.radius, p[2]], surface: isTee ? 'tee' : hole.surface(p[0], p[2]), isTee };
+// (a plugged ball sits sunk in its crater)
+export function groundBall(hole, p, isTee = false, plugged = false) {
+  const surface = isTee ? 'tee' : hole.surface(p[0], p[2]);
+  plugged = plugged && surface === 'bunker';
+  return { p: [p[0], hole.height(p[0], p[2]) + BALL.radius * (plugged ? 1 - PLUG_SINK : 1), p[2]], surface, isTee, plugged };
 }
 
 // how high the ball sits above the turf: on a peg for woods and long irons
@@ -34,8 +37,10 @@ export function lieKeyFor(ball, hole, club) {
   if (ball.isTee) return 'tee';
   if (s === 'tee') return 'fairway'; // ball sitting on the tee box turf (topped drive): mown like fairway
   if (s === 'bunker') {
+    if (ball.plugged) return 'plugged';
     const nearGreen = hole.greenSdf(ball.p[0], ball.p[2]) < 30;
-    return nearGreen && club && club.loft >= 50 ? 'splash' : 'bunker';
+    // from a greenside bunker anything from a pitching wedge up is an explosion shot; a 9-iron or less is a bump-out
+    return nearGreen && club && club.loft >= 44 ? 'splash' : 'bunker';
   }
   return LIES[s] ? s : 'rough';
 }
@@ -52,7 +57,7 @@ export function slopeAt(hole, p, aim) {
 
 // how much of the meter's accuracy zone the lie and stance leave the player
 export function lieZoneFor(ball, hole, club, aim) {
-  const k = { tee: 1, fairway: 1, green: 1, fringe: 1, cut: 0.95, second: 0.85, rough: 0.75, deep: 0.55, bunker: 0.8, splash: 0.85, straw: 0.8, waste: 0.85, path: 0.9 }[lieKeyFor(ball, hole, club)] ?? 0.8;
+  const k = { tee: 1, fairway: 1, green: 1, fringe: 1, cut: 0.95, second: 0.85, rough: 0.75, deep: 0.55, bunker: 0.8, splash: 0.85, plugged: 0.6, straw: 0.8, waste: 0.85, path: 0.9 }[lieKeyFor(ball, hole, club)] ?? 0.8;
   const sl = slopeAt(hole, ball.p, aim);
   return k * clamp(1 - (Math.abs(sl.side) + Math.abs(sl.up) * 0.5) * 0.025, 0.6, 1);
 }
@@ -89,7 +94,7 @@ export function computeBagDistances(bag, course) {
 // sound/effects family of a stroke
 export function swingKind(club, lie) {
   if (club.putter) return 'putt';
-  if (lie === 'splash' || lie === 'bunker') return 'sand';
+  if (lie === 'splash' || lie === 'bunker' || lie === 'plugged') return 'sand';
   return club.key === 'DR' ? 'driver' : club.loft <= 20 ? 'wood' : club.loft >= 45 ? 'wedge' : 'iron';
 }
 
@@ -112,13 +117,14 @@ export function shotStartOf({ hole, ball, club, aim, pl, strokes, lie, duffed })
 export function launchShot({ hole, env, ball, club, swing: sw, aim, shape = 'straight', traj = 0, puttRange = 10, ballLift = 0, seed }) {
   const h = hole;
   const sim = new BallSim(h, env, mulberry32(seed));
-  const start = [ball.p[0], ball.p[1] + (ballLift || 0), ball.p[2]];
+  // (a plugged ball is struck from the sand's surface, not from inside the crater)
+  const start = [ball.p[0], ball.plugged ? h.height(ball.p[0], ball.p[2]) + BALL.radius : ball.p[1] + (ballLift || 0), ball.p[2]];
   const dir = dirOf(aim);
   const fwd = [dir.x, 0, dir.z];
   const putt = !!club.putter;
   h.pinIn = !putt;
   if (putt) {
-    const speed = puttSpeedFor(sw.power * puttRange * FT, h.greenRoll) * (0.97 + 0.03 * sw.strike);
+    const speed = puttSpeedFor(sw.power * puttRange * FT, puttRollAt(h, ball.p)) * (0.97 + 0.03 * sw.strike);
     const d2 = dirOf(aim + sw.face * DEG);
     sim.putt(start, [d2.x, 0, d2.z], speed);
     return { sim, ld: { putt: true, speed, face: sw.face, power: sw.power }, start, fwd, putt, kind: 'putt' };
@@ -184,6 +190,7 @@ export function shotInfoFor({ sim, hole: h, shotStart: S, club, ld, landV, puttE
     stimp: h.stimp,
     pinFt: Math.hypot(cup.x - p[0], cup.z - p[2]) / FT,
     duffed: !!S.duffed,
+    plugged: !!sim.plugged,
     tempo, // { kind, face, back, want } of the backswing, when there was one
   };
   // how much of the club's normal carry this shot got – a chunk or a top is < 0.3

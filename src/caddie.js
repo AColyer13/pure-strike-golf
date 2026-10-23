@@ -1,7 +1,7 @@
 // Caddie: club selection, plays-like distances, expected-strokes lay-up analysis,
 // meter-marker power suggestions and putt reads. Reads the game state (hole, ball,
 // wind, shot shape) and only changes the club/aim through the game's setters.
-import { BallSim, computeLaunch, simulateCarry, puttSpeedFor, BALL, G } from './physics.js';
+import { BallSim, computeLaunch, simulateCarry, puttSpeedFor, puttRollAt, BALL, G } from './physics.js';
 import { YD, FT, mulberry32 } from './hole.js';
 import { expectedStrokes } from './stats.js';
 import { dirOf, angOf, clamp, DEG } from './util.js';
@@ -46,7 +46,9 @@ export function canPutt(hole, ball) {
   if (!hole || !ball || ball.isTee) return false;
   const s = ball.surface;
   if (s === 'green' || s === 'fringe') return true;
-  if (s === 'water' || s === 'ob' || s === 'bunker') return false;
+  if (s === 'water' || s === 'ob') return false;
+  // from sand only near the green, and never with the ball buried in it
+  if (s === 'bunker' && ball.plugged) return false;
   return hole.greenSdf(ball.p[0], ball.p[2]) < 25;
 }
 
@@ -103,7 +105,7 @@ function* speedSteps(hole, env, p, dir, d, launch = dir, guess = 0) {
     its = Math.max(1, Math.ceil(Math.log2((hi - lo) / (guess * 0.0025))));
   }
   for (let it = 0; it < its; it++) {
-    const v = it === 0 && !guess ? puttSpeedFor(d, hole.greenRoll) : (lo + hi) / 2;
+    const v = it === 0 && !guess ? puttSpeedFor(d, puttRollAt(hole, p)) : (lo + hi) / 2;
     if (yield* reach(v)) hi = v; else lo = v;
     yield;
   }
@@ -130,7 +132,7 @@ function* setupSteps(hole, ball, env) {
   return setupFor(h, b, dir, v);
 }
 function setupFor(h, b, dir, v) {
-  const eqFt = (v * v) / (2 * h.greenRoll * G) / FT;
+  const eqFt = (v * v) / (2 * puttRollAt(h, b.p) * G) / FT;
   const range = puttRangeFor(eqFt);
   const elevIn = (h.height(h.cup.x, h.cup.z) - h.height(b.p[0], b.p[2])) / 0.0254;
   return { eqFt, range, elevIn, aim: angOf(dir.x, dir.z), speed: v };
@@ -141,8 +143,9 @@ function quickSetup(h, b) {
   const d = Math.hypot(h.cup.x - b.p[0], h.cup.z - b.p[2]) || 1e-6;
   const dir = { x: (h.cup.x - b.p[0]) / d, z: (h.cup.z - b.p[2]) / d };
   const rise = h.height(h.cup.x, h.cup.z) - h.height(b.p[0], b.p[2]);
-  const v2 = 2 * (h.greenRoll * G * (d + 0.43) + G * rise);
-  return setupFor(h, b, dir, Math.sqrt(Math.max(v2, puttSpeedFor(0.5, h.greenRoll) ** 2)));
+  const roll = puttRollAt(h, b.p);
+  const v2 = 2 * (roll * G * (d + 0.43) + G * rise);
+  return setupFor(h, b, dir, Math.sqrt(Math.max(v2, puttSpeedFor(0.5, roll) ** 2)));
 }
 
 // Sideways miss (metres, + = right of the cup as the player looks at it) of a putt
@@ -265,7 +268,7 @@ export function* puttReadSteps(hole, ball, env, straight = false) {
   }
   const score = rb.score;
   ({ a, v } = best);
-  const eqFt = (v * v) / (2 * h.greenRoll * G) / FT;
+  const eqFt = (v * v) / (2 * puttRollAt(h, b.p) * G) / FT;
   const range = puttRangeFor(eqFt);
   const brk = Math.sin(a - a0) * d;
   return { ...base, eqFt, range, aim: a, speed: v, cupAim: a0, brk, leave: best.leave, spread: score };
@@ -371,9 +374,11 @@ export class Caddie {
     if (target) { pl = this.playsLike(target, d, dh, dir); target = pick(pl.plays) || target; }
     g.pl = pl;
     const lie = g.lieKey();
-    if (lie === 'splash' || (b.surface === 'bunker' && h.greenSdf(b.p[0], b.p[2]) < 30)) {
+    if (lie === 'plugged') this.msg = 'Plugged in the sand: no spin and no height. Square the face, swing hard and let it run out.';
+    else if (lie === 'splash' || (b.surface === 'bunker' && h.greenSdf(b.p[0], b.p[2]) < 30 && d < 35 * YD)) {
       target = g.bag.find((c) => c.key === 'SW');
       this.msg = 'Greenside bunker: open the face, splash the sand – the ball rides out on it.';
+      if (target) g.pl = pl = this.playsLike(target, d, dh, dir); // the numbers belong to the sand wedge, not the club first guessed
     }
     if (target && !(h.par >= 4 && b.isTee && pl.plays > target.carry + 30)) {
       g.setClub(g.bag.indexOf(target));
@@ -647,7 +652,7 @@ export class Caddie {
     const sh = SHAPES[g.shape];
     const ld = computeLaunch(club, { power: o.power ?? 1, face: (o.face || 0) + sh.face, path: sh.path, strike: 1, traj: g.traj, lie: g.lieKey(), slope: g.slope() });
     const env = { ...g.env, wind: o.withWind ? g.env.wind : [0, 0, 0] };
-    const sim = new BallSim(h, env, mulberry32(7));
+    const sim = new BallSim(h, env, mulberry32(7), { noPlug: true });
     const start = [b.p[0], b.p[1] + (g.ballLift || 0), b.p[2]];
     sim.launch(start, ld, [dir.x, 0, dir.z]);
     const dt = o.dt || 1 / 120;
