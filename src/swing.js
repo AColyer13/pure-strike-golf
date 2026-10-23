@@ -1,7 +1,7 @@
 // Swing input.
 //  MouseSwing – Tiger Woods PGA Tour style analog swing: pull the mouse back
 //               (backswing), push it forward (downswing). Backswing depth = power,
-//               a three-second backswing = a pure strike, sideways drift = face
+//               a backswing on the count (0.8 s at the default tempo) = a pure strike, sideways drift = face
 //               angle, stroke direction = club path.
 
 import { clamp } from './util.js';
@@ -94,7 +94,7 @@ export class MouseSwing {
     this.practice = false; // Shift held on the press: a practice swing, timed and shown but not struck
     this.bar = false;     // the timing bar while pulling back (the tempo guide, or training)
     this.pro = false;     // Pro: no blue mark for the caddie's number, no timing bar
-    this.count = false;   // training: show the 3-second count (bar and ticks) while pulling back
+    this.count = false;   // training: show the timing count (bar and ticks) while pulling back
   }
   resize() {
     const dpr = Math.min(2, window.devicePixelRatio || 1);

@@ -4,6 +4,7 @@
 // whatever the player actually does: a ball in the water gets the relief step,
 // a missed green gets the "not on yet" step, a holed putt ends the lesson.
 import { loadHistory } from './history.js';
+import { tempo } from './swing.js';
 
 const $ = (id) => document.getElementById(id);
 const DONE_KEY = 'psg-tutorial-done';
@@ -11,7 +12,7 @@ export const TUTORIAL_ROUND = { courseId: 'augusta', holes: [11], mode: 'single'
 
 // asked once, on the lesson's last card: what the player's own rounds start with
 export const LEVELS = [
-  { id: 'new', label: 'New to golf', hint: 'Big assists, wind helps', settings: { profile: 'mid', difficulty: 'beginner', tees: 'forward' } },
+  { id: 'new', label: 'New to golf', hint: 'Biggest assists, forward tees', settings: { profile: 'mid', difficulty: 'beginner', tees: 'forward' } },
   { id: 'casual', label: 'Play casually', hint: 'Typical club golfer', settings: { profile: 'mid', difficulty: 'standard', tees: 'middle' } },
   { id: 'regular', label: 'I play regularly', hint: 'Scratch golfer, standard assists', settings: { profile: 'scratch', difficulty: 'standard', tees: 'back' } },
 ];
@@ -29,20 +30,16 @@ export const STEPS = [
   { id: 'flyover', when: (g) => g.state === 'flyover', skip: (g) => g.settings.reducedMotion, anchor: 'intro', title: 'The flyover',
     text: (g, k, touch) => `Every hole opens with a flight from tee to green. The card gives par, length, wind and green speed (Stimp). ${touch ? 'Tap anywhere' : `Press ${k('swing')} or click`} to skip it.`,
     done: (g) => g.state !== 'flyover' },
-  { id: 'distance', when: (g) => g.state === 'address', anchor: 'distBox', title: 'How far?',
-    text: () => 'Distance to the pin. “Plays like” adds elevation and wind: that is the number to pick a club for.' },
-  { id: 'wind', when: (g) => g.state === 'address', anchor: 'windBox', title: 'Wind',
-    text: () => 'The arrow is the wind relative to your aim: into, helping or across. The plays-like distance already allows for it.' },
-  { id: 'club', when: (g) => g.state === 'address', anchor: 'clubBox', title: 'Your club',
-    text: (g, k, touch) => `Your caddie picked a club whose full-swing carry covers the plays-like distance. ${touch ? `The ${k('clubUp')} and ${k('clubDown')} buttons` : `${k('clubUp')} / ${k('clubDown')}`} change it; the caddie bubble explains the choice.` },
-  { id: 'aim', when: (g) => g.state === 'address', anchor: 'clubBox', title: 'Aim',
+  { id: 'distance', when: (g) => g.state === 'address', anchor: 'distBox', title: 'How far, and the wind',
+    text: () => 'Distance to the pin. “Plays like” adds elevation and wind – that is the number to pick a club for. The arrow is the wind relative to your aim: into, helping or across.' },
+  { id: 'club', when: (g) => g.state === 'address', anchor: 'clubBox', title: 'Club and aim',
     text: (g, k, touch) => (touch
-      ? `Hold ${k('aimLeft')} or ${k('aimRight')} to turn your aim; ${k('aimPin')} aims back at the pin. You can also drag sideways on the view to aim, or up and down to look around. The ring at the end of the arc is where this club lands with a full swing.`
-      : `${k('aimLeft')} / ${k('aimRight')} move your aim (hold ${k('aimFine')} for fine steps); ${k('aimPin')} aims back at the pin. The ring at the end of the arc is where this club lands with a full swing.`) },
+      ? `Your caddie picked a club whose full-swing carry covers the plays-like distance; the ${k('clubUp')} and ${k('clubDown')} buttons change it. Hold ${k('aimLeft')} or ${k('aimRight')} to turn your aim; ${k('aimPin')} aims back at the pin. Or tap ${k('targetView')}, then the ground, to aim at a spot (drag in that view to look around). The ring at the end of the arc is where this club lands with a full swing.`
+      : `Your caddie picked a club whose full-swing carry covers the plays-like distance; ${k('clubUp')} / ${k('clubDown')} change it. ${k('aimLeft')} / ${k('aimRight')} move your aim (hold ${k('aimFine')} for fine steps); ${k('aimPin')} aims back at the pin. The ring at the end of the arc is where this club lands with a full swing.`) },
   { id: 'swing', when: (g) => g.state === 'address', anchor: 'clubBox', title: 'The swing',
     text: (g, k, touch) => (touch
-      ? 'Your caddie says how hard to hit it (“about 75%”). Put one finger on the view, take it back on a three-count (1… 2… 3) by dragging down that far, then flick up. Go on, hit it.'
-      : 'Your caddie says how hard to hit it (“about 75%”). Hold the left mouse button, take it back on a three-count (1… 2… 3) by pulling down that far, then push up. Go on, hit it.'),
+      ? `Your caddie says how hard to hit it (“go all out”, or “about 75%”). Put one finger on the view and drag down to the blue mark – his number – on a brisk one-two-three (about ${tempo.back.toFixed(1)} s), then flick up. Go on, hit it.`
+      : `Your caddie says how hard to hit it (“go all out”, or “about 75%”). Hold the left mouse button and pull down to the blue mark – his number – on a brisk one-two-three (about ${tempo.back.toFixed(1)} s), then push up. Go on, hit it.`),
     done: (g) => g.state !== 'address' },
   { id: 'relief', when: (g) => g.state === 'relief', anchor: 'relief', title: 'Penalty area',
     text: () => 'In the water: one penalty stroke. Each option shows the tour-average strokes to hole out from that drop, so the lowest number is the smart choice.',

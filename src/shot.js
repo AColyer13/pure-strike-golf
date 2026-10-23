@@ -169,7 +169,7 @@ export function shotResult(sim) {
 }
 
 // Launch-monitor style numbers for the shot panel and the coach
-export function shotInfoFor({ sim, hole: h, shotStart: S, club, ld, landV, puttElevIn }) {
+export function shotInfoFor({ sim, hole: h, shotStart: S, club, ld, landV, puttElevIn, tempo }) {
   const putt = !!club.putter;
   const result = shotResult(sim);
   const p = sim.p, cup = h.cup;
@@ -184,6 +184,7 @@ export function shotInfoFor({ sim, hole: h, shotStart: S, club, ld, landV, puttE
     stimp: h.stimp,
     pinFt: Math.hypot(cup.x - p[0], cup.z - p[2]) / FT,
     duffed: !!S.duffed,
+    tempo, // { kind, face, back, want } of the backswing, when there was one
   };
   // how much of the club's normal carry this shot got – a chunk or a top is < 0.3
   info.carryFrac = putt ? 1 : info.carryYd / Math.max(1, (club.carry || 0) / YD);

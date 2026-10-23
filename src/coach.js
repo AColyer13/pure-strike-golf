@@ -74,8 +74,12 @@ export function coachShot(s, units = 'yd') {
     const dir = f2p > 0 ? 'right' : 'left';
     const shape = Math.abs(f2p) > 6 ? (f2p > 0 ? 'slice' : 'hook') : (f2p > 0 ? 'fade' : 'draw');
     const verb = { slice: 'sliced', hook: 'hooked', fade: 'faded', draw: 'drew' }[shape];
+    // when the backswing's own face turn is most of the curve, say that instead of only blaming the face
+    const tp = s.tempo, byTempo = tp && tp.kind !== 'pure' && tp.face * f2p > 0 && Math.abs(tp.face) >= 0.6 * Math.abs(f2p);
     L.push({ id: 'dplane-' + shape, pri: Math.abs(f2p) > 5 ? 8 : 5, title: `Why it curved: ${shape}`,
-      text: `The clubface pointed ${f2p > 0 ? 'right' : 'left'} of your swing path at impact, so the ball ${verb} ${dir}.`,
+      text: byTempo
+        ? `Your backswing took ${f1(tp.back)} s against a ${f1(tp.want)} s count – too ${tp.kind} – so the clubface was ${i0(Math.abs(tp.face))}° ${tp.face > 0 ? 'open' : 'closed'} at impact and the ball ${verb} ${dir}.`
+        : `The clubface pointed ${f2p > 0 ? 'right' : 'left'} of your swing path at impact, so the ball ${verb} ${dir}.`,
       why: `Face ${f1(Math.abs(ld.face))}° ${ld.face >= 0 ? 'open' : 'closed'}, path ${Math.abs(ld.path) < 0.05 ? 'square' : `${f1(Math.abs(ld.path))}° ${ld.path > 0 ? 'in-to-out' : 'out-to-in'}`} → face ${f1(Math.abs(f2p))}° ${f2p > 0 ? 'open' : 'closed'} to the path. The spin axis tilted ${f1(Math.abs(ld.axisTilt))}° and the ball curved ${dir}. (D-plane: the start line comes mostly from the face; the curve comes from face-to-path.)` });
   } else if (Math.abs(ld.hLaunch) > 3 && Math.abs(f2p) < 2) {
     L.push({ id: 'pushpull', pri: 5, title: ld.hLaunch > 0 ? 'Push' : 'Pull', text: `Started ${f1(Math.abs(ld.hLaunch))}° ${ld.hLaunch > 0 ? 'right' : 'left'} and flew straight: face and path pointed the same way, so there was no curve – only a wrong start line.` });

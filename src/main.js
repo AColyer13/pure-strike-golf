@@ -29,7 +29,8 @@ try {
     ui.challenge = parseChallenge(location.hash);
     if (ui.challenge && COURSES.some((c) => c.id === ui.challenge.courseId)) ui.sel.courseId = ui.challenge.courseId;
     game.showcase(ui.sel.courseId);
-    ui.mainMenu();
+    // a link that breaks the menu is dropped (and reported below) rather than taking the whole game down
+    try { ui.mainMenu(); } catch (e) { if (!ui.challenge) throw e; console.error(e); ui.challenge = null; ui.mainMenu(); }
     if (!ui.challenge && /^#c=/.test(location.hash)) {
       // a link that is damaged, or for a hole that can't be played that way: say so instead of ignoring it
       ui.toast('That challenge link isn’t valid, so it was ignored', 'bad');
@@ -50,8 +51,11 @@ try {
       <div class="boot-msg"><b>The game couldn’t start</b>
       <p>Your saved settings or history may be damaged. Reloading usually fixes it; if it doesn’t, reset the saved data (this clears your rounds, stats and settings on this device).</p>
       <button class="btn primary" id="bootReload">Reload</button> <button class="btn" id="bootReset">Reset saved data</button></div>`;
-    document.getElementById('bootReload').onclick = () => location.reload();
+    // reloading with the same #c= link would fail the same way, so the link is dropped first
+    const dropLink = () => window.history.replaceState?.(null, '', location.pathname + location.search);
+    document.getElementById('bootReload').onclick = () => { dropLink(); location.reload(); };
     document.getElementById('bootReset').onclick = () => {
+      dropLink();
       try {
         Object.keys(localStorage).filter((k) => k.startsWith('psg-')).forEach((k) => localStorage.removeItem(k));
       } catch (err) { /* storage blocked: nothing to clear */ }

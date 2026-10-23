@@ -1,7 +1,7 @@
 // Service worker: makes the game installable and playable offline.
 // Network-first, so a reload always picks up new code when online; the cache is
 // the fallback when there's no connection. VERSION is stamped by tools/bundle.mjs (a hash of what is cached), so old caches drop on their own.
-const VERSION = 'psg-48b2f5ed';
+const VERSION = 'psg-61745d02';
 const SHELL = [
   './', 'index.html', 'styles.css', 'manifest.json', 'icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png', 'audio/manifest.json', 'dist/game.js',
   'fonts/barlow-latin-400-normal.woff2', 'fonts/barlow-latin-500-normal.woff2', 'fonts/barlow-latin-600-normal.woff2', 'fonts/barlow-latin-700-normal.woff2', 'fonts/barlow-latin-800-normal.woff2',

@@ -161,3 +161,13 @@ test('best scores and the handicap index only compare rounds from the same tees'
   assert.notEqual(handicapIndex(three({})), null);
   assert.equal(handicapIndex(three({ tees: 'forward' })), null, 'forward-tee rounds are not rated against the championship tees');
 });
+
+test('coach: a slice caused by the backswing tempo names the backswing, otherwise the face', () => {
+  const ld = { f2p: 9, face: 13, path: 1, axisTilt: 8, hLaunch: 2, smash: 1.45, clubMph: 90 };
+  const base = { club: { name: '7 Iron', smash: 1.45 }, result: 'ok', lie: 'fairway', carryFrac: 0.8, duffed: false, par: 4, ld };
+  const text = (tempo) => { resetCoach(); return coachShot({ ...base, tempo }).find((t) => t.title.startsWith('Why it curved'))?.text; };
+  assert.match(text({ kind: 'slow', face: 13, back: 2, want: 0.8 }), /2\.0 s against a 0\.8 s count – too slow – so the clubface was 13° open/);
+  assert.match(text({ kind: 'pure', face: 0.5, back: 0.8, want: 0.8 }), /clubface pointed right/);
+  assert.match(text(undefined), /clubface pointed right/);
+  assert.match(text({ kind: 'slow', face: -13, back: 2, want: 0.8 }), /clubface pointed right/);
+});

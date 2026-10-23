@@ -728,7 +728,8 @@ body.touch.in-round #caddie .caddie-ico { color: var(--accent); }
 }
 /* the result card has Continue and Details, so the menu / view / skip buttons under it step aside and the card drops into their place */
 @media (orientation: portrait) {
-  body.touch.in-round[data-state="result"] .tc-right > :not(.tc-swing) { visibility: hidden; pointer-events: none; }
+  /* the row itself, not just its buttons: an empty row would still sit over the card's Details button and take its taps */
+  body.touch.in-round[data-state="result"] .tc-right { visibility: hidden; pointer-events: none; }
   body.touch.in-round[data-state="result"] #shotPanel { bottom: calc(14px + env(safe-area-inset-bottom)); max-height: calc(100vh - 100px); }
 }
 /* a narrow window with a mouse (no touch rules): the note sits on the club card, full width, not mid-screen */

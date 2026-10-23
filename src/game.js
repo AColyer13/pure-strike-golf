@@ -136,7 +136,9 @@ export class Game {
     };
   }
   saveSettings() {
-    try { localStorage.setItem('psg-settings', JSON.stringify(this.settings)); } catch (e) { /* ignore */ }
+    // the guided hole forces Beginner assists; a refresh mid-lesson must not make that the player's saved choice
+    const s = this.tutorial?.saved ? { ...this.settings, ...this.tutorial.saved } : this.settings;
+    try { localStorage.setItem('psg-settings', JSON.stringify(s)); } catch (e) { /* ignore */ }
     this.applyAccessibility();
   }
   applyAccessibility() {
@@ -299,11 +301,12 @@ export class Game {
     this.mouseSwing.putt = !!this.club.putter;
     this.mouseSwing.result = null;
     this.mouseSwing.target = null; this.powerReady = false; this.adviceErr = 0;
+    this.swingTempo = null;
     setTempo(this.settings.tempo);
     setCounts(countsFor(this.club, this.suggestedPower));
     // Beginner shows the timing bar and the caddie's blue mark; Pro shows neither (just the caddie's spoken
-    // percentage); training is always Beginner
-    const training = !!this.tutorial || this.round?.mode === 'practice', pro = this.settings.guide === 'pro' && !training;
+    // percentage); the guided hole is always Beginner
+    const pro = this.settings.guide === 'pro' && !this.tutorial;
     this.mouseSwing.count = !pro;
     this.mouseSwing.bar = !pro;
     this.mouseSwing.pro = pro;
@@ -534,19 +537,23 @@ export class Game {
 
   // a backswing on the count (3 counts at the chosen tempo) is a pure strike; off it costs contact and turns the face
   mouseDone(r) {
+    let tempoFace = 0;
     if (r.backTime != null) {
       const putt = !!this.club.putter;
       const zone = (putt ? this.diff.puttZone : this.diff.zone) * this.lieZone();
       const t = meterToStrike(tempoToMeterError(r.backTime, zone), zone, putt);
+      tempoFace = t.face;
       r = { ...r, face: r.face + t.face, strike: r.strike * t.strike };
       if (this.mouseSwing.result) Object.assign(this.mouseSwing.result, { finalFace: r.face, tempoFace: t.face }); // (what the readout shows)
     }
     if (r.practice) { this.practiceSwing(r); return; }
     this.tempoNote = null;
+    // what the backswing did to the face, so the shot tip can name it when it explains the curve
+    const e = r.backTime != null ? r.backTime - tempo.back : 0;
+    const kind = r.backTime == null ? null : Math.abs(e) <= tempo.pure ? 'pure' : e < 0 ? 'quick' : 'slow';
+    this.swingTempo = kind && { kind, face: tempoFace, back: r.backTime, want: tempo.back };
     this.executeSwing(r);
-    if (r.backTime == null) return;
-    const e = r.backTime - tempo.back;
-    const kind = Math.abs(e) <= tempo.pure ? 'pure' : e < 0 ? 'quick' : 'slow';
+    if (!kind) return;
     const p = CADDIES[this.settings.caddie];
     // shown in the result card, and spoken with the caddie's word on the shot (a pure swing is only mentioned there)
     this.tempoKind = kind;
@@ -834,7 +841,7 @@ export class Game {
 
   // ------------------------------------------------------------------ shot result
   shotInfo() {
-    return shotInfoFor({ sim: this.sim, hole: this.hole, shotStart: this.shotStart, club: this.club, ld: this.shotLD, landV: this.landV, puttElevIn: this.puttElevIn });
+    return shotInfoFor({ sim: this.sim, hole: this.hole, shotStart: this.shotStart, club: this.club, ld: this.shotLD, landV: this.landV, puttElevIn: this.puttElevIn, tempo: this.swingTempo });
   }
 
   onBallStop() {

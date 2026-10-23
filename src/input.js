@@ -93,7 +93,7 @@ export class Input {
       return true;
     }
     if (a === 'swing') {
-      g.ui.toast(g.ui.touch ? 'Analog swing: drag down on the view on a 3-count, then flick up' : 'Analog swing: hold the left button, take it back on a 3-count, push through');
+      g.ui.toast(g.ui.touch ? 'Analog swing: drag down on the view on a brisk 3-count, then flick up' : 'Analog swing: hold the left button, take it back on a brisk 3-count, push through');
       return true;
     }
     return this.dispatchAddress(a);
@@ -178,8 +178,8 @@ export class Input {
   }
 
   // ------------------------------------------------------------------ touch
-  // One finger on the 3D view orbits the camera (drag) or acts as a click (tap);
-  // the on-screen buttons cover aim, clubs, shape and the swing itself.
+  // At address a finger on the view is the swing. Otherwise (target view, or under a dialog) it orbits
+  // the camera (drag) or acts as a click (tap); the on-screen buttons cover aim, clubs and shape.
   touchDown(e) {
     const g = this.g;
     this.showTouch(true);
@@ -189,23 +189,16 @@ export class Input {
       return;
     }
     const t0 = { x: e.clientX, y: e.clientY, time: performance.now(), yaw: g.cam.orbit.yaw, pitch: g.cam.orbit.pitch };
-    // a drag that starts mostly sideways steers the aim (like holding ◀ ▶); one that starts mostly vertical
-    // orbits the camera. Target view keeps the plain orbit, since a tap there already places the aim.
     const move = (ev) => {
       if (ev.pointerId !== e.pointerId) return;
       const dx = ev.clientX - t0.x, dy = ev.clientY - t0.y;
       if (!t0.mode && Math.hypot(dx, dy) > 12 && g.state === 'address') {
-        t0.mode = !g.cam.targetView && Math.abs(dx) > Math.abs(dy) * 1.2 ? 'aim' : 'orbit';
+        t0.mode = 'orbit';
         t0.dragged = true;
-        t0.ax = ev.clientX; t0.aim = this.aimGoal ?? g.aim;
-        if (t0.mode === 'aim') { this.aimGoal = t0.aim; this.aimDrag = true; }
       }
       if (t0.mode === 'orbit' && g.state === 'address') {
         g.cam.orbit.yaw = t0.yaw - dx * 0.006;
         g.cam.orbit.pitch = clamp(t0.pitch - dy * 0.005, -0.3, 2.5);
-      } else if (t0.mode === 'aim' && g.state === 'address') {
-        // finer on the green, where a degree is a lot of cup
-        this.aimGoal = t0.aim + (ev.clientX - t0.ax) * (g.club.putter ? 0.05 : 0.15) * DEG;
       }
     };
     const up = (ev) => {
@@ -213,7 +206,6 @@ export class Input {
       removeEventListener('pointermove', move);
       removeEventListener('pointerup', up);
       removeEventListener('pointercancel', up);
-      if (t0.mode === 'aim') this.aimDrag = false;
       if (!t0.dragged && performance.now() - t0.time < 400) this.primary(ev.clientX, ev.clientY, null);
     };
     addEventListener('pointermove', move);
@@ -378,7 +370,7 @@ export class Input {
   update(dt) {
     this.pollGamepad(dt);
     const g = this.g;
-    if (g.state !== 'address') { this.aimHold = 0; this.aimVel = 0; this.aimGoal = null; return; }
+    if (g.state !== 'address') { this.aimHold = 0; this.aimVel = 0; return; }
     const fine = this.held('aimFine');
     const rate = (g.club.putter ? 4 : 14) * (fine ? 0.2 : 1) * DEG;
     let d = 0;
@@ -386,17 +378,11 @@ export class Input {
     if (this.held('aimRight')) d += 1;
     if (this.pad.aimAxis) d = this.pad.aimAxis;
     // the turn rate eases in and out rather than jumping to full speed, so the golfer and the camera glide
-    if (d) { this.aimHold = (this.aimHold || 0) + dt; this.aimGoal = null; } else this.aimHold = 0;
+    if (d) this.aimHold = (this.aimHold || 0) + dt; else this.aimHold = 0;
     const want = d * rate * (1 + Math.min(2, this.aimHold));
     this.aimVel = (this.aimVel || 0) + (want - (this.aimVel || 0)) * (1 - Math.exp(-dt * (d ? 14 : 22)));
     if (Math.abs(this.aimVel) < 1e-4) this.aimVel = 0;
     else g.setAim(g.aim + this.aimVel * dt);
-    // a finger drag sets a goal the aim glides to, so the golfer follows smoothly instead of in touch-sampled steps
-    if (this.aimGoal != null) {
-      const gap = this.aimGoal - g.aim;
-      if (Math.abs(gap) < 1e-4 && !this.aimDrag) this.aimGoal = null;
-      else g.setAim(g.aim + gap * (1 - Math.exp(-dt * 18)));
-    }
   }
   get fastForward() { return this.held('fastForward'); }
 }
