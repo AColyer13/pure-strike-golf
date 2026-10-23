@@ -120,7 +120,6 @@ index.html, styles.css    UI shell, menu and broadcast-style HUD
 sw.js, manifest.json      offline / installable PWA
 vendor/three/             three.js 0.169 (MIT); copied by tools/vendor.mjs and bundled into dist/game.js
 dist/game.js              the whole game (src/ plus three.js) as one minified file, built by tools/bundle.mjs; index.html loads only this
-fonts/                    Barlow / Barlow Condensed (OFL), self-hosted so the game has no runtime CDN dependency
 src/main.js               boot: wires UI, game and academy together
 src/game.js               game loop and round flow (state machine)
 src/camera.js             flyover, address, flight, landing and reverse-angle cameras
@@ -162,7 +161,7 @@ npm run check
 
 Pushes and pull requests run the same checks in GitHub Actions (`.github/workflows/ci.yml`), plus `npm run vendor:check` and `npm run bundle:check`.
 
-three.js and the fonts are pinned as dev dependencies and copied into the repo with `npm run vendor` (it walks each addon's imports, so adding an addon is one line in `tools/vendor.mjs`). `npm run vendor:check` fails if the vendored copies drift from `node_modules`.
+three.js is pinned as a dev dependency and copied into the repo with `npm run vendor` (it walks each addon's imports, so adding an addon is one line in `tools/vendor.mjs`). `npm run vendor:check` fails if the vendored copies drift from `node_modules`.
 
 The game loads as one file because ~50 separate modules cost a network round trip per level of the import graph on a slow connection. **After changing anything in `src/` or `vendor/`, run `npm run bundle` and commit `dist/game.js`.** `node tools/serve.mjs` (and `start.bat`) rebuild the bundle on every request when dev dependencies are installed, so local edits show on reload; the unbundled `src/` files are what the tests import.
 

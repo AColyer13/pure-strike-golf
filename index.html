@@ -19,17 +19,16 @@
 <meta name="twitter:title" content="Pure Strike Golf – free browser golf with real ball flight">
 <meta name="twitter:description" content="Four original courses, real ball-flight physics and a caddie that explains every shot. No download.">
 <meta name="twitter:image" content="https://acolyer13.github.io/pure-strike-golf/og-image.jpg">
-<link rel="preload" href="fonts/barlow-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="preload" href="fonts/barlow-condensed-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="styles.css">
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#14281b">
+<meta name="theme-color" content="#F5F5F7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#09090B" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Pure Strike">
-<link rel="modulepreload" href="dist/game.js?v=1af8bfca">
+<link rel="modulepreload" href="dist/game.js?v=a20b45fe">
 </head>
 <body>
 <canvas id="c" role="img" aria-label="3D golf course view"></canvas>
@@ -148,7 +147,7 @@
 <div id="academy" class="hidden"></div>
 <div id="loading" class="hidden"><div class="spinner"></div><div id="loadingText"></div></div>
 
-<script type="module" src="dist/game.js?v=1af8bfca"></script>
+<script type="module" src="dist/game.js?v=a20b45fe"></script>
 <script>
 // a dropped connection or a hiccup on the host can fail one module and leave "Loading…" up for ever:
 // say so and offer a reload instead

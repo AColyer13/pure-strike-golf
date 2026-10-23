@@ -1,11 +1,9 @@
 // Service worker: makes the game installable and playable offline.
 // Network-first, so a reload always picks up new code when online; the cache is
 // the fallback when there's no connection. VERSION is stamped by tools/bundle.mjs (a hash of what is cached), so old caches drop on their own.
-const VERSION = 'psg-dd642153';
+const VERSION = 'psg-51db5229';
 const SHELL = [
   './', 'index.html', 'styles.css', 'manifest.json', 'icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/apple-touch-icon.png', 'audio/manifest.json', 'dist/game.js',
-  'fonts/barlow-latin-400-normal.woff2', 'fonts/barlow-latin-500-normal.woff2', 'fonts/barlow-latin-600-normal.woff2', 'fonts/barlow-latin-700-normal.woff2', 'fonts/barlow-latin-800-normal.woff2',
-  'fonts/barlow-condensed-latin-600-normal.woff2', 'fonts/barlow-condensed-latin-700-normal.woff2', 'fonts/barlow-condensed-latin-800-normal.woff2',
   'audio/sfx/driver.mp3', 'audio/sfx/iron.mp3', 'audio/sfx/wedge1.mp3', 'audio/sfx/wedge2.mp3', 'audio/sfx/putter.mp3', 'audio/sfx/whoosh.mp3', 'audio/sfx/land.mp3',
   'audio/sfx/cup.mp3', 'audio/sfx/pin.mp3', 'audio/sfx/tree.mp3', 'audio/sfx/splash.mp3', 'audio/sfx/cheer.mp3', 'audio/sfx/applause.mp3', 'audio/sfx/groan.mp3',
   'audio/sfx/driver2.mp3', 'audio/sfx/wood.mp3', 'audio/sfx/iron2.mp3', 'audio/sfx/iron3.mp3', 'audio/sfx/iron4.mp3', 'audio/sfx/wedge3.mp3', 'audio/sfx/wedge4.mp3',

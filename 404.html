@@ -4,27 +4,32 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<meta name="theme-color" content="#14281b">
+<meta name="theme-color" content="#F5F5F7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#09090B" media="(prefers-color-scheme: dark)">
 <title>Page not found · Pure Strike Golf</title>
 <style>
   /* self-contained: a 404 can be served from any path, so no relative assets */
+  :root { color-scheme: light dark; --bg: #F5F5F7; --text: #1D1D1F; --muted: #55555A; --accent: #007AFF; --accent-hover: #0A6BE0; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #09090B; --text: #F5F5F7; --muted: #A1A1AA; --accent: #0A84FF; --accent-hover: #409CFF; } }
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; }
-  body { display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; color: #eef6f0; background: radial-gradient(circle at 50% 35%, #1d4a2c 0%, #0c1a12 70%); font-family: Barlow, "Segoe UI", system-ui, sans-serif; }
+  body { display: flex; align-items: center; justify-content: center; padding: 24px; text-align: center; color: var(--text); background: var(--bg); font-family: system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif; }
   main { max-width: 440px; }
-  .logo { font: 800 46px/1.1 "Barlow Condensed", "Arial Narrow", Impact, sans-serif; letter-spacing: .04em; text-shadow: 0 3px 18px rgba(0,0,0,.5); }
-  .logo span { color: #f4d31f; }
-  svg { width: 120px; height: 60px; margin: 18px 0 4px; }
-  h1 { margin: 6px 0; font-size: 24px; }
-  p { margin: 0 0 24px; color: #a9bfb1; line-height: 1.5; }
-  a { display: inline-block; min-height: 48px; padding: 13px 28px; border-radius: 12px; background: #f4d31f; color: #1b1b10; font-weight: 700; font-size: 18px; text-decoration: none; }
-  a:hover, a:focus-visible { background: #ffe25a; }
+  .logo { font: 700 42px/1.1 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; letter-spacing: -0.028em; }
+  .logo span { color: var(--accent); }
+  svg { width: 120px; height: 60px; margin: 16px 0 4px; }
+  h1 { margin: 8px 0; font-size: 24px; letter-spacing: -0.028em; }
+  p { margin: 0 0 24px; color: var(--muted); line-height: 1.5; }
+  a { display: inline-flex; align-items: center; min-height: 48px; padding: 8px 24px; border-radius: 8px; background: var(--accent); color: #fff; font-weight: 600; font-size: 18px; text-decoration: none; transition: background-color .14s cubic-bezier(.22,1,.36,1), transform .14s cubic-bezier(.22,1,.36,1); }
+  a:hover, a:focus-visible { background: var(--accent-hover); }
+  a:active { transform: scale(.975); }
+  @media (prefers-reduced-motion: reduce) { a { transition: none; } a:active { transform: none; } }
 </style>
 </head>
 <body>
 <main>
   <div class="logo">PURE <span>STRIKE</span> GOLF</div>
-  <svg viewBox="0 0 120 60" role="img" aria-label="A ball that has missed the green"><path d="M0 52 Q60 44 120 52 V60 H0Z" fill="#2f8f4d"/><circle cx="60" cy="40" r="9" fill="#fff"/><path d="M56 37 q4 -3 8 0 M55 42 q5 3 10 0" stroke="#c9d3cc" stroke-width="1.4" fill="none"/></svg>
+  <svg viewBox="0 0 120 60" role="img" aria-label="A ball that has missed the green"><path d="M0 52 Q60 44 120 52 V60 H0Z" fill="#30D158"/><circle cx="60" cy="40" r="9" fill="#fff" stroke="#8A8A90" stroke-width="1"/><path d="M56 37 q4 -3 8 0 M55 42 q5 3 10 0" stroke="#c9d3cc" stroke-width="1.4" fill="none"/></svg>
   <h1>That shot went out of bounds</h1>
   <p>There is no page at this address. The course is still open.</p>
   <a id="back" href="/">Back to game</a>

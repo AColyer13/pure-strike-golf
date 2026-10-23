@@ -205,7 +205,7 @@ export class MouseSwing {
     // the counts, as small notches under the track
     g.fillStyle = 'rgba(255,255,255,0.75)';
     for (let k = 1; k <= tempo.counts; k++) g.fillRect(at(k * tempo.count) - 0.75, by + bh + 1, 1.5, 3);
-    g.font = '700 12px Barlow, system-ui, sans-serif'; g.textAlign = 'left';
+    g.font = '700 12px system-ui, sans-serif'; g.textAlign = 'left';
     g.shadowColor = 'rgba(0,0,0,0.8)'; g.shadowBlur = 3;
     g.fillStyle = inZone ? '#b6ffca' : '#fff'; g.fillText(`${(el / tempo.count).toFixed(1)}`, bx, by + bh + 17);
     g.restore();
@@ -229,7 +229,7 @@ export class MouseSwing {
       g.fillStyle = c; roundRect(g, bx, y, w, BH, 4); g.fill();
       if (secs > target) { g.fillStyle = '#4aa8ff'; g.fillRect(bx + target * pps - 1, y - 3, 2, BH + 6); }
     };
-    g.font = '700 14px Barlow, system-ui, sans-serif'; g.textAlign = 'left';
+    g.font = '700 14px system-ui, sans-serif'; g.textAlign = 'left';
     g.shadowColor = 'rgba(0,0,0,0.8)'; g.shadowBlur = 4;
     const bt = r.backTime / tempo.count, dt = r.downTime == null ? null : r.downTime / tempo.count;
     // the backswing line says what the tempo did to the face, when it did anything
@@ -272,7 +272,7 @@ export class MouseSwing {
       g.fillRect(bxs, this.y0, 5, this.maxY - this.y0);
       g.strokeStyle = 'rgba(255,255,255,0.5)';
       g.strokeRect(bxs, this.y0, 5, this.range);
-      g.font = '700 12px Barlow, system-ui, sans-serif';
+      g.font = '700 12px system-ui, sans-serif';
       g.textAlign = 'left';
       // the caddie's number, and where the swing is now
       if (this.target != null && !this.pro) {

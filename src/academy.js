@@ -193,7 +193,7 @@ export class Academy {
       const [g, w, h] = prep(side);
       const L = 36, B = h - 22;
       const sx = (w - L - 12) / maxD, sy = Math.min((B - 12) / maxH, sx * 3);
-      g.strokeStyle = 'rgba(255,255,255,0.12)'; g.fillStyle = 'rgba(255,255,255,0.5)'; g.font = '11px Barlow, sans-serif';
+      g.strokeStyle = 'rgba(255,255,255,0.12)'; g.fillStyle = 'rgba(255,255,255,0.5)'; g.font = '11px system-ui, sans-serif';
       for (let d = 0; d <= maxD / YD; d += 50) { const x = L + d * YD * sx; g.beginPath(); g.moveTo(x, 8); g.lineTo(x, B); g.stroke(); g.fillText(`${d}`, x - 8, h - 6); }
       for (let hh = 0; hh <= maxH / 0.3048; hh += 25) { const y = B - hh * 0.3048 * sy; if (y < 6) break; g.fillText(`${hh}ft`, 2, y + 3); }
       g.fillStyle = '#2f6b37'; g.fillRect(0, B, w, h - B);
@@ -224,7 +224,7 @@ export class Academy {
         const e = s.pts[s.pts.length - 1];
         g.fillStyle = g.strokeStyle; g.beginPath(); g.arc(L + -e[2] * sx, cy + e[0] * sy, 3, 0, 7); g.fill();
       });
-      g.fillStyle = 'rgba(255,255,255,0.8)'; g.font = '11px Barlow, sans-serif'; g.fillText('Top view (right is down)', L + 4, 14);
+      g.fillStyle = 'rgba(255,255,255,0.8)'; g.font = '11px system-ui, sans-serif'; g.fillText('Top view (right is down)', L + 4, 14);
       // legend
       const lx = w - 10; g.textAlign = 'right';
       [...all].reverse().forEach((s, i) => { g.fillStyle = s.current ? '#fff' : colors[(all.length - 1 - i) % colors.length]; g.fillText(s.name, lx, h - 8 - i * 13); });

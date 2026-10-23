@@ -1,8 +1,8 @@
 // Copies the pinned three.js build, the addons the game imports (plus everything
-// they import, recursively) and the Barlow web fonts from node_modules into the
-// repo, so the deployed site has no runtime dependency on a CDN or Google Fonts.
+// they import, recursively) from node_modules into the
+// repo, so the deployed site has no runtime dependency on a CDN.
 //
-//   node tools/vendor.mjs          copy (overwrites vendor/three and fonts/)
+//   node tools/vendor.mjs          copy (overwrites vendor/three)
 //   node tools/vendor.mjs --check  exit 1 if the vendored files differ from node_modules
 import fs from 'node:fs';
 import path from 'node:path';
@@ -21,10 +21,6 @@ const ADDONS = [
   'postprocessing/UnrealBloomPass.js',
   'postprocessing/GTAOPass.js',
   'postprocessing/OutputPass.js',
-];
-const FONTS = [
-  ['@fontsource/barlow', 'barlow-latin', [400, 500, 600, 700, 800]],
-  ['@fontsource/barlow-condensed', 'barlow-condensed-latin', [600, 700, 800]],
 ];
 
 /** Walks relative `import ... from './x.js'` statements from each entry. */
@@ -50,10 +46,6 @@ function plan() {
     ['three/LICENSE', 'vendor/three/LICENSE'],
   ];
   for (const rel of collectAddons()) files.push([`three/examples/jsm/${rel}`, `vendor/three/addons/${rel}`]);
-  for (const [pkg, stem, weights] of FONTS) {
-    for (const w of weights) files.push([`${pkg}/files/${stem}-${w}-normal.woff2`, `fonts/${stem}-${w}-normal.woff2`]);
-    files.push([`${pkg}/LICENSE`, `fonts/${stem.replace('-latin', '')}-LICENSE`]);
-  }
   return files;
 }
 
