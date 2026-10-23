@@ -158,3 +158,33 @@ test('a steep lie moves to gentle ground that is not nearer the hole', () => {
   assert.ok(slopeDeg(hole, p[0], p[2]) <= MAX_LIE_SLOPE, 'the drop is gentle enough to stand on');
   assert.ok(d1 >= d0 - 0.05, `drop gained ground: ${d0.toFixed(1)} m to ${d1.toFixed(2)} m at (${p[0].toFixed(2)}, ${p[2].toFixed(2)})`);
 });
+
+test('a ball on the Lane fairway pot face finishes on the flat floor', () => {
+  const course = COURSES.find((c) => c.id === 'standrews');
+  const i = course.holes.findIndex((h) => h.name === 'Lane');
+  const hole = new Hole(course.holes[i], course, i, {});
+  const pot = hole.bunkers.filter((b) => b.kind === 'pot').sort((a, b) => hole.greenSdf(b.cx, b.cz) - hole.greenSdf(a.cx, a.cz))[0];
+  let face = null;
+  for (let x = pot.cx - pot.rmax; x <= pot.cx + pot.rmax; x += 0.4) {
+    for (let z = pot.cz - pot.rmax; z <= pot.cz + pot.rmax; z += 0.4) {
+      const hit = hole.bunkerSdf(x, z);
+      if (hit.b !== pot || hole.surface(x, z) !== 'bunker') continue;
+      const d = slopeDeg(hole, x, z);
+      // a face sand can hold only if the repose gate fails: steeper than a stance, shallower than a cliff
+      if (d < 40 || d > 55) continue;
+      if (!face || d > face.d) face = { x, z, d };
+    }
+  }
+  assert.ok(face, 'the fairway pot has a face between 40° and 55°');
+  const nrm = hole.normal(face.x, face.z);
+  const dh = Math.hypot(nrm[0], nrm[2]) || 1;
+  const sim = new BallSim(hole, { rho: course.rho, wind: [0, 0, 0], firmness: course.firmness, stimp: course.stimp });
+  // the normal's horizontal part points downhill (height falls that way)
+  sim.putt([face.x, hole.height(face.x, face.z) + BALL.radius, face.z], [nrm[0] / dh, 0, nrm[2] / dh], 0.2);
+  let steps = 0;
+  while (sim.state === 'roll' && steps++ < 8000) sim.step(1 / 120);
+  const rest = slopeDeg(hole, sim.p[0], sim.p[2]);
+  assert.equal(sim.state, 'rest');
+  assert.equal(hole.surface(sim.p[0], sim.p[2]), 'bunker', 'the ball stays in the sand');
+  assert.ok(rest < 10, `finished on ${rest.toFixed(1)}° sand`);
+});

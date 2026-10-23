@@ -467,6 +467,8 @@ export class BallSim {
     let v = this.v;
     const sp = len(v);
     let rollRes = S.roll * (this.env.rollScale?.[surf] ?? 1);
+    // sand holds a ball only up to its angle of repose (~34 degrees); on a steeper face it runs down to the floor
+    if (surf === 'bunker' && len(gPar) / (1 + k) > 0.4 * G) rollRes = Math.min(rollRes, 0.25);
     // grass grabs slow balls more (rough) – and the ball sits down
     if (surf === 'green' && this.env.stimp) rollRes = stimpToRoll(this.env.stimp);
     let acc = mul(gPar, 1 / (1 + k)); // 5/7 g sin(theta) for a rolling sphere
