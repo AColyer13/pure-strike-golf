@@ -528,12 +528,17 @@ export class Hole {
 
     // bunkers
     const { d: bd, b } = this.bunkerSdf(x, z, 3);
-    if (b && bd < 3) {
+    if (b && bd < 3 && !this._noBunker) {
       const depth = b.depth;
       // the lip is lower on the green side, so the collar rolls into the bunker face
       const lip = lerp(0.35, 1, smooth(0, 4, gsd));
-      if (b.kind === 'pot') h -= depth * smooth(0.2, -1.0, bd) + 0.25 * lip * Math.exp(-((bd - 0.8) ** 2) / 0.6);
-      else if (b.kind === 'waste') h -= depth * smooth(1, -2, bd);
+      if (b.kind === 'pot') {
+        // a pot's floor is the ground at its centre, dug down by its depth. The face
+        // between the dune and that floor is steeper than sand can hold (about 34°), so a ball runs to the floor.
+        const key = b.cx * 1000 + b.cz;
+        if (b.gyKey !== key) { b.gyKey = key; this._noBunker = true; b.gy = this.height(b.cx, b.cz); this._noBunker = false; }
+        h = lerp(h, b.gy - depth, smooth(0.2, -0.7, bd));
+      } else if (b.kind === 'waste') h -= depth * smooth(1, -2, bd);
       else h -= depth * smooth(0.6, -2.4, bd) - 0.28 * lip * Math.exp(-((bd - 1.0) ** 2) / 1.2);
     }
 
