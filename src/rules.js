@@ -25,6 +25,9 @@ export function findEntry(hole, sim, fallback) {
 // Steepest slope (degrees) a ball may rest or be dropped on. Anything steeper is a mound flank or a bank
 // nobody could play from, so the ball is placed on the nearest gentler ground instead.
 export const MAX_LIE_SLOPE = 30;
+// Rules of Golf: lateral relief is two club-lengths of the longest club except the putter.
+// 46 inches is the tour limit on driver length.
+export const TWO_CLUB_LENGTHS = 46 * 0.0254 * 2;
 export const slopeDeg = (hole, x, z) => Math.acos(Math.min(1, hole.normal(x, z)[1])) * 180 / Math.PI;
 
 // [x, y, z] ball position -> the same position when it is playable, else the nearest point (searching outward
@@ -79,7 +82,8 @@ export function reliefOptions(hole, entry, shotStart) {
   // lateral (red penalty area): within two club-lengths, no nearer the hole
   const eD = Math.hypot(e.x - cup.x, e.z - cup.z);
   let best = null;
-  for (let r = 0.5; r <= 12 && !best; r += 0.5) {
+  for (let i = 1; !best; i++) {
+    const r = Math.min(i * 0.5, TWO_CLUB_LENGTHS);
     for (let a = 0; a < 32; a++) {
       const x = e.x + Math.cos((a / 32) * Math.PI * 2) * r, z = e.z + Math.sin((a / 32) * Math.PI * 2) * r;
       if (Math.hypot(x - cup.x, z - cup.z) < eD) continue;
@@ -87,7 +91,7 @@ export function reliefOptions(hole, entry, shotStart) {
       const d = Math.hypot(x - cup.x, z - cup.z);
       if (!best || d < best.d) best = { x, z, d };
     }
-    if (r >= 2.2 && best) break;
+    if (r === TWO_CLUB_LENGTHS) break;
   }
   if (best) opts.push({ id: 'lateral', title: 'Lateral relief', desc: 'Drop within two club-lengths of where the ball crossed the edge, no nearer the hole.', p: [best.x, 0, best.z] });
   for (const o of opts) {
@@ -97,5 +101,7 @@ export function reliefOptions(hole, entry, shotStart) {
     o.surface = h.surface(o.p[0], o.p[2]);
     o.es = expectedStrokes(o.isTee ? 'tee' : o.surface, o.dist / YD, !!o.isTee);
   }
-  return opts;
+  // A slope nudge can walk a legal reference point out of the relief area. That drop is not offered.
+  return opts.filter((o) => o.id !== 'lateral'
+    || (Math.hypot(o.p[0] - e.x, o.p[2] - e.z) <= TWO_CLUB_LENGTHS + 1e-6 && o.dist + 1e-6 >= eD));
 }
