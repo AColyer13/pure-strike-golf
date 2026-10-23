@@ -18,7 +18,8 @@ const TOUR = [
   ['PW', 'Pitching Wedge',45,    83, 1.23, 24.2, 9304, 45,  136],
   ['GW', 'Gap Wedge',     50,    80, 1.19, 27.5, 9700, 50,  120],
   ['SW', 'Sand Wedge',    56,    77, 1.14, 31.0, 9900, 55,  103],
-  ['LW', 'Lob Wedge',     60,    74, 1.10, 34.0, 10000, 58,  88],
+  // 70 mph club speed, not a published tour figure: at 74 the frozen aero model carries 94.
+  ['LW', 'Lob Wedge',     60,    70, 1.10, 34.0, 10000, 58,  88],
 ];
 
 export const PROFILES = {

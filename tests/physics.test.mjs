@@ -28,6 +28,14 @@ for (const [key, [carry, apex, land]] of Object.entries(TARGET)) {
   });
 }
 
+for (const key of ['GW', 'SW', 'LW']) {
+  test(`${key} carry matches its tour number`, () => {
+    const c = club(key);
+    const carry = simulateCarry(full(c), env).carry * YD;
+    assert.ok(Math.abs(carry - c.tourCarry) <= 4.5, `carry ${carry.toFixed(1)} vs ${c.tourCarry}`);
+  });
+}
+
 test('bag gaps are monotonic', () => {
   let prev = Infinity;
   for (const c of bag) {
