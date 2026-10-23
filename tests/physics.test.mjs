@@ -70,6 +70,18 @@ test('wind: headwind hurts more than tailwind helps', () => {
   assert.ok(hurt / base > 0.06 && hurt / base < 0.13);
 });
 
+test('a 10 mph crosswind drifts a 7-iron and barely changes carry', () => {
+  const ld = full(club('7I'));
+  const calm = simulateCarry(ld, env);
+  const cross = (wx) => simulateCarry(ld, { rho: 1.18, wind: [wx, 0, 0] });
+  const right = cross(4.47), left = cross(-4.47);
+  const drift = Math.abs(right.lateral - calm.lateral) * YD;
+  const dCarry = Math.abs(right.carry - calm.carry) * YD;
+  assert.ok(drift > 10 && drift < 18, `drift ${drift.toFixed(1)} yd`);
+  assert.ok(dCarry < 2, `carry change ${dCarry.toFixed(1)} yd`);
+  assert.ok(Math.abs((right.lateral + left.lateral) * YD) < 0.5, 'the drift mirrors when the wind flips');
+});
+
 test('thin air flies further (Denver vs sea level)', () => {
   const ld = full(club('7I'));
   const sea = simulateCarry(ld, env).carry;
