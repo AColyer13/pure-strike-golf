@@ -92,7 +92,7 @@ export class MouseSwing {
     this.putt = false;
     this.target = null;   // the caddie's power, drawn on the depth scale
     this.practice = false; // Shift held on the press: a practice swing, timed and shown but not struck
-    this.bar = false;     // the timing bar while pulling back (the tempo guide, or training)
+    this.bar = false;     // the timing bar while pulling back (Beginner assists, or training)
     this.pro = false;     // Pro: no blue mark for the caddie's number, no timing bar
     this.count = false;   // training: show the timing count (bar and ticks) while pulling back
   }
@@ -179,7 +179,7 @@ export class MouseSwing {
   // training aid: the bar fills as the club goes back and should reach the mark with the top of the swing
   drawCount() {
     const g = this.g;
-    const bx = this.x0 + 70, bw = 130, bh = 10, by = this.y0 + 1, secs = tempo.back * 1.7;
+    const bw = 130, bx = clamp(this.flip ? this.x0 - 70 - bw : this.x0 + 70, 10, innerWidth - bw - 10), bh = 10, by = this.y0 + 1, secs = tempo.back * 1.7;
     const el = this.startT == null ? 0 : ((this.phase === 'back' ? performance.now() : this.turnAt) - this.startT) / 1000;
     const at = (s) => bx + (s / secs) * bw; // (s in seconds)
     const inZone = Math.abs(el - tempo.back) <= tempo.pure;
@@ -222,14 +222,13 @@ export class MouseSwing {
     const face = r.finalFace ?? r.face, fa = Math.abs(face), fs = this.putt ? 0.5 : 1.5;
     // each bar is as long as its part of the swing took (the same scale for both); one that ran long has a blue line
     // where it should have ended
-    const pps = 120 / tempo.back, bx = this.x0 + 18, BH = 8;
+    const pps = 120 / tempo.back, BH = 8;
+    let bx = this.x0 + 18;
     const bar = (secs, target, y, c) => {
       const w = Math.max(4, Math.min(secs, target * 1.6) * pps);
       g.fillStyle = c; roundRect(g, bx, y, w, BH, 4); g.fill();
       if (secs > target) { g.fillStyle = '#4aa8ff'; g.fillRect(bx + target * pps - 1, y - 3, 2, BH + 6); }
     };
-    bar(r.backTime, tempo.back, this.y0 - 4, col(e, tempo.pure, tempo.good));
-    if (r.downTime != null) bar(r.downTime, tempo.down, this.y0 + 8, col(pe, 0.3, 0.6));
     g.font = '700 14px Barlow, system-ui, sans-serif'; g.textAlign = 'left';
     g.shadowColor = 'rgba(0,0,0,0.8)'; g.shadowBlur = 4;
     const bt = r.backTime / tempo.count, dt = r.downTime == null ? null : r.downTime / tempo.count;
@@ -241,8 +240,13 @@ export class MouseSwing {
       dt == null ? null : [`Through ${dt.toFixed(1)}/1${pe > 0.3 ? (dt < 1 ? ' quick' : ' slow') : ''}`, col(pe, 0.3, 0.6)],
       [fa < 0.3 ? 'Face square' : `Face ${fa.toFixed(0)}° ${face > 0 ? 'open' : 'closed'}`, col(fa, fs, fs * 2.7)],
     ].filter(Boolean)];
+    // keep the whole readout on screen, however far right (or left) the finger went down
+    const tw = Math.max(120, ...rows.map((row) => row.reduce((a, [t]) => a + g.measureText(t).width + 12, -12)));
+    bx = Math.max(8, Math.min(this.x0 + 18, innerWidth - tw - 8));
+    bar(r.backTime, tempo.back, this.y0 - 4, col(e, tempo.pure, tempo.good));
+    if (r.downTime != null) bar(r.downTime, tempo.down, this.y0 + 8, col(pe, 0.3, 0.6));
     rows.forEach((row, i) => {
-      let x = this.x0 + 18;
+      let x = bx;
       for (const [t, c] of row) { g.fillStyle = c; g.fillText(t, x, this.y0 + 32 + i * 18); x += g.measureText(t).width + 12; }
     });
     g.shadowBlur = 0;
@@ -254,6 +258,9 @@ export class MouseSwing {
     if (!this.enabled) return;
     if (!this.active) { if (this.fading()) this.drawTempo(); return; }
     if (this.active) {
+      // a finger far right of centre puts the depth scale and its labels on the finger's left instead
+      this.flip = this.x0 + ((this.bar || this.practice) ? 210 : 80) > innerWidth - 8;
+      const sd = this.flip ? -1 : 1, bxs = this.flip ? this.x0 - 23 : this.x0 + 18;
       g.strokeStyle = 'rgba(255,255,255,0.35)';
       g.setLineDash([6, 6]);
       g.beginPath(); g.moveTo(this.x0, this.y0 - 60); g.lineTo(this.x0, this.y0 + this.range); g.stroke();
@@ -262,20 +269,22 @@ export class MouseSwing {
       g.beginPath(); g.arc(this.x0, this.y0, 6, 0, Math.PI * 2); g.fill();
       // backswing depth scale
       g.fillStyle = 'rgba(255,220,80,0.7)';
-      g.fillRect(this.x0 + 18, this.y0, 5, this.maxY - this.y0);
+      g.fillRect(bxs, this.y0, 5, this.maxY - this.y0);
       g.strokeStyle = 'rgba(255,255,255,0.5)';
-      g.strokeRect(this.x0 + 18, this.y0, 5, this.range);
+      g.strokeRect(bxs, this.y0, 5, this.range);
       g.font = '700 12px Barlow, system-ui, sans-serif';
       g.textAlign = 'left';
       // the caddie's number, and where the swing is now
       if (this.target != null && !this.pro) {
         const ty = this.y0 + clamp(this.target, 0, 1.1) * this.range;
         g.fillStyle = '#5fd4ff';
-        g.fillRect(this.x0 + 12, ty - 1.5, 17, 3);
-        g.fillText(`${Math.round(this.target * 100)}%`, this.x0 + 32, ty + 4);
+        g.fillRect(this.flip ? this.x0 - 29 : this.x0 + 12, ty - 1.5, 17, 3);
+        g.textAlign = this.flip ? 'right' : 'left';
+        g.fillText(`${Math.round(this.target * 100)}%`, this.x0 + 32 * sd, ty + 4);
+        g.textAlign = 'left';
       }
       const deep = (this.maxY - this.y0) / this.range;
-      if (deep > 0.04) { g.fillStyle = '#fff'; g.fillText(`${Math.round(deep * 100)}%`, this.x0 - 40, this.maxY + 4); }
+      if (deep > 0.04) { g.fillStyle = '#fff'; g.fillText(`${Math.round(deep * 100)}%`, this.flip ? this.x0 + 12 : Math.max(4, this.x0 - 40), this.maxY + 4); }
       if (this.bar || this.practice) this.drawCount();
       // trail
       g.strokeStyle = '#ffe14d'; g.lineWidth = 3;

@@ -273,7 +273,6 @@ export class UI {
     opt('optTees', tees, Object.entries(TEE_SETS).map(([k, t]) => [k, t.name, `${fmtYd(course.holes.reduce((a, h) => a + teeYds(h, k), 0), units).replace(/\d+/, (n) => (+n).toLocaleString())} at ${course.name}${k === 'back' ? ': the full championship length' : k === 'middle' ? ': a shorter course for most club golfers' : ': the shortest, for newer players and slower swings'}`]));
     opt('optDiff', s.difficulty, [['beginner', 'Beginner', 'Big impact zone, full aim preview with wind and roll, full putt line'], ['standard', 'Standard', 'Normal zone, carry preview without wind, partial putt line'], ['pro', 'Pro', 'Small zone, no wind/putt assistance – read it yourself']]);
     opt('optTempo', s.tempo, TEMPO_IDS.map((k) => [k, TEMPOS[k].name, TEMPOS[k].blurb + ' – three counts back, one through (analog swing)']));
-    opt('optGuide', s.guide === 'pro' ? 'pro' : 'beginner', [['beginner', 'Beginner', 'A timing bar fills to the mark as you swing back, and a blue dash on the scale shows the caddie’s number'], ['pro', 'Pro', 'No timing bar and no blue dash: hit the percentage the caddie says, by feel']]);
     opt('optCaddie', s.caddie, [...CADDIE_IDS.map((k) => [k, CADDIES[k].name, CADDIES[k].blurb]), ['none', 'None', 'A plain, quiet caddie']]);
     opt('optUnits', s.units === 'm' ? 'm' : 'yd', [['yd', 'Yards'], ['m', 'Metres']]);
     const hs = $('optHole');
@@ -302,7 +301,6 @@ export class UI {
     if (id === 'optTees') { s.tees = k; s.teesChosen = true; }
     if (id === 'optDiff') s.difficulty = k;
     if (id === 'optTempo') s.tempo = k;
-    if (id === 'optGuide') s.guide = k;
     if (id === 'optCaddie') { s.caddie = k; this.game.greeted = false; if (CADDIES[k]) this.game.auditionCaddie(k); }
     if (id === 'optUnits') s.units = k;
     this.game.saveSettings();
@@ -466,9 +464,6 @@ export class UI {
     document.body.dataset.state = state; // the touch buttons that make sense change with it
     if (this.hbState !== state && !this.touch) this.helpBar();
     if (state !== 'address') this.game.input?.toggleShotOpts(false);
-    // with the ball away the big button holds to fast-forward, and its label says so
-    const sw = document.querySelector('.tc-swing');
-    if (sw) sw.setAttribute('aria-label', state === 'flight' ? 'Hold to fast-forward' : 'Swing');
   }
   // the shot tray's buttons say what is set, and the tray's own button shows a dot when the shot is shaped
   touchChips(d) {
@@ -681,7 +676,7 @@ export class UI {
   ffHint(on) {
     const h = $('ffHint');
     if (!h) return;
-    if (on) h.innerHTML = this.touch ? 'Hold <b>▶▶</b> to fast-forward · <b>skip</b> button to skip'
+    if (on) h.innerHTML = this.touch ? 'Touch and <b>hold</b> the screen to fast-forward · <b>skip</b> button to skip'
       : `Hold <b>${this.key('fastForward')}</b> to fast-forward · <b>${this.key('skip')}</b> to skip`;
     h.classList.toggle('hidden', !on);
   }
@@ -997,7 +992,6 @@ export class UI {
       ${chk('sTracer', 'Shot tracer', s.tracer)}
       <label class="set"><span>Caddie<small>${CADDIES[s.caddie]?.blurb || 'A plain, quiet caddie'}</small></span><select id="sCaddie">${CADDIE_IDS.map((k) => `<option value="${k}" ${s.caddie === k ? 'selected' : ''}>${CADDIES[k].name}</option>`).join('')}<option value="none" ${CADDIES[s.caddie] ? '' : 'selected'}>None</option></select></label>
       <label class="set"><span>Swing tempo<small>${TEMPOS[s.tempo]?.blurb || ''} (analog swing)</small></span><select id="sTempo">${TEMPO_IDS.map((k) => `<option value="${k}" ${s.tempo === k ? 'selected' : ''}>${TEMPOS[k].name}</option>`).join('')}</select></label>
-      <label class="set"><span>Swing guide<small>Beginner shows the timing bar and the blue mark for the caddie's number; Pro hides both (the guided hole always uses Beginner)</small></span><select id="sGuide"><option value="beginner" ${s.guide !== 'pro' ? 'selected' : ''}>Beginner</option><option value="pro" ${s.guide === 'pro' ? 'selected' : ''}>Pro</option></select></label>
       ${chk('sVoice', 'Caddie voice', s.caddyVoice, 'Your caddie speaks: the club and how hard to hit it (analog swing), and what he thinks of your shots.')}
       <label class="set"><span>Distances</span><select id="sUnits"><option value="yd" ${s.units !== 'm' ? 'selected' : ''}>Yards</option><option value="m" ${s.units === 'm' ? 'selected' : ''}>Metres</option></select></label>
       <label class="set"><span>Assists</span><select id="sDiff">${['beginner', 'standard', 'pro'].map((d) => `<option value="${d}" ${s.difficulty === d ? 'selected' : ''}>${d[0].toUpperCase() + d.slice(1)}</option>`).join('')}</select></label>
@@ -1017,7 +1011,6 @@ export class UI {
     $('sVol').oninput = (e) => { s.volume = +e.target.value; g.audio.setVolume(s.volume); g.saveSettings(); };
     $('sTracer').onchange = (e) => { s.tracer = e.target.checked; save(); };
     $('sCaddie').onchange = (e) => { s.caddie = e.target.value; g.greeted = false; g.saveSettings(); this.showSettings(true); };
-    $('sGuide').onchange = (e) => { s.guide = e.target.value; g.saveSettings(); };
     $('sTempo').onchange = (e) => { s.tempo = e.target.value; g.saveSettings(); this.showSettings(true); };
     $('sVoice').onchange = (e) => { s.caddyVoice = e.target.checked; g.saveSettings(); };
     $('sUnits').onchange = (e) => { s.units = e.target.value; save(); g.updateHUD?.(true); };
@@ -1123,9 +1116,9 @@ export class UI {
         <li>In flight: hold <b>${k('fastForward')}</b> to fast-forward, <b>${k('skip')}</b> skips to where it finishes. <b>${k('replay')}</b> replays the shot from a new angle.</li>
         <li>Right-drag orbits the camera; the wheel zooms.</li>`;
     const analog = touch
-      ? `<ol><li>Your caddie tells you how hard to hit it ("about 75%", or "go all out"). Put one finger on the view and drag <b>down</b> that far – the blue mark on the scale (Beginner swing guide) is his number.</li><li>Take it back on a <b>three-count</b> at your chosen tempo (24/8 by default: a quick 0.8 s backswing, so count briskly), whatever the distance. Reaching the top right on 3 is a pure strike. Putts and short wedge shots take <b>two</b> counts back instead; the club box tells you.</li><li>Then drag <b>up</b> past the start point, straight – drifting left or right opens/closes the clubface.</li></ol>
+      ? `<ol><li>Your caddie tells you how hard to hit it ("about 75%", or "go all out"). Put one finger on the view and drag <b>down</b> that far – on Beginner assists the blue mark on the scale is his number.</li><li>Take it back on a <b>three-count</b> at your chosen tempo (24/8 by default: a quick 0.8 s backswing, so count briskly), whatever the distance. Reaching the top right on 3 is a pure strike. Putts and short wedge shots take <b>two</b> counts back instead; the club box tells you.</li><li>Then drag <b>up</b> past the start point, straight – drifting left or right opens/closes the clubface.</li></ol>
         <p class="muted small">Tap the shot-options button, then <b>practice</b>, and your next drag is a practice swing: same timing feedback, no shot.</p>`
-      : `<ol><li>Your caddie tells you how hard to hit it ("about 75%", or "go all out"). Hold the left mouse button and pull <b>down</b> that far – the blue mark on the scale (Beginner swing guide) is his number.</li><li>Take it back on a <b>three-count</b> at your chosen tempo (24/8 by default: a quick 0.8 s backswing, so count briskly), whatever the distance. Reaching the top right on 3 and pushing through in one count is a pure strike; rushed or slow costs contact and turns the face. Putts and short wedge shots (under about 50%) take <b>two</b> counts back and one through – the club box and your caddie tell you which.</li><li>Then push <b>up</b> past the start point, straight – drifting left or right opens/closes the clubface.</li></ol>
+      : `<ol><li>Your caddie tells you how hard to hit it ("about 75%", or "go all out"). Hold the left mouse button and pull <b>down</b> that far – on Beginner assists the blue mark on the scale is his number.</li><li>Take it back on a <b>three-count</b> at your chosen tempo (24/8 by default: a quick 0.8 s backswing, so count briskly), whatever the distance. Reaching the top right on 3 and pushing through in one count is a pure strike; rushed or slow costs contact and turns the face. Putts and short wedge shots (under about 50%) take <b>two</b> counts back and one through – the club box and your caddie tell you which.</li><li>Then push <b>up</b> past the start point, straight – drifting left or right opens/closes the clubface.</li></ol>
         <p class="muted small">Hold <b>Shift</b> while you swing for a practice swing: same timing feedback, no shot.</p>
         <p class="muted small">Gamepad: the right stick does the same – pull back, then push up.</p>`;
     h.innerHTML = `<h2>How to play</h2>

@@ -131,7 +131,7 @@ export class Game {
     const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
     return {
       // a first visit starts a typical golfer on the middle tees; saved settings from before tee sets keep the back tees
-      profile: 'mid', difficulty: 'standard', tees: Object.keys(s).length ? 'back' : 'middle', units: 'yd', volume: 0.7, tracer: true, caddyVoice: true, caddie: 'tech', tempo: DEFAULT_TEMPO, guide: 'beginner',
+      profile: 'mid', difficulty: 'standard', tees: Object.keys(s).length ? 'back' : 'middle', units: 'yd', volume: 0.7, tracer: true, caddyVoice: true, caddie: 'tech', tempo: DEFAULT_TEMPO,
       reducedMotion: reduce, captions: false, uiScale: 1, keys: {}, ffSeen: 0, quality: 'auto', ...s,
     };
   }
@@ -304,9 +304,9 @@ export class Game {
     this.swingTempo = null;
     setTempo(this.settings.tempo);
     setCounts(countsFor(this.club, this.suggestedPower));
-    // Beginner shows the timing bar and the caddie's blue mark; Pro shows neither (just the caddie's spoken
-    // percentage); the guided hole is always Beginner
-    const pro = this.settings.guide === 'pro' && !this.tutorial;
+    // only Beginner assists show the timing bar and the caddie's blue mark; Standard and Pro swing to the
+    // caddie's spoken percentage alone; the guided hole is always Beginner
+    const pro = this.settings.difficulty !== 'beginner' && !this.tutorial;
     this.mouseSwing.count = !pro;
     this.mouseSwing.bar = !pro;
     this.mouseSwing.pro = pro;
@@ -402,6 +402,7 @@ export class Game {
   }
   toggleTargetView() {
     this.cam.targetView = !this.cam.targetView;
+    this.cam.resetOrbit(); // a drag in target view must not leave the address camera tilted
     document.body.classList.toggle('target-view', this.cam.targetView);
     this.ui.toast(this.cam.targetView ? 'Target view – click the ground to aim' : 'Address view');
   }
@@ -846,6 +847,7 @@ export class Game {
 
   onBallStop() {
     const sim = this.sim, S = this.shotStart;
+    this.input.touchHeld.fastForward = false;
     this.ui.ffHint(false);
     this.ffUsed = false;
     this.timeScale = 1;
@@ -1090,7 +1092,7 @@ export class Game {
     cam.getWorldDirection(fwd);
     const behind = (v.x - cam.position.x) * fwd.x + (v.y - cam.position.y) * fwd.y + (v.z - cam.position.z) * fwd.z <= 0;
     v.project(cam);
-    const W = innerWidth, H = innerHeight, m = 46;
+    const W = innerWidth, H = innerHeight, m = Math.max(46, (el.offsetWidth || 0) / 2 + 8);
     if (!W || !H) return;
     let x = (v.x * 0.5 + 0.5) * W, y = (-v.y * 0.5 + 0.5) * H, side = 0;
     if (behind) { side = v.x > 0 ? -1 : 1; x = side < 0 ? m : W - m; y = H * 0.3; }
@@ -1115,10 +1117,14 @@ export class Game {
     const pl = this.club.putter ? ` · stroke ${this.fmtPutt(this.puttEqFt)}` : plays && Math.abs(plays - dist) >= 1.5 * YD ? ` · plays ${this.fmtDist(plays)}` : '';
     const e = Math.round((h.height(c.x, c.z) - (this.ball.p[1] - BALL.radius)) / FT);
     const up = Math.abs(e) >= 1 ? ` · ${e > 0 ? '▲' : '▼'} ${fmtElev(e, this.settings.units)}` : '';
-    const text = `${side < 0 ? '◀ ' : ''}⚑ ${dtxt}${pl}${up}${side > 0 ? ' ▶' : ''}`;
+    const mk = (a, b) => `${side < 0 ? '◀ ' : ''}⚑ ${dtxt}${a}${b}${side > 0 ? ' ▶' : ''}`;
+    const text = mk(pl, up);
     if (el.textContent !== text) el.textContent = text;
     document.body.classList.add('pintag');
     el.classList.remove('hidden');
+    // a narrow screen drops the elevation, then the plays-like, before the tag would run off the edge
+    if (el.offsetWidth > W - 16 && up) el.textContent = mk(pl, '');
+    if (el.offsetWidth > W - 16 && pl) el.textContent = mk('', '');
     // never sit on top of a card: slide to whichever side of it is nearest (it reads as a pill hanging off the card)
     const tw = el.offsetWidth, th = el.offsetHeight, pad = 8;
     this.pinAvoid = this.pinAvoid || ['holeCard', 'distBox', 'windBox', 'clubBox', 'minimap', 'caddie'].map((id) => document.getElementById(id));
@@ -1132,6 +1138,8 @@ export class Game {
       if (!opts.length) break;
       [x, y] = opts[0];
     }
+    x = clamp(x, 8 + tw / 2, Math.max(8 + tw / 2, W - 8 - tw / 2));
+    y = clamp(y, 8 + th / 2, Math.max(8 + th / 2, H - 8 - th / 2));
     el.style.transform = `translate(${x.toFixed(0)}px, ${y.toFixed(0)}px) translate(-50%, -50%)`;
   }
 

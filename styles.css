@@ -387,7 +387,6 @@ body.touch.in-round #touchControls { display: flex; position: fixed; inset: auto
 .tc-left button { width: 48px; height: 48px; border-radius: 50%; }
 .tc-right button { flex: 1 1 0; min-width: 0; max-width: 48px; height: 44px; border-radius: 22px; }
 #touchControls button.down { background: rgba(244,211,31,.6); }
-#touchControls .tc-swing { flex: 1 0 100%; max-width: none; height: 64px; border-radius: 32px; background: linear-gradient(180deg, #ffe25a, #f0b91c); color: #1b1a0c; font-size: 17px; letter-spacing: .06em; }
 #touchControls button small { display: block; font: 600 10px/1 Barlow, sans-serif; margin-top: 3px; color: rgba(255,255,255,.75); }
 #touchControls .ico { width: 18px; height: 18px; }
 /* only the buttons that make sense now: shot options at address, skip once the ball is away */
@@ -401,15 +400,14 @@ body[data-state="address"][data-putt="1"] .tc-shot { display: none; }
 body[data-state="address"][data-putt="1"] .tc-pin { display: block; }
 .tc-shot.set::after { content: ''; position: absolute; top: 6px; right: 8px; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px rgba(10,22,16,.8); }
 .tc-opts { position: absolute; right: 0; top: 0; height: 44px; gap: 4px; z-index: 1; border-radius: 22px; background: rgba(10,22,16,.92); }
-body.tc-opts[data-state="address"]:not([data-putt="1"]) .tc-opts { display: flex; animation: tin .15s ease-out; }
+body.shot-tray[data-state="address"]:not([data-putt="1"]) .tc-opts { display: flex; animation: tin .15s ease-out; }
 .tc-opts button { flex: 0 0 48px; }
 .tc-prac { display: block; }
 .tc-prac.set { background: var(--accent); color: #17210f; }
 /* only what matters now stays up: mid-swing just the swing button and the meter; once the ball is away
    the aim and club buttons and the club card go, and on the result the swing button too (tap anywhere continues) */
-body.touch.in-round:is([data-state="swing"], [data-state="backswing"]) :is(.tc-left, .tc-right > :not(.tc-swing)) { visibility: hidden; }
+body.touch.in-round:is([data-state="swing"], [data-state="backswing"]) :is(.tc-left, .tc-right) { visibility: hidden; }
 body.touch.in-round:not([data-state="address"], [data-state="swing"], [data-state="backswing"]) .tc-left { visibility: hidden; }
-body.touch.in-round:is([data-state="result"], [data-state="replay"]) .tc-swing { visibility: hidden; }
 body.touch.in-round:is([data-state="swing"], [data-state="backswing"]) :is(#clubBox, #minimap, #caddie),
 body.touch.in-round:not([data-state="address"], [data-state="swing"], [data-state="backswing"]) #clubBox { opacity: 0; pointer-events: none; }
 body.touch #helpBar { display: none; }
@@ -713,18 +711,12 @@ body.touch.in-round #clubBox .club-name { font-size: 17px; }
 body.touch.in-round #clubBox .club-key { font-size: 15px; }
 /* in the air the panel would only repeat the shot being played */
 body.touch.in-round[data-state="flight"]:not(.coaching) #distBox { display: none; }
-/* once the ball is away the big button is a fast-forward button, and wears the icon instead of "SWING" */
-#touchControls .tc-swing .tc-ff { display: none; width: 34px; height: 34px; }
-body.touch.in-round[data-state="flight"] #touchControls .tc-swing .tc-lbl { display: none; }
-body.touch.in-round[data-state="flight"] #touchControls .tc-swing .tc-ff { display: block; }
-body.touch.in-round[data-state="flight"] #touchControls .tc-swing { background: linear-gradient(180deg, #cfe9d6, #8fc6a0); }
 /* the caddie's note wears the same dark glass as the rest of the HUD and sits right on the club card
    (or on the meter, on the green where there is no club card) instead of floating in the grass */
 body.touch.in-round #caddie { background: rgba(10, 22, 16, .8); color: #f3f6ef; border: 1px solid rgba(255, 255, 255, .16); box-shadow: none; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); align-items: center; }
 body.touch.in-round #caddie .caddie-ico { color: var(--accent); }
 @media (orientation: portrait) {
   body.touch.in-round #caddie { left: 14px; right: 14px; max-width: none; bottom: calc(var(--tcb) + 78px + 40px); }
-  body.touch.in-round[data-putt="1"] #caddie { bottom: calc(var(--tcb) + 78px); }
 }
 /* the result card has Continue and Details, so the menu / view / skip buttons under it step aside and the card drops into their place */
 @media (orientation: portrait) {
@@ -760,8 +752,6 @@ body.in-round[data-putt="1"] #clubBox .club-row { display: none; }
 }
 
 /* Analog swing: no meter strip; the caddie says how far back to go and the depth scale is on the swing itself */
-/* touch: the drag on the view is the swing, so there is no SWING button (it comes back as fast-forward in flight) */
-body.touch:is([data-state="address"], [data-state="swing"], [data-state="backswing"]) .tc-swing { display: none; }
 body.in-round #distBox .lie-line { border-top: 0; margin-top: 0; padding-top: 0; }
 body.in-round:not(.pintag) #distBox .lie-line { margin-top: 3px; }
 @media (orientation: portrait) {

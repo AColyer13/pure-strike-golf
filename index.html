@@ -29,7 +29,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Pure Strike">
-<link rel="modulepreload" href="dist/game.js?v=1c52923e">
+<link rel="modulepreload" href="dist/game.js?v=e0f2c2b7">
 </head>
 <body>
 <canvas id="c" role="img" aria-label="3D golf course view"></canvas>
@@ -66,7 +66,6 @@
         <div class="opt"><label>Assists</label><div id="optDiff" class="segs"></div><div id="optDiffDesc" class="seg-desc muted small"></div></div>
         <div class="opt"><label>Distances</label><div id="optUnits" class="segs"></div></div>
         <div class="opt"><label>Tempo</label><div id="optTempo" class="segs"></div><div id="optTempoDesc" class="seg-desc muted small"></div></div>
-        <div class="opt"><label>Swing guide</label><div id="optGuide" class="segs"></div><div id="optGuideDesc" class="seg-desc muted small"></div></div>
         <div class="opt"><label>Caddie</label><div id="optCaddie" class="segs"></div><div id="optCaddieDesc" class="seg-desc muted small"></div></div>
       </div>
     </details>
@@ -131,7 +130,6 @@
       <button data-act="trajCycle" aria-label="Ball flight: low, standard, high">⤒<small>flight</small></button>
     </div>
     <button data-act="skip" aria-label="Skip"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5l11 7-11 7zM18 5v14" fill="currentColor" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/></svg><small>skip</small></button>
-    <button data-act="swing" data-hold class="tc-swing" aria-label="Swing"><span class="tc-lbl">SWING</span><svg class="ico tc-ff" viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 5.5l9 6.5-9 6.5zM12.5 5.5l9 6.5-9 6.5z" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg></button>
   </div>
 </div>
 <div id="toasts"></div>
@@ -150,7 +148,7 @@
 <div id="academy" class="hidden"></div>
 <div id="loading" class="hidden"><div class="spinner"></div><div id="loadingText"></div></div>
 
-<script type="module" src="dist/game.js?v=1c52923e"></script>
+<script type="module" src="dist/game.js?v=e0f2c2b7"></script>
 <script>
 // a dropped connection or a hiccup on the host can fail one module and leave "Loading…" up for ever:
 // say so and offer a reload instead

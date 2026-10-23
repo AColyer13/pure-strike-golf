@@ -183,6 +183,19 @@ export class Input {
   touchDown(e) {
     const g = this.g;
     this.showTouch(true);
+    // with the ball away, a finger held anywhere fast-forwards until it lifts
+    if (g.state === 'flight' && !g.ui.paused && !g.ui.modalOpen()) {
+      this.touchHeld.fastForward = true;
+      const off = (ev) => {
+        if (ev.pointerId !== e.pointerId) return;
+        this.touchHeld.fastForward = false;
+        removeEventListener('pointerup', off);
+        removeEventListener('pointercancel', off);
+      };
+      addEventListener('pointerup', off);
+      addEventListener('pointercancel', off);
+      return;
+    }
     // analog swing: a finger drag on the view is the swing itself, not an orbit
     if (g.state === 'address' && !g.cam.targetView && !g.ui.paused && !g.ui.modalOpen()) {
       if (!g.addressSettling && g.mouseSwing.down(e)) { g.state = 'swing'; g.caddie.analysis = null; }
@@ -226,14 +239,13 @@ export class Input {
         b.setPointerCapture(e.pointerId);
         b.classList.add('down');
         if (hold) this.touchHeld[a] = true;
-        if (a === 'swing') this.touchHeld.fastForward = true;
         if (a === 'menu') this.g.ui.togglePause();
         else if (a === 'shotOpts') this.toggleShotOpts();
-        else if (!hold || a === 'swing') this.dispatch(a);
+        else if (!hold) this.dispatch(a);
         if (a === 'shapeCycle' || a === 'trajCycle') this.armShotOpts(); // keep the tray up while the player tunes the shot
         else if (a === 'aimPin') this.toggleShotOpts(false);
       });
-      const release = () => { b.classList.remove('down'); this.touchHeld[a] = false; if (a === 'swing') this.touchHeld.fastForward = false; };
+      const release = () => { b.classList.remove('down'); this.touchHeld[a] = false; };
       b.addEventListener('pointerup', release);
       b.addEventListener('pointercancel', release);
     }
@@ -281,8 +293,8 @@ export class Input {
   }
   // The pin, shape and flight buttons live in a tray that replaces the top button row while it is open.
   // It closes on its own: after a few seconds, on a tap anywhere else, or when the shot is struck.
-  toggleShotOpts(on = !document.body.classList.contains('tc-opts')) {
-    document.body.classList.toggle('tc-opts', on);
+  toggleShotOpts(on = !document.body.classList.contains('shot-tray')) {
+    document.body.classList.toggle('shot-tray', on);
     document.querySelector('.tc-shot')?.setAttribute('aria-expanded', String(on));
     clearTimeout(this.optsT);
     removeEventListener('pointerdown', this.optsOutside, true);
