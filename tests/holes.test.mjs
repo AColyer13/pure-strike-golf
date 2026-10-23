@@ -116,3 +116,45 @@ test('tee sets keep the back tee as the start of the centre line', () => {
   assert.equal(back.cup.z, fwd.cup.z);
   assert.equal(new Hole(def, course, 0, { tees: 'nonsense' }).yards, def.yds, 'unknown tees fall back to the back tees');
 });
+
+// A ball that stops (or is dropped) on a bank too steep to stand on is moved to the nearest gentle ground.
+import { playableNear, slopeDeg, MAX_LIE_SLOPE } from '../src/rules.js';
+import { BALL } from '../src/physics.js';
+test('playableNear moves a ball off any steep bank', () => {
+  let steep = 0, fixed = 0;
+  for (const course of COURSES) {
+    for (let i = 0; i < course.holes.length; i++) {
+      const h = new Hole(course.holes[i], course, i, {});
+      for (let k = 0; k < 400; k++) {
+        const x = h.tee.x + (((k * 7919) % 200) - 100) * 3, z = h.tee.z + (((k * 104729) % 200) - 100) * 3;
+        if (!h.inBounds(x, z) || h.surface(x, z) === 'water' || slopeDeg(h, x, z) <= MAX_LIE_SLOPE) continue;
+        steep++;
+        const p = playableNear(h, [x, h.height(x, z) + BALL.radius, z]);
+        if (slopeDeg(h, p[0], p[2]) <= MAX_LIE_SLOPE) fixed++;
+      }
+    }
+  }
+  assert.equal(fixed, steep, `${steep - fixed} of ${steep} steep spots could not be moved`);
+  console.log(`steep spots sampled: ${steep}`);
+});
+
+test('a steep lie moves to gentle ground that is not nearer the hole', () => {
+  // Two flat pads on the same ring: one toward the cup, one beside the ball.
+  // The beside pad is the nearest relief that does not gain ground on the hole.
+  const cup = { x: 0, z: -20 };
+  const pad = (x, z) => Math.hypot(x, z + 2) < 0.35 || Math.hypot(x - 2, z) < 0.35;
+  const hole = {
+    cup,
+    inBounds: () => true,
+    surface: () => 'deep',
+    waterSdf: () => ({ d: 10 }),
+    height: () => 0,
+    normal: (x, z) => (pad(x, z) ? [0, 1, 0] : [0, Math.cos(50 * Math.PI / 180), Math.sin(50 * Math.PI / 180)]),
+  };
+  const start = [0, BALL.radius, 0];
+  const p = playableNear(hole, start);
+  const d0 = Math.hypot(start[0] - cup.x, start[2] - cup.z);
+  const d1 = Math.hypot(p[0] - cup.x, p[2] - cup.z);
+  assert.ok(slopeDeg(hole, p[0], p[2]) <= MAX_LIE_SLOPE, 'the drop is gentle enough to stand on');
+  assert.ok(d1 >= d0 - 0.05, `drop gained ground: ${d0.toFixed(1)} m to ${d1.toFixed(2)} m at (${p[0].toFixed(2)}, ${p[2].toFixed(2)})`);
+});

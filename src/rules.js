@@ -22,6 +22,42 @@ export function findEntry(hole, sim, fallback) {
   return { x: fallback[0], z: fallback[2] };
 }
 
+// Steepest slope (degrees) a ball may rest or be dropped on. Anything steeper is a mound flank or a bank
+// nobody could play from, so the ball is placed on the nearest gentler ground instead.
+export const MAX_LIE_SLOPE = 30;
+export const slopeDeg = (hole, x, z) => Math.acos(Math.min(1, hole.normal(x, z)[1])) * 180 / Math.PI;
+
+// [x, y, z] ball position -> the same position when it is playable, else the nearest point (searching outward
+// up to 10 m) that is in bounds, dry and gentler than MAX_LIE_SLOPE. A bunker stays a bunker's worth of sand
+// where it can: a point on the same surface is preferred. Points on a ring are the same distance from the ball,
+// so the one that does not move the ball nearer the hole wins; if every point on the ring is nearer, the drop
+// gives up the least ground. Returns the input when nothing fits.
+export function playableNear(hole, p) {
+  if (slopeDeg(hole, p[0], p[2]) <= MAX_LIE_SLOPE) return p;
+  const surf = hole.surface(p[0], p[2]);
+  const d0 = Math.hypot(p[0] - hole.cup.x, p[2] - hole.cup.z);
+  const ok = (x, z) => {
+    const sf = hole.surface(x, z);
+    return hole.inBounds(x, z) && sf !== 'water' && sf !== 'ob' && hole.waterSdf(x, z).d > 0.6 && slopeDeg(hole, x, z) <= MAX_LIE_SLOPE;
+  };
+  for (const same of [true, false]) {
+    for (let r = 0.5; r <= 10; r += 0.5) {
+      let best = null;
+      for (let a = 0; a < 24; a++) {
+        const x = p[0] + Math.cos((a / 24) * Math.PI * 2) * r, z = p[2] + Math.sin((a / 24) * Math.PI * 2) * r;
+        if (!ok(x, z) || (same && hole.surface(x, z) !== surf)) continue;
+        const d = Math.hypot(x - hole.cup.x, z - hole.cup.z);
+        const gift = d < d0 - 0.02;
+        // not-nearer beats nearer. Among not-nearer points, stay closest to the original distance.
+        // Among only-nearer points, give up as little as possible.
+        if (!best || (best.gift && !gift) || (gift === best.gift && (gift ? d > best.d : d < best.d))) best = { x, z, d, gift };
+      }
+      if (best) return [best.x, hole.height(best.x, best.z) + BALL.radius, best.z];
+    }
+  }
+  return p;
+}
+
 // shotStart: { p, surface, isTee } of the stroke that went in. Each option has the
 // drop point p, its surface, distance to the hole and the tour expected score from there.
 export function reliefOptions(hole, entry, shotStart) {
@@ -55,9 +91,10 @@ export function reliefOptions(hole, entry, shotStart) {
   }
   if (best) opts.push({ id: 'lateral', title: 'Lateral relief', desc: 'Drop within two club-lengths of where the ball crossed the edge, no nearer the hole.', p: [best.x, 0, best.z] });
   for (const o of opts) {
+    if (!o.isTee) o.p = playableNear(h, [o.p[0], h.height(o.p[0], o.p[2]) + BALL.radius, o.p[2]]);
     o.p[1] = h.height(o.p[0], o.p[2]) + BALL.radius;
     o.dist = Math.hypot(cup.x - o.p[0], cup.z - o.p[2]);
-    o.surface = o.surface || h.surface(o.p[0], o.p[2]);
+    o.surface = h.surface(o.p[0], o.p[2]);
     o.es = expectedStrokes(o.isTee ? 'tee' : o.surface, o.dist / YD, !!o.isTee);
   }
   return opts;

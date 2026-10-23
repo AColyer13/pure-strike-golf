@@ -2,7 +2,7 @@
 // the Strokes Gained record and the hole/round flow. No DOM, no renderer.
 import { YD } from './hole.js';
 import { MAX_STROKES } from './config.js';
-import { findEntry } from './rules.js';
+import { findEntry, playableNear } from './rules.js';
 
 const beforeOf = (S) => ({ surface: S.isTee ? 'tee' : S.surface, yards: S.yards, isTee: S.isTee });
 
@@ -23,10 +23,14 @@ export function settleShot({ hole, shotStart: S, sim, info, stats, strokes }) {
   } else if (result === 'ob') {
     penalty = 1;
     after = { surface: S.isTee ? 'fairway' : S.surface, yards: S.yards };
-    ball = { p: S.p.slice(), surface: S.surface, isTee: S.isTee };
+    const p = S.isTee ? S.p.slice() : playableNear(hole, S.p.slice());
+    ball = { p, surface: p === S.p || S.isTee ? S.surface : hole.surface(p[0], p[2]), isTee: S.isTee };
   } else {
-    ball = { p: sim.p.slice(), surface: info.after, isTee: false };
-    after = { surface: info.after, yards: Math.hypot(hole.cup.x - sim.p[0], hole.cup.z - sim.p[2]) / YD };
+    // a ball that came to rest on a ridge too steep to stand on is placed on the nearest playable ground
+    const p = playableNear(hole, sim.p.slice());
+    const moved = p[0] !== sim.p[0] || p[2] !== sim.p[2];
+    ball = { p, surface: moved ? hole.surface(p[0], p[2]) : info.after, isTee: false };
+    after = { surface: ball.surface, yards: Math.hypot(hole.cup.x - ball.p[0], hole.cup.z - ball.p[2]) / YD };
   }
   strokes += penalty;
   let sg = null;
