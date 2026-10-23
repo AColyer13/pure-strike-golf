@@ -27,8 +27,8 @@
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: Barlow, system-ui, sans-serif; user-select: none; -webkit-user-select: none; }
-canvas#c { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
-#swingOverlay { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 5; }
+canvas#c { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; display: block; }
+#swingOverlay { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; pointer-events: none; z-index: 5; }
 .hidden { display: none !important; }
 .muted { color: var(--muted); }
 .small { font-size: 12px; }
@@ -235,6 +235,7 @@ body:has(.modal:not(.hidden)) #shotPanel { visibility: hidden; }
 /* ---------- modals ---------- */
 .modal { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 30; background: rgba(12, 26, 18, .95); border: 1px solid var(--line); border-radius: 16px; padding: 20px 24px; width: min(760px, 94vw); max-height: 92vh; max-height: 92dvh; overflow-y: auto; overscroll-behavior: contain; box-shadow: 0 30px 80px rgba(0,0,0,.5); animation: tin .25s ease-out; }
 .modal:focus, #academy:focus { outline: none; }
+.btn:focus-visible, .seg:focus-visible, select:focus-visible, input:focus-visible, button:focus-visible, .course-tab:focus-visible { outline: 2px solid #ffe25a; outline-offset: 2px; }
 #settings .set-foot { position: sticky; bottom: 0; display: flex; gap: 10px; justify-content: flex-end; margin: 14px -24px -20px; padding: 12px 24px; background: rgba(12, 26, 18, .98); border-top: 1px solid var(--line); }
 #confirmBox { z-index: 31; width: min(420px, 94vw); }
 #confirmBox p { margin: 6px 0 16px; color: var(--muted); line-height: 1.4; }
@@ -668,6 +669,7 @@ body.touch .course-tab { min-height: 44px; }
   .seg { min-width: 44px; padding: 8px 14px; }
 }
 body.touch .seg, body.touch .btn, body.touch select { min-height: 44px; }
+body.touch select, body.touch .share-box input { font-size: 16px; }
 body.touch .seg { min-width: 44px; padding: 8px 14px; }
 body.touch .segs { gap: 6px; }
 body.touch .drawer > summary { min-height: 44px; display: flex; align-items: center; }
