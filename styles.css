@@ -101,6 +101,7 @@ body.touch .cc-more > summary { min-height: 44px; display: flex; align-items: ce
 .resume-card .lbl { color: var(--green); }
 .resume-card { position: relative; padding-right: 110px; }
 .resume-card .rc-go { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font: 700 14px Barlow, sans-serif; color: #0d2415; background: var(--green); border-radius: 999px; padding: 6px 14px; }
+@media (max-width: 239px) { .resume-card { padding-right: 14px; } .resume-card .rc-go { position: static; transform: none; display: inline-block; margin-top: 8px; } }
 .challenge { background: rgba(244,211,31,.12); border: 1px solid rgba(244,211,31,.5); border-radius: var(--radius); padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; }
 .row { display: flex; gap: 8px; }
 .row.wrap { flex-wrap: wrap; margin-top: 14px; }

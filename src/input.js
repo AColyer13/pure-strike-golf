@@ -233,10 +233,8 @@ export class Input {
     for (const b of box.querySelectorAll('[data-act]')) {
       const a = b.dataset.act;
       const hold = b.hasAttribute('data-hold');
-      b.addEventListener('pointerdown', (e) => {
-        e.preventDefault(); e.stopPropagation();
+      const press = () => {
         this.g.audio.init();
-        b.setPointerCapture(e.pointerId);
         b.classList.add('down');
         if (hold) this.touchHeld[a] = true;
         if (a === 'menu') this.g.ui.togglePause();
@@ -244,6 +242,17 @@ export class Input {
         else if (!hold) this.dispatch(a);
         if (a === 'shapeCycle' || a === 'trajCycle') this.armShotOpts(); // keep the tray up while the player tunes the shot
         else if (a === 'aimPin') this.toggleShotOpts(false);
+      };
+      b.addEventListener('pointerdown', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        b.setPointerCapture(e.pointerId);
+        press();
+      });
+      // Enter or Space on a focused button (a click with no pointer behind it): one short press
+      b.addEventListener('click', (e) => {
+        if (e.detail !== 0) return;
+        press();
+        setTimeout(release, 160);
       });
       const release = () => { b.classList.remove('down'); this.touchHeld[a] = false; };
       b.addEventListener('pointerup', release);

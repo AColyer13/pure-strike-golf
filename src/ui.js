@@ -114,6 +114,7 @@ export class UI {
         const back = from && document.contains(from) && !from.closest('[inert], .hidden') ? from : null;
         if (back) back.focus({ preventScroll: true });
         else if (top) top.focus({ preventScroll: true });
+        else if (!$('menu').classList.contains('hidden')) $('btnPlay').focus({ preventScroll: true }); // nothing to go back to: don't strand the keyboard on a hidden control
       }
     };
     const mo = new MutationObserver((list) => { for (const m of list) sync(m.target); });
