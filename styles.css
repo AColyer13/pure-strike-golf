@@ -204,7 +204,7 @@ body.coaching #caddie { visibility: hidden; }
 .intro-skip { font-size: 12px; color: var(--muted); }
 
 /* ---------- shot panel ---------- */
-#shotPanel { position: fixed; right: 14px; bottom: 14px; width: min(400px, 94vw); max-height: calc(100vh - 110px); overflow-y: auto; padding: 14px 16px; z-index: 12; cursor: pointer; animation: tin .3s ease-out; }
+#shotPanel { position: fixed; right: 14px; bottom: 14px; width: min(400px, 94vw); max-height: calc(100vh - 110px); max-height: calc(100dvh - 110px); overflow-y: auto; padding: 14px 16px; z-index: 12; cursor: pointer; animation: tin .3s ease-out; }
 .sp-head { font: 700 13px Barlow; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: 8px; }
 .sp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px 10px; }
 .sp-grid div { display: flex; flex-direction: column; }
@@ -428,7 +428,7 @@ body.touch.in-round #lieBox { bottom: calc(24px + 102px + 52px + env(safe-area-i
 /* keep overlays out from under the button columns: portrait stacks them above, landscape narrows them */
 @media (orientation: portrait) {
   body.touch.in-round #intro { bottom: var(--tcb); width: min(640px, calc(100vw - 16px)); }
-  body.touch.in-round #shotPanel { bottom: calc(var(--tcb) + 8px); max-height: calc(100vh - var(--tcb) - 78px); }
+  body.touch.in-round #shotPanel { bottom: calc(var(--tcb) + 8px); max-height: calc(100vh - var(--tcb) - 78px); max-height: calc(100dvh - var(--tcb) - 78px); }
   body.touch.in-round #captions, body.touch.in-round #ffHint { bottom: calc(var(--tcb) + 8px); }
   /* the club box sits on the meter, the caddie's note on the club box (and on the lie box, when the full HUD shows it) */
   body.touch.in-round #clubBox { bottom: calc(var(--tcb) + 78px); }
@@ -593,7 +593,7 @@ body.reduced-motion *, body.reduced-motion *::before, body.reduced-motion *::aft
   .logo { font-size: 30px; }
   .tagline { display: none; }
   .menu-panel { gap: 10px; }
-  .course-tabs { margin: 0 -16px; padding: 0 16px; }
+  .course-tabs { margin: 0 -16px; padding: 0 16px; scroll-padding: 0 16px; }
   .menu-play { grid-template-columns: 1fr; gap: 8px; }
   .menu-play .btn.big { min-height: 56px; }
   /* a round is waiting: Resume is the one call to action, the rest step back to a quiet row */
@@ -724,7 +724,7 @@ body.touch.in-round #caddie .caddie-ico { color: var(--accent); }
 @media (orientation: portrait) {
   /* the row itself, not just its buttons: an empty row would still sit over the card's Details button and take its taps */
   body.touch.in-round[data-state="result"] .tc-right { visibility: hidden; pointer-events: none; }
-  body.touch.in-round[data-state="result"] #shotPanel { bottom: calc(14px + env(safe-area-inset-bottom)); max-height: calc(100vh - 100px); }
+  body.touch.in-round[data-state="result"] #shotPanel { bottom: calc(14px + env(safe-area-inset-bottom)); max-height: calc(100vh - 100px); max-height: calc(100dvh - 100px); }
 }
 /* a narrow window with a mouse (no touch rules): the note sits on the club card, full width, not mid-screen */
 @media (max-width: 700px) and (orientation: portrait) {
@@ -764,8 +764,27 @@ body.in-round:not(.pintag) #distBox .lie-line { margin-top: 3px; }
   body.touch .tc-right { width: calc(100vw - 20px - 188px - 8px); }
   body.touch .tc-opts button { flex-basis: 42px; }
 }
+/* under 360 px the four arrows and three buttons cannot share one row at 44 px each: the arrows stack two by two */
+@media (orientation: portrait) and (max-width: 359px) {
+  body.touch { --tc-h: 96px; }
+  body.touch .tc-left { grid-template-columns: repeat(2, 44px); }
+  body.touch .tc-right { width: calc(100vw - 20px - 92px - 8px); }
+  body.touch.in-round #holeCard .hc-name { white-space: normal; -webkit-line-clamp: 2; line-clamp: 2; display: -webkit-box; -webkit-box-orient: vertical; }
+}
 body:not(.touch).in-round #clubBox { bottom: max(28px, calc(var(--hb-h, 0px) + 22px)); }
 @media (orientation: portrait) {
   body.touch.in-round #clubBox { bottom: calc(var(--tcb) + 8px); }
   body.touch.in-round :is(#lieBox, #caddie) { bottom: calc(var(--tcb) + 64px); }
+}
+
+/* ---------- material pass: tabular figures, spring press, glass, hairline, thin scrollbars ---------- */
+:root { --ease-spring: cubic-bezier(0.22, 1, 0.36, 1); --specular-top: rgba(255, 255, 255, 0.1); }
+body { font-variant-numeric: tabular-nums; }
+.btn, .seg, .course-tab, .hb-btn, .tc-left button, .tc-right button { transition: transform .14s var(--ease-spring), background-color .14s, border-color .14s, filter .14s; }
+.btn:active, .seg:active, .course-tab:active, .tc-left button:active, .tc-right button:active { transform: scale(0.975); }
+.panel, .modal { backdrop-filter: blur(24px) saturate(160%); -webkit-backdrop-filter: blur(24px) saturate(160%); box-shadow: 0 8px 24px rgba(0,0,0,.25), inset 0 1px 0 0 var(--specular-top); }
+.modal { box-shadow: 0 30px 80px rgba(0,0,0,.5), inset 0 1px 0 0 var(--specular-top); }
+@media (pointer: fine) {
+  .btn:hover, .seg:hover { border-color: rgba(255, 255, 255, .24); }
+  .modal, #shotPanel, .course-tabs { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.2) transparent; }
 }
